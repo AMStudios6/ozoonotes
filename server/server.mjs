@@ -146,6 +146,17 @@ async function handler(req, res) {
       const row = db.prepare('SELECT b.* FROM boards b JOIN public_links p ON p.board_id=b.id WHERE p.token=?').get(publicBoard[1])
       return row ? sendJson(res, 200, { board: shapeBoard(row), access: 'view' }) : sendJson(res, 404, { error: 'This read-only link is invalid or revoked.' })
     }
+    if (method === 'GET' && !route.startsWith('/api') && existsSync(join(staticRoot, 'index.html'))) {
+      let decodedRoute
+      try { decodedRoute = decodeURIComponent(route) } catch { return sendJson(res, 400, { error: 'Invalid URL path.' }) }
+      const requestedFile = resolve(staticRoot, `.${decodedRoute}`)
+      if (requestedFile !== staticRoot && !requestedFile.startsWith(`${staticRoot}${sep}`)) return sendJson(res, 403, { error: 'Forbidden.' })
+      const filePath = existsSync(requestedFile) && statSync(requestedFile).isFile() ? requestedFile : join(staticRoot, 'index.html')
+      const contentTypes = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp' }
+      res.writeHead(200, { 'Content-Type': contentTypes[extname(filePath)] ?? 'application/octet-stream', 'Cache-Control': filePath.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable' })
+      createReadStream(filePath).pipe(res)
+      return
+    }
     const user = sessionUser(req)
     if (route === '/api/me' && method === 'GET') return user ? sendJson(res, 200, { user }) : sendJson(res, 200, { user: null })
     if (!user) return sendJson(res, 401, { error: 'Sign in to use cloud features.' })
@@ -287,17 +298,6 @@ async function handler(req, res) {
       if (!target) return sendJson(res, 404, { error: 'Create an account for that person first.' })
       db.prepare('INSERT OR IGNORE INTO team_members(team_id,user_id) VALUES(?,?)').run(teamId, target.id)
       return sendJson(res, 201, { username })
-    }
-    if (method === 'GET' && !route.startsWith('/api') && existsSync(join(staticRoot, 'index.html'))) {
-      let decodedRoute
-      try { decodedRoute = decodeURIComponent(route) } catch { return sendJson(res, 400, { error: 'Invalid URL path.' }) }
-      const requestedFile = resolve(staticRoot, `.${decodedRoute}`)
-      if (requestedFile !== staticRoot && !requestedFile.startsWith(`${staticRoot}${sep}`)) return sendJson(res, 403, { error: 'Forbidden.' })
-      const filePath = existsSync(requestedFile) && statSync(requestedFile).isFile() ? requestedFile : join(staticRoot, 'index.html')
-      const contentTypes = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp' }
-      res.writeHead(200, { 'Content-Type': contentTypes[extname(filePath)] ?? 'application/octet-stream', 'Cache-Control': filePath.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable' })
-      createReadStream(filePath).pipe(res)
-      return
     }
     return sendJson(res, 404, { error: 'Not found.' })
   } catch (error) {
