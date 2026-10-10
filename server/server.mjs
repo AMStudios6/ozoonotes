@@ -146,6 +146,7 @@ async function handler(req, res) {
       const row = db.prepare('SELECT b.* FROM boards b JOIN public_links p ON p.board_id=b.id WHERE p.token=?').get(publicBoard[1])
       return row ? sendJson(res, 200, { board: shapeBoard(row), access: 'view' }) : sendJson(res, 404, { error: 'This read-only link is invalid or revoked.' })
     }
+    // Serve the frontend before the cloud API's sign-in guard.
     if (method === 'GET' && !route.startsWith('/api') && existsSync(join(staticRoot, 'index.html'))) {
       let decodedRoute
       try { decodedRoute = decodeURIComponent(route) } catch { return sendJson(res, 400, { error: 'Invalid URL path.' }) }
