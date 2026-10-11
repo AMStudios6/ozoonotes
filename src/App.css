@@ -185,6 +185,7 @@
 .new-file-dialog {position:relative;width:min(520px,100%);max-height:min(90vh,800px);overflow-y:auto;padding:27px;border:1px solid var(--line);border-radius:17px;background:var(--panel);box-shadow:0 24px 80px #0008;color:var(--ink)}
 .compact-dialog {width:min(470px,100%)}
 .new-file-dialog .eyebrow {margin:0 0 5px}.new-file-dialog h2 {margin:0 0 22px;font-size:23px;letter-spacing:-.03em}
+.template-note {margin:-12px 0 12px;color:var(--muted);font-size:10px;line-height:1.5}
 .dialog-close {position:absolute;right:16px;top:14px;width:30px;height:30px;border:0;border-radius:7px;background:var(--panel-raised);color:var(--muted);font-size:20px;cursor:pointer}
 .dialog-label {display:grid;gap:7px;margin:14px 0;color:var(--muted);font-size:12px;font-weight:600}
 .dialog-label input,.dialog-label select {height:38px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--workspace);color:var(--ink);font:inherit}
