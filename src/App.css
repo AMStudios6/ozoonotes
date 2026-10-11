@@ -249,7 +249,7 @@
 .landing-copy h1 {margin:0;color:var(--ink);font-size:clamp(45px,6vw,72px);font-weight:750;line-height:.99;letter-spacing:-.075em}
 .landing-copy h1 span {color:var(--accent)}
 .landing-copy .hero-description {max-width:430px;margin:22px 0 0;color:var(--muted);font-size:16px;line-height:1.65}
-.landing-cta-row {display:flex;align-items:center;gap:13px;margin-top:29px}
+.landing-cta-row {display:flex;flex-wrap:wrap;align-items:center;gap:13px;margin-top:29px}
 .landing-cta-row .hero-new-file {height:48px;margin:0;padding:0 19px;border-radius:10px;color:#fff;font-size:14px}
 .app.light .landing-cta-row .hero-new-file {color:#fff}
 .landing-open-file {height:46px;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:0 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font-size:13px;font-weight:650;cursor:pointer}
