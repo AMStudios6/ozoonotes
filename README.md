@@ -6,6 +6,8 @@ OzooNotes is a browser-based whiteboard with local boards, multiple page sizes, 
 
 ## Use the website
 
+![OzooNotes website preview](public/ozoonotes-landing.png)
+
 Open the GitHub Pages site and create a file. Boards and recent files are saved in this browser on this device. Use **Save OzooNotes file** to download a portable backup that can be opened on another device.
 
 GitHub Pages hosts the static website only. Account sign-in, server sync, comments, teams, and shared cloud boards require a separate API server and are not available in the Pages version.
