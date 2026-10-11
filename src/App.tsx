@@ -255,8 +255,8 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
 const graphColors = ['#378cdb', '#e65353', '#48a879', '#9762d5', '#ee8b33']
 
 function evaluateGraphExpression(expression: string, x: number): number {
-  const tokens = expression.match(/(?:\\d*\\.?\\d+(?:e[+-]?\\d+)?)|(?:[a-z]+)|[()+\\-*/^]/gi)
-  if (!tokens || tokens.join('').toLowerCase() !== expression.replace(/\\s+/g, '').toLowerCase()) throw new Error('Use numbers, x, parentheses, and + − × ÷ ^ or sin/cos/tan/sqrt/abs/log/ln/exp.')
+  const tokens = expression.match(/(?:\d*\.?\d+(?:e[+-]?\d+)?)|(?:[a-z]+)|[-()+*\/^]/gi)
+  if (!tokens || tokens.join('').toLowerCase() !== expression.replace(/\s+/g, '').toLowerCase()) throw new Error('Use numbers, x, parentheses, and + − × ÷ ^ or sin/cos/tan/sqrt/abs/log/ln/exp.')
   let index = 0
   const peek = () => tokens[index]?.toLowerCase()
   const take = () => tokens[index++]
@@ -303,10 +303,10 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
   const esc = (value: string) => value.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!)
   let series: string[] = []
   if (options.mode === 'equation') {
-    const expressions = options.equation.split(/\\n|;/).map((line) => line.trim()).filter(Boolean)
+    const expressions = options.equation.split(/\n|;/).map((line) => line.trim()).filter(Boolean)
     if (!expressions.length) throw new Error('Enter an equation such as y = x^2.')
     series = expressions.map((line, seriesIndex) => {
-      const expression = line.replace(/^y\\s*=\\s*/i, '')
+      const expression = line.replace(/^y\s*=\s*/i, '')
       let path = '', drawing = false
       for (let i = 0; i <= 500; i++) {
         const x = options.xMin + (options.xMax - options.xMin) * i / 500
@@ -320,7 +320,7 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
       return `<path d="${path}" fill="none" stroke="${graphColors[seriesIndex % graphColors.length]}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`
     })
   } else {
-    const pairs = options.points.split(/[;\\n]+/).map((pair) => pair.trim()).filter(Boolean).map((pair) => pair.split(/[\\s,]+/).map(Number))
+    const pairs = options.points.split(/[;\n]+/).map((pair) => pair.trim()).filter(Boolean).map((pair) => pair.split(/[\s,]+/).map(Number))
     if (!pairs.length || pairs.some((pair) => pair.length !== 2 || !pair.every(Number.isFinite))) throw new Error('Enter points like 1, 2; 2, 5; 3, 4.')
     const visible = pairs.filter(([x, y]) => x >= options.xMin && x <= options.xMax && y >= options.yMin && y <= options.yMax)
     if (!visible.length) throw new Error('No points are inside the selected ranges.')
@@ -339,7 +339,7 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
   }
   const xAxisY = options.yMin <= 0 && options.yMax >= 0 ? py(0) : height - bottom
   const yAxisX = options.xMin <= 0 && options.xMax >= 0 ? px(0) : left
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" rx="20" fill="#fff"/><text x="${width/2}" y="25" text-anchor="middle" fill="#18202a" font-family="Arial,sans-serif" font-size="18" font-weight="700">${options.mode === 'equation' ? esc(options.equation.split(/\\n|;/)[0]) : 'Data points'}</text>${grid.join('')}<line x1="${left}" y1="${xAxisY}" x2="${width-right}" y2="${xAxisY}" stroke="#667085" stroke-width="2"/><line x1="${yAxisX}" y1="${top}" x2="${yAxisX}" y2="${height-bottom}" stroke="#667085" stroke-width="2"/>${series.join('')}<text x="${width-right}" y="${height-16}" text-anchor="end" fill="#667085" font-family="Arial,sans-serif" font-size="16">x</text><text x="20" y="${top}" fill="#667085" font-family="Arial,sans-serif" font-size="16">y</text></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" rx="20" fill="#fff"/><text x="${width/2}" y="25" text-anchor="middle" fill="#18202a" font-family="Arial,sans-serif" font-size="18" font-weight="700">${options.mode === 'equation' ? esc(options.equation.split(/\n|;/)[0]) : 'Data points'}</text>${grid.join('')}<line x1="${left}" y1="${xAxisY}" x2="${width-right}" y2="${xAxisY}" stroke="#667085" stroke-width="2"/><line x1="${yAxisX}" y1="${top}" x2="${yAxisX}" y2="${height-bottom}" stroke="#667085" stroke-width="2"/>${series.join('')}<text x="${width-right}" y="${height-16}" text-anchor="end" fill="#667085" font-family="Arial,sans-serif" font-size="16">x</text><text x="20" y="${top}" fill="#667085" font-family="Arial,sans-serif" font-size="16">y</text></svg>`
 }
 
 const toolIcons: Record<Tool, string> = {
