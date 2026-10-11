@@ -41,8 +41,7 @@
 }
 .window-top {min-height:54px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--frame-top);border-bottom:1px solid var(--line)}
 .brand {font-size:14px; font-weight:700; letter-spacing:.04em; display:flex; align-items:center; gap:9px}
-.brand-mark {display:block;flex:none;width:150px;height:55px;object-fit:contain;border:0;border-radius:0;mix-blend-mode:screen}
-.app.light .brand-mark {mix-blend-mode:multiply}
+.brand-mark {display:block;flex:none;width:150px;height:55px;object-fit:contain;border:0;border-radius:0}
 .window-actions {display:flex; gap:8px}
 .window-actions button {border:0; color:var(--muted); background:transparent; font-size:13px; width:20px; height:20px; border-radius:50%; cursor:pointer}
 .window-actions button:first-child {background:#72b7ff;color:#152332}.window-actions button:nth-child(2){background:#84cf9b;color:#17301e}.window-actions button.close{background:#ec8589;color:#421b1d}
