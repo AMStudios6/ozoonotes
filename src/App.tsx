@@ -188,7 +188,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     context.lineWidth = drawing.width
     context.lineCap = 'round'
     context.lineJoin = 'round'
-    context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Brush' ? 0.72 : 1)
+    context.globalAlpha = drawing.opacity / 100
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
       const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
