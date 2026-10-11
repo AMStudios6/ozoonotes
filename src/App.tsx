@@ -1577,7 +1577,7 @@ function App() {
     const sharedMmOriented = state?.orientation === 'landscape' ? [sharedMm[1], sharedMm[0]] : sharedMm
     const sharedWidth = state?.infinite ? 2800 : Math.round(sharedMmOriented[0] * 3.78)
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
-    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}OzooNotes with abstract purple whiteboard icon.png`} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : state?.pageBackground }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
+    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : state?.pageBackground }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
   if (boards.length === 0) {
@@ -1585,7 +1585,7 @@ function App() {
       <main className={`app ${dark ? 'dark' : 'light'}`}>
         <section className="landing-window">
           <header className="landing-topbar">
-            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={`${import.meta.env.BASE_URL}OzooNotes with abstract purple whiteboard icon.png`} alt="OzooNotes" /></a>
+            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></a>
             <nav className="landing-nav" aria-label="Main navigation">
               <a href="#landing-tools">What you can do</a>
               <a href="#landing-files">Your files</a>
@@ -1632,7 +1632,7 @@ function App() {
               {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}<small>Saved in this browser</small></span><b>Open →</b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon">▤</span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}>↗ Open file</button></div>}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open →</b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
-            <footer className="landing-footer"><div className="landing-brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}OzooNotes with abstract purple whiteboard icon.png`} alt="OzooNotes" /></div><span>Don’t Doomscroll, just OzooNotes</span></footer>
+            <footer className="landing-footer"><div className="landing-brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></div><span>Don’t Doomscroll, just OzooNotes</span></footer>
           </div>
         </section>
         {newFileDialog}
@@ -1645,7 +1645,7 @@ function App() {
     <main className={`app ${dark ? 'dark' : 'light'}`}>
       <div className="window">
         <header className="window-top">
-          <div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}OzooNotes with abstract purple whiteboard icon.png`} alt="OzooNotes" /></div>
+          <div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></div>
           <nav className="file-tabs" aria-label="Whiteboard files">
             {boards.map((board, index) => <div key={board.name} className={`file-tab ${index === activeBoard ? 'selected' : ''}`}>
               <button className="tab-open" onClick={() => activateBoard(index)}>{board.name}</button>
