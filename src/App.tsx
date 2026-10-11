@@ -473,8 +473,15 @@ function App() {
         setShowBrushColors(false)
       }
     }
+    const dismissBrushColorsOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowBrushColors(false)
+    }
     document.addEventListener('pointerdown', dismissBrushColors)
-    return () => document.removeEventListener('pointerdown', dismissBrushColors)
+    document.addEventListener('keydown', dismissBrushColorsOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', dismissBrushColors)
+      document.removeEventListener('keydown', dismissBrushColorsOnEscape)
+    }
   }, [showBrushColors])
 
   useEffect(() => {
