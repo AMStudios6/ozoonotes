@@ -5,6 +5,7 @@ type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Se
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
+type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string }
 type CloudUser = { id: number; username: string }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
@@ -18,6 +19,39 @@ type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; previ
 type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
+function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation: 'portrait' | 'landscape'): Stroke[] {
+  if (template === 'Blank') return []
+  const dimensions = size === 'Infinite' ? [210, 297] : pageDimensionsMm[size]
+  const [widthMm, heightMm] = orientation === 'landscape' ? [dimensions[1], dimensions[0]] : dimensions
+  const soft = '#b9a7cb'
+  const accent = '#9a6bc4'
+  const line = (x1: number, y1: number, x2: number, y2: number, color = soft, opacity = 42, width = 0.8): Stroke => ({ tool: 'Line', color, width, opacity, points: [{ x: x1 / widthMm, y: y1 / heightMm }, { x: x2 / widthMm, y: y2 / heightMm }] })
+  const text = (value: string, xMm: number, yMm: number, width = 3): Stroke => ({ tool: 'Text', color: accent, width, opacity: 100, text: value, points: [{ x: xMm / widthMm, y: yMm / heightMm }] })
+  const lines: Stroke[] = []
+  if (template === 'Lined notes') {
+    for (let y = 22; y < heightMm - 10; y += 8) lines.push(line(12, y, widthMm - 10, y))
+    lines.push(line(24, 12, 24, heightMm - 10, accent, 54, 1))
+  } else if (template === 'Graph paper') {
+    for (let x = 10; x < widthMm - 9; x += 10) lines.push(line(x, 10, x, heightMm - 10, soft, 38, 0.65))
+    for (let y = 10; y < heightMm - 9; y += 10) lines.push(line(10, y, widthMm - 10, y, soft, 38, 0.65))
+  } else if (template === 'Cornell notes') {
+    const summaryTop = heightMm - 48
+    lines.push(line(14, 30, widthMm - 12, 30, accent, 58, 1), line(widthMm * 0.32, 30, widthMm * 0.32, summaryTop, accent, 58, 1), line(14, summaryTop, widthMm - 12, summaryTop, accent, 58, 1))
+    for (let y = 40; y < summaryTop - 4; y += 8) lines.push(line(14, y, widthMm - 12, y))
+    for (let y = summaryTop + 8; y < heightMm - 10; y += 8) lines.push(line(14, y, widthMm - 12, y))
+  } else if (template === 'Weekly planner') {
+    const top = 24, bottom = heightMm - 14, rowHeight = (bottom - top) / 7
+    const divider = widthMm * 0.22
+    lines.push(text('WEEKLY PLAN', 14, 9, 3.4), line(14, top, widthMm - 12, top, accent, 58, 1), line(divider, top, divider, bottom, accent, 58, 1))
+    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+    days.forEach((day, index) => {
+      const y = top + rowHeight * (index + 1)
+      lines.push(line(14, y, widthMm - 12, y))
+      lines.push(text(day, 16, top + rowHeight * index + rowHeight * 0.35, 2.8))
+    })
+  }
+  return lines
+}
 function resolvePageBackground(background: string, dark: boolean) {
   if (background === 'auto' || background === '#ffffff') return dark ? '#08060d' : '#ffffff'
   if (background === 'white') return '#ffffff'
@@ -453,6 +487,7 @@ function App() {
   const [opacity, setOpacity] = useState(100)
   const [pageBackground, setPageBackground] = useState(initialWorkspace.pageBackground)
   const [pageSize, setPageSize] = useState<PageSize>(initialWorkspace.pageSize)
+  const [draftTemplate, setDraftTemplate] = useState<PageTemplate>('Blank')
   const [infinitePage, setInfinitePage] = useState(initialWorkspace.infinitePage)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
   const [graphOpen, setGraphOpen] = useState(false)
@@ -1633,6 +1668,7 @@ function App() {
   const addBoard = () => {
     setDraftName(`File ${nextFileNumber}`)
     setDraftSize('A4')
+    setDraftTemplate('Blank')
     setDraftOrientation('portrait')
     setDraftBackground('auto')
     setShowNewFileDialog(true)
@@ -1640,6 +1676,9 @@ function App() {
   const createBoard = () => {
     const isInfinite = draftSize === 'Infinite'
     const name = draftName.trim() || `File ${nextFileNumber}`
+    const boardIndex = boards.length
+    const templateStrokes = makeTemplateStrokes(draftTemplate, draftSize, draftOrientation)
+    setStrokesByPage((current) => ({ ...current, [`${boardIndex}:1`]: templateStrokes }))
     setBoards((current) => [...current, { name, pages: 1, pageSize: draftSize, infinite: isInfinite, orientation: draftOrientation, pageOrientations: [draftOrientation], pageBackground: draftBackground }])
     setActiveBoard(boards.length)
     setPage(1)
@@ -1702,7 +1741,7 @@ function App() {
     setAddPageMenuOpen(false)
   }
 
-  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}>×</button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset>{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}>×</button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
 
   const quickStartDialog = quickStartOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickStartOpen(false) }}><section className="new-file-dialog compact-dialog quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title"><button className="dialog-close" aria-label="Close Quick Start guide" onClick={() => setQuickStartOpen(false)}>×</button><p className="eyebrow">OZOONOTES BASICS</p><h2 id="quick-start-title">Quick Start Guide</h2><ol className="quick-start-steps"><li><span>1</span><div><strong>Start with a board</strong><p>Choose <b>Start a new board</b>, or open an OzooNotes file you already have.</p></div></li><li><span>2</span><div><strong>Draw and create</strong><p>Pick a pen from the drawing tools. Use the shape, text, image, or graph tools to add more to your page.</p></div></li><li><span>3</span><div><strong>Select and move objects</strong><p>Choose Select. Drag over empty space to select several objects, or Shift-click to add or remove an object. Drag a selected object to move the group. Ctrl+A selects everything on the current page.</p></div></li><li><span>4</span><div><strong>Move around and add pages</strong><p>Use the Hand tool to pan across an infinite board. For regular boards, add a page and choose portrait or landscape; each page keeps its own orientation.</p></div></li><li><span>5</span><div><strong>Keep a copy of your work</strong><p>Your boards save in this browser on this device. Choose <b>Save OzooNotes file</b> to download a portable copy. You can also export pages as PNG or SVG, or regular boards as PDF.</p></div></li></ol><footer className="dialog-actions"><button className="dialog-create" onClick={() => setQuickStartOpen(false)}>Got it</button></footer></section></div>
 
