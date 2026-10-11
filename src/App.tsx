@@ -251,6 +251,92 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
   context.globalAlpha = 1
 }
 
+
+const graphColors = ['#378cdb', '#e65353', '#48a879', '#9762d5', '#ee8b33']
+
+function evaluateGraphExpression(expression: string, x: number): number {
+  const tokens = expression.match(/(?:\\d*\\.?\\d+(?:e[+-]?\\d+)?)|(?:[a-z]+)|[()+\\-*/^]/gi)
+  if (!tokens || tokens.join('').toLowerCase() !== expression.replace(/\\s+/g, '').toLowerCase()) throw new Error('Use numbers, x, parentheses, and + − × ÷ ^ or sin/cos/tan/sqrt/abs/log/ln/exp.')
+  let index = 0
+  const peek = () => tokens[index]?.toLowerCase()
+  const take = () => tokens[index++]
+  const primary = (): number => {
+    const token = take()
+    if (token === undefined) throw new Error('The equation is incomplete.')
+    if (token === '(') {
+      const value = sum()
+      if (take() !== ')') throw new Error('Check the parentheses in the equation.')
+      return value
+    }
+    const value = Number(token)
+    if (Number.isFinite(value) && token !== '') return value
+    const name = token.toLowerCase()
+    if (name === 'x') return x
+    if (name === 'pi') return Math.PI
+    if (name === 'e') return Math.E
+    const functions: Record<string, (n: number) => number> = { sin: Math.sin, cos: Math.cos, tan: Math.tan, sqrt: Math.sqrt, abs: Math.abs, log: Math.log10, ln: Math.log, exp: Math.exp }
+    const fn = functions[name]
+    if (!fn) throw new Error(`Unknown value or function: ${token}`)
+    const input = peek() === '(' ? (take(), primary()) : unary()
+    return fn(input)
+  }
+  const power = (): number => { const left = primary(); return peek() === '^' ? (take(), left ** unary()) : left }
+  const unary = (): number => peek() === '+' ? (take(), unary()) : peek() === '-' ? (take(), -unary()) : power()
+  const product = (): number => { let value = unary(); while (peek() === '*' || peek() === '/') { const op = take(); const next = unary(); value = op === '*' ? value * next : value / next } return value }
+  const sum = (): number => { let value = product(); while (peek() === '+' || peek() === '-') { const op = take(); const next = product(); value = op === '+' ? value + next : value - next } return value }
+  const result = sum()
+  if (index !== tokens.length) throw new Error('Check the equation format.')
+  return result
+}
+
+function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; points: string; xMin: number; xMax: number; yMin: number; yMax: number }) {
+  const width = 900, height = 580
+  const left = 72, right = 30, top = 34, bottom = 62
+  const plotWidth = width - left - right, plotHeight = height - top - bottom
+  const px = (x: number) => left + (x - options.xMin) / (options.xMax - options.xMin) * plotWidth
+  const py = (y: number) => top + (options.yMax - y) / (options.yMax - options.yMin) * plotHeight
+  const esc = (value: string) => value.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!)
+  let series: string[] = []
+  if (options.mode === 'equation') {
+    const expressions = options.equation.split(/\\n|;/).map((line) => line.trim()).filter(Boolean)
+    if (!expressions.length) throw new Error('Enter an equation such as y = x^2.')
+    series = expressions.map((line, seriesIndex) => {
+      const expression = line.replace(/^y\\s*=\\s*/i, '')
+      let path = '', drawing = false
+      for (let i = 0; i <= 500; i++) {
+        const x = options.xMin + (options.xMax - options.xMin) * i / 500
+        const y = evaluateGraphExpression(expression, x)
+        const visible = Number.isFinite(y) && y >= options.yMin && y <= options.yMax
+        if (!visible) { drawing = false; continue }
+        path += `${drawing ? 'L' : 'M'}${px(x).toFixed(2)},${py(y).toFixed(2)} `
+        drawing = true
+      }
+      if (!path) throw new Error('This equation has no points in the selected ranges.')
+      return `<path d="${path}" fill="none" stroke="${graphColors[seriesIndex % graphColors.length]}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`
+    })
+  } else {
+    const pairs = options.points.split(/[;\\n]+/).map((pair) => pair.trim()).filter(Boolean).map((pair) => pair.split(/[\\s,]+/).map(Number))
+    if (!pairs.length || pairs.some((pair) => pair.length !== 2 || !pair.every(Number.isFinite))) throw new Error('Enter points like 1, 2; 2, 5; 3, 4.')
+    const visible = pairs.filter(([x, y]) => x >= options.xMin && x <= options.xMax && y >= options.yMin && y <= options.yMax)
+    if (!visible.length) throw new Error('No points are inside the selected ranges.')
+    series = [
+      `<polyline points="${visible.map(([x, y]) => `${px(x).toFixed(2)},${py(y).toFixed(2)}`).join(' ')}" fill="none" stroke="${graphColors[0]}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`,
+      ...visible.map(([x, y]) => `<circle cx="${px(x)}" cy="${py(y)}" r="7" fill="${graphColors[0]}" stroke="#fff" stroke-width="2"/>`),
+    ]
+  }
+  const grid: string[] = []
+  for (let i = 0; i <= 5; i++) {
+    const x = options.xMin + (options.xMax - options.xMin) * i / 5
+    const y = options.yMin + (options.yMax - options.yMin) * i / 5
+    const gx = px(x), gy = py(y)
+    grid.push(`<line x1="${gx}" y1="${top}" x2="${gx}" y2="${height-bottom}" stroke="#e5e7eb"/><text x="${gx}" y="${height-bottom+24}" text-anchor="middle" fill="#667085" font-size="16">${esc(Number(x.toPrecision(3)).toString())}</text>`)
+    grid.push(`<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" stroke="#e5e7eb"/><text x="${left-12}" y="${gy+5}" text-anchor="end" fill="#667085" font-size="16">${esc(Number(y.toPrecision(3)).toString())}</text>`)
+  }
+  const xAxisY = options.yMin <= 0 && options.yMax >= 0 ? py(0) : height - bottom
+  const yAxisX = options.xMin <= 0 && options.xMax >= 0 ? px(0) : left
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" rx="20" fill="#fff"/><text x="${width/2}" y="25" text-anchor="middle" fill="#18202a" font-family="Arial,sans-serif" font-size="18" font-weight="700">${options.mode === 'equation' ? esc(options.equation.split(/\\n|;/)[0]) : 'Data points'}</text>${grid.join('')}<line x1="${left}" y1="${xAxisY}" x2="${width-right}" y2="${xAxisY}" stroke="#667085" stroke-width="2"/><line x1="${yAxisX}" y1="${top}" x2="${yAxisX}" y2="${height-bottom}" stroke="#667085" stroke-width="2"/>${series.join('')}<text x="${width-right}" y="${height-16}" text-anchor="end" fill="#667085" font-family="Arial,sans-serif" font-size="16">x</text><text x="20" y="${top}" fill="#667085" font-family="Arial,sans-serif" font-size="16">y</text></svg>`
+}
+
 const toolIcons: Record<Tool, string> = {
   Brush: '✎', Pen: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
 }
@@ -321,6 +407,12 @@ function App() {
   const [pageSize, setPageSize] = useState<PageSize>(initialWorkspace.pageSize)
   const [infinitePage, setInfinitePage] = useState(initialWorkspace.infinitePage)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
+  const [graphOpen, setGraphOpen] = useState(false)
+  const [graphMode, setGraphMode] = useState<'equation' | 'points'>('equation')
+  const [graphEquation, setGraphEquation] = useState('y = x^2')
+  const [graphPoints, setGraphPoints] = useState('1, 2; 2, 5; 3, 4')
+  const [graphRange, setGraphRange] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 })
+  const [graphError, setGraphError] = useState('')
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
   const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
@@ -1358,6 +1450,29 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const addGraphToBoard = () => {
+    try {
+      const ranges = { xMin: Number(graphRange.xMin), xMax: Number(graphRange.xMax), yMin: Number(graphRange.yMin), yMax: Number(graphRange.yMax) }
+      if (!Object.values(ranges).every(Number.isFinite) || ranges.xMin >= ranges.xMax || ranges.yMin >= ranges.yMax) throw new Error('Each minimum must be smaller than its maximum.')
+      const svg = makeGraphSvg({ mode: graphMode, equation: graphEquation, points: graphPoints, ...ranges })
+      const imageData = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      const image = new Image()
+      image.onload = () => {
+        const width = 0.58, height = width * 580 / 900
+        const x = Math.max(0, Math.min(1 - width, 0.21)), y = Math.max(0, Math.min(1 - height, 0.28))
+        const graph: Stroke = { tool: 'Image', color: '#ffffff', width: 1, opacity: 100, points: [{ x, y }, { x: x + width, y: y + height }], imageData }
+        imageCache.set(imageData, image)
+        editCurrentPage((current) => [...current, graph])
+        setGraphOpen(false)
+        setGraphError('')
+      }
+      image.onerror = () => setGraphError('Could not create the graph. Please check the equation or data points.')
+      image.src = imageData
+    } catch (error) {
+      setGraphError(error instanceof Error ? error.message : 'Could not create the graph.')
+    }
+  }
+
   const addBoard = () => {
     setDraftName(`File ${nextFileNumber}`)
     setDraftSize('A4')
@@ -1442,6 +1557,8 @@ function App() {
 
   const selectedForLibrary = selectedIndices.map((index) => strokes[index]).filter((stroke): stroke is Stroke => Boolean(stroke))
   const libraryDialog = libraryOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLibraryOpen(false) }}><section className="new-file-dialog compact-dialog library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-title"><button className="dialog-close" aria-label="Close library" onClick={() => setLibraryOpen(false)}>×</button><p className="eyebrow">REUSABLE OBJECTS</p><h2 id="library-title">Libraries</h2><form className="library-save-form" onSubmit={saveSelectionToLibrary}><label className="dialog-label">Save the {selectedForLibrary.length || 'selected'} selected object{selectedForLibrary.length === 1 ? '' : 's'}<input required maxLength={80} value={libraryName} onChange={(event) => setLibraryName(event.target.value)} placeholder="Name this library item" /></label><button className="dialog-create" disabled={!selectedForLibrary.length || !libraryName.trim()}>Save selection</button></form>{libraryItems.length ? <ul className="library-list">{libraryItems.map((item) => <li key={item.id}><span><strong>{item.name}</strong><small>{item.strokes.length} object{item.strokes.length === 1 ? '' : 's'}</small></span><button className="library-insert" onClick={() => insertLibraryItem(item)}>Insert</button><button className="library-delete" aria-label={`Delete ${item.name} from library`} title="Delete library item" onClick={() => deleteLibraryItem(item.id)}>×</button></li>)}</ul> : <p className="empty-hint">No saved objects yet. Select objects on the board and save them here for reuse.</p>}</section></div>
+
+  const graphDialog = graphOpen && <div className="new-file-overlay graph-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGraphOpen(false) }}><section className="new-file-dialog graph-dialog" role="dialog" aria-modal="true" aria-labelledby="graph-title"><button className="dialog-close" aria-label="Close graph tool" onClick={() => setGraphOpen(false)}>×</button><p className="eyebrow">WHITEBOARD TOOL</p><h2 id="graph-title">Create a graph</h2><div className="graph-mode-picker" role="group" aria-label="Graph input type"><button type="button" className={graphMode === 'equation' ? 'selected' : ''} aria-pressed={graphMode === 'equation'} onClick={() => { setGraphMode('equation'); setGraphError('') }}>Equation</button><button type="button" className={graphMode === 'points' ? 'selected' : ''} aria-pressed={graphMode === 'points'} onClick={() => { setGraphMode('points'); setGraphError('') }}>Data points</button></div>{graphMode === 'equation' ? <label className="dialog-label">Equation(s)<textarea className="graph-textarea" value={graphEquation} onChange={(event) => setGraphEquation(event.target.value)} placeholder="y = x^2" rows={3} /><small>Use x, numbers, + − * / ^, parentheses, or sin, cos, tan, sqrt, abs, log, ln, exp. Put each equation on a new line.</small></label> : <label className="dialog-label">Points (x, y)<textarea className="graph-textarea" value={graphPoints} onChange={(event) => setGraphPoints(event.target.value)} placeholder="1, 2; 2, 5; 3, 4" rows={3} /><small>Enter points as x, y pairs separated by semicolons or new lines.</small></label>}<div className="graph-range-grid"><label className="dialog-label">X minimum<input type="number" value={graphRange.xMin} onChange={(event) => setGraphRange({ ...graphRange, xMin: Number(event.target.value) })} /></label><label className="dialog-label">X maximum<input type="number" value={graphRange.xMax} onChange={(event) => setGraphRange({ ...graphRange, xMax: Number(event.target.value) })} /></label><label className="dialog-label">Y minimum<input type="number" value={graphRange.yMin} onChange={(event) => setGraphRange({ ...graphRange, yMin: Number(event.target.value) })} /></label><label className="dialog-label">Y maximum<input type="number" value={graphRange.yMax} onChange={(event) => setGraphRange({ ...graphRange, yMax: Number(event.target.value) })} /></label></div>{graphError && <p className="graph-error" role="alert">{graphError}</p>}<button className="dialog-create" onClick={addGraphToBoard}>Add graph to page</button></section></div>
 
   const pageSizeMm = pageSize === 'Infinite' ? [1, 1] : pageDimensionsMm[pageSize]
   const orientedPageMm = orientation === 'portrait' || pageSize === 'Infinite' ? pageSizeMm : [pageSizeMm[1], pageSizeMm[0]]
@@ -1538,6 +1655,7 @@ function App() {
           </div>
           <div className="toolbar" aria-label="Drawing tools">
             <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span>▧</span></button>
+            <button type="button" className="tool-button graph-tool" title="Add graph" aria-label="Add graph" onClick={() => { setGraphError(''); setGraphOpen(true) }}><span>⌁</span></button>
             {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush') setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span></button>)}
             <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
           </div>
@@ -1592,6 +1710,7 @@ function App() {
       {teamDialog}
       {libraryDialog}
       {cloudSaveDialog}
+      {graphDialog}
     </main>
   )
 }
