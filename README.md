@@ -1,6 +1,6 @@
 # OzooNotes
 
-![OzooNotes logo](<OzooNotes with abstract purple whiteboard icon.png>)
+![OzooNotes logo](public/ozoo-logo.png)
 
 OzooNotes is a browser-based whiteboard with local boards, multiple page sizes, image import, graph creation, PDF/PNG/SVG export, and portable `.ozoonotes` files.
 
