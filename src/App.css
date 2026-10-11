@@ -190,4 +190,3 @@
 @media(max-width:650px){.quick-actions{top:13px;left:58px;height:36px;padding:3px 5px}.quick-actions button{width:27px;height:27px}.toolbar{top:59px;left:10px;right:auto;max-height:calc(100vh - 130px);overflow-y:auto;transform:none;gap:1px;padding:3px;justify-content:flex-start}.tool-button{width:34px;height:34px;flex:none}.stroke-panel{top:59px;left:58px;width:min(220px,calc(100vw - 70px));max-height:calc(100vh - 150px);overflow:auto;display:block;padding:11px}.settings-group+.settings-group{margin-top:12px}.settings-group{padding:0}.workspace{padding-top:20px}.tool-status{display:flex;top:auto;right:10px;bottom:62px;font-size:9px}}
 
 
-.color-options-toggle{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;font-size:12px;font-weight:600;text-align:left;cursor:pointer}.color-options-toggle:hover{border-color:var(--accent);color:var(--accent)}
