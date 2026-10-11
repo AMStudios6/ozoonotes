@@ -399,6 +399,7 @@ function readSavedWorkspace(): RestoredWorkspace {
 }
 
 function App() {
+  const localOnly = import.meta.env.VITE_LOCAL_ONLY === 'true'
   const [initialWorkspace] = useState(readSavedWorkspace)
   const [boards, setBoards] = useState<Board[]>(initialWorkspace.boards)
   const [nextFileNumber, setNextFileNumber] = useState(() => Math.max(0, ...initialWorkspace.boards.map(({ name }) => Number(name.match(/^File (\d+)$/)?.[1] ?? 0))) + 1)
@@ -603,11 +604,12 @@ function App() {
   }
 
   useEffect(() => {
+    if (localOnly) return
     apiRequest<{ user: CloudUser | null }>('/api/me').then(({ user }) => {
       setCloudUser(user)
       if (user) void refreshCloudBoards()
     }).catch(() => undefined)
-  }, [])
+  }, [localOnly])
 
   useEffect(() => {
     if (activeTool !== 'Brush') setShowSettingsPanel(false)
@@ -1575,14 +1577,14 @@ function App() {
     const sharedMmOriented = state?.orientation === 'landscape' ? [sharedMm[1], sharedMm[0]] : sharedMm
     const sharedWidth = state?.infinite ? 2800 : Math.round(sharedMmOriented[0] * 3.78)
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
-    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src="/ozoo-mascot.svg" alt="" /> OzooNotes</div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : state?.pageBackground }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
+    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /> OzooNotes</div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : state?.pageBackground }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
   if (boards.length === 0) {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`}>
         <section className="landing-window">
-          <header className="landing-topbar"><div className="brand"><img className="brand-mark" src="/ozoo-mascot.svg" alt="" /> OzooNotes</div><div className="landing-top-actions"><button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button><button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button></div></header>
+          <header className="landing-topbar"><div className="brand"><img className="brand-mark" src="/ozoo-mascot.svg" alt="" /> OzooNotes</div><div className="landing-top-actions">{!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}<button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button></div></header>
           <div className="landing-content">
             <aside className="landing-sidebar">
               <div className="landing-actions">
@@ -1591,7 +1593,7 @@ function App() {
                 <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
               </div>
               <div className="recent-section"><h2>Recent files</h2>{recentFiles.length ? <div className="recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}</span></button>)}</div> : <div className="recent-empty"><span className="recent-icon">▤</span><p>Your recent files will<br />appear here.</p></div>}</div>
-              {cloudUser && <div className="recent-section"><h2>Cloud boards</h2>{cloudBoards.length ? <div className="recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small className="cloud-board-subtitle">{board.folderId ? cloudFolders.find((folder) => folder.id === board.folderId)?.name ?? 'Folder' : board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span></button>)}</div> : <p className="empty-hint">No cloud boards yet. Open a board and choose Save to server.</p>}</div>}
+              {!localOnly && cloudUser && <div className="recent-section"><h2>Cloud boards</h2>{cloudBoards.length ? <div className="recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small className="cloud-board-subtitle">{board.folderId ? cloudFolders.find((folder) => folder.id === board.folderId)?.name ?? 'Folder' : board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span></button>)}</div> : <p className="empty-hint">No cloud boards yet. Open a board and choose Save to server.</p>}</div>}
             </aside>
             <section className="landing-hero">
               <div className="hero-decoration decoration-one" /><div className="hero-decoration decoration-two" />
@@ -1601,7 +1603,7 @@ function App() {
           </div>
         </section>
         {newFileDialog}
-        {accountDialog}
+        {!localOnly && accountDialog}
       </main>
     )
   }
@@ -1619,7 +1621,7 @@ function App() {
             <button className="add-file" onClick={addBoard} aria-label="Create new file">+</button>
             <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><span>↓</span> Download PDF</button>
             <button className="theme-toggle" onClick={() => setDark(!dark)} title="Toggle theme">{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button>
-            <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync">{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>
+            {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync">{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}
           </nav>
         </header>
 
@@ -1641,12 +1643,14 @@ function App() {
               <button onClick={saveCurrentFile}>▣ <span>Save</span></button>
               <button onClick={saveBoardToFile}>↓ <span>Save OzooNotes file</span></button>
               <button onClick={() => documentInputRef.current?.click()}>↗ <span>Open OzooNotes file</span></button>
+              {!localOnly && <>
               <button onClick={openCloudSaveDialog}>☁ <span>Save to server</span></button>
               <button onClick={() => { void openShareManager() }}>♧ <span>Access and read-only links</span></button>
               <button onClick={() => { if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this board to your server first.') } }}>▤ <span>Comments</span></button>
               <button onClick={() => { if (!cloudUser) setAccountOpen(true); else { setTeamOpen(true); void apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams').then(({ teams: result }) => setTeams(result)).catch((error) => setCloudMessage(error.message)) } }}>♧ <span>Team management</span></button>
               {saveNotice && <div className="save-notice">{saveNotice}</div>}
               {cloudMessage && <div className="save-notice">{cloudMessage}</div>}
+              </>}
             </div>}
           </div>
           <div className="quick-actions" aria-label="Selection actions">
@@ -1707,12 +1711,12 @@ function App() {
         </section>
       </div>
       {newFileDialog}
-      {accountDialog}
-      {shareDialog}
-      {commentsDialog}
-      {teamDialog}
+      {!localOnly && accountDialog}
+      {!localOnly && shareDialog}
+      {!localOnly && commentsDialog}
+      {!localOnly && teamDialog}
       {libraryDialog}
-      {cloudSaveDialog}
+      {!localOnly && cloudSaveDialog}
       {graphDialog}
     </main>
   )
