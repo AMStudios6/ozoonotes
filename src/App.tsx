@@ -5,9 +5,9 @@ type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Se
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
-type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageBackground?: string }
+type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string }
 type CloudUser = { id: number; username: string }
-type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
+type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
 type CloudBoard = { id: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; ownerName?: string }
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
@@ -411,9 +411,9 @@ function readSavedWorkspace(): RestoredWorkspace {
     const loaded = savedWorkspace.names.filter((name): name is string => typeof name === 'string').map((name) => {
       const raw = localStorage.getItem(`doomnotes:${name}`)
       if (!raw) return null
-      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
       if (typeof saved.name !== 'string' || typeof saved.pages !== 'number' || !Array.isArray(saved.pageStrokes)) return null
-      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageBackground: saved.pageBackground ?? 'auto' }, saved }
+      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation ?? 'portrait'), pageBackground: saved.pageBackground ?? 'auto' }, saved }
     }).filter((item): item is NonNullable<typeof item> => item !== null)
 
     if (!loaded.length) return empty
@@ -428,7 +428,7 @@ function readSavedWorkspace(): RestoredWorkspace {
       page: activePage,
       pageSize: activeSaved.pageSize ?? 'A4',
       infinitePage: activeSaved.infinite ?? false,
-      orientation: activeSaved.orientation ?? 'portrait',
+      orientation: activeSaved.pageOrientations?.[activePage - 1] ?? activeSaved.orientation ?? 'portrait',
       pageBackground: activeSaved.pageBackground ?? 'auto',
       gridEnabled: activeSaved.gridEnabled ?? false,
       showScale: activeSaved.showScale ?? false,
@@ -518,6 +518,7 @@ function App() {
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:')).map((key) => key.slice('doomnotes:'.length)))
@@ -737,7 +738,7 @@ function App() {
   const saveToCloud = async (passphrase?: string) => {
     if (!cloudUser) { setAccountOpen(true); setCloudMessage('Sign in or create an account to save this board to your server.'); return }
     const currentBoard = boards[activeBoard]
-    const state = { pages: currentBoard.pages, pageSize, infinite: infinitePage, orientation, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: currentBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
+    const state = { pages: currentBoard.pages, pageSize, infinite: infinitePage, orientation, pageOrientations: currentBoard.pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: currentBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
     const existingId = cloudBoardIds[currentBoard.name]
     try {
       const cloudId = existingId
@@ -771,12 +772,12 @@ function App() {
       try { state = await decryptBoardState(remote.state, passphrase); cloudKeys.current[remote.id] = passphrase }
       catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not unlock this board.'); return }
     } else state = remote.state
-    setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageBackground: state.pageBackground }])
+    setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground }])
     setActiveBoard(newIndex)
     setPage(1)
     setPageSize(state.pageSize ?? 'A4')
     setInfinitePage(state.infinite ?? false)
-    setOrientation(state.orientation)
+    setOrientation(state.pageOrientations?.[0] ?? state.orientation)
     setPageBackground(state.pageBackground)
     setGridEnabled(state.gridEnabled ?? false)
     setShowScale(state.showScale ?? false)
@@ -933,10 +934,10 @@ function App() {
           if (!key) return
           remoteState = await decryptBoardState(remote.state, key)
         } else remoteState = remote.state
-        setBoards((current) => current.map((item, index) => index === localIndex ? { ...item, pages: remoteState.pages, pageSize: remoteState.pageSize ?? 'A4', infinite: remoteState.infinite ?? false, orientation: remoteState.orientation, pageBackground: remoteState.pageBackground } : item))
+        setBoards((current) => current.map((item, index) => index === localIndex ? { ...item, pages: remoteState.pages, pageSize: remoteState.pageSize ?? 'A4', infinite: remoteState.infinite ?? false, orientation: remoteState.orientation, pageOrientations: remoteState.pageOrientations, pageBackground: remoteState.pageBackground } : item))
         setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(remoteState.pageStrokes.map((items, index) => [`${localIndex}:${index + 1}`, items])) }))
         if (localIndex === activeBoard) {
-          setPageSize(remoteState.pageSize ?? 'A4'); setInfinitePage(remoteState.infinite ?? false); setOrientation(remoteState.orientation); setPageBackground(remoteState.pageBackground); setGridEnabled(remoteState.gridEnabled ?? false); setShowScale(remoteState.showScale ?? false)
+          setPageSize(remoteState.pageSize ?? 'A4'); setInfinitePage(remoteState.infinite ?? false); setOrientation(remoteState.pageOrientations?.[page - 1] ?? remoteState.orientation); setPageBackground(remoteState.pageBackground); setGridEnabled(remoteState.gridEnabled ?? false); setShowScale(remoteState.showScale ?? false)
         }
       }).catch(() => undefined)
     })
@@ -1163,7 +1164,7 @@ function App() {
     }
   }
   const saveCurrentFile = () => {
-    const payload = { name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
+    const payload = { name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
     localStorage.setItem(`doomnotes:${boards[activeBoard].name}`, JSON.stringify(payload))
     setRecentFiles((files) => [boards[activeBoard].name, ...files.filter((name) => name !== boards[activeBoard].name)])
     setSaveNotice('Saved in this browser')
@@ -1186,7 +1187,7 @@ function App() {
     if (!board) { setAutoSaveStatus('idle'); return }
     setAutoSaveStatus('saving')
     const saveBoard = () => {
-      const payload = { name: board.name, pages: board.pages, pageSize, infinite: board.infinite ?? infinitePage, orientation: board.orientation ?? orientation, pageBackground: board.pageBackground ?? pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
+      const payload = { name: board.name, pages: board.pages, pageSize, infinite: board.infinite ?? infinitePage, orientation: board.orientation ?? orientation, pageOrientations: board.pageOrientations, pageBackground: board.pageBackground ?? pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
       try {
         localStorage.setItem(`doomnotes:${board.name}`, JSON.stringify(payload))
         setRecentFiles((files) => [board.name, ...files.filter((name) => name !== board.name)])
@@ -1202,7 +1203,7 @@ function App() {
       window.removeEventListener('pagehide', saveBoard)
     }
   }, [boards, activeBoard, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
-  const getBoardDocument = () => ({ format: 'doomnotes', version: 1, name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
+  const getBoardDocument = () => ({ format: 'doomnotes', version: 1, name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
   const downloadNamedBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob)
     const link = window.document.createElement('a')
@@ -1318,12 +1319,12 @@ function App() {
     const raw = localStorage.getItem(`doomnotes:${name}`)
     if (!raw) return
     try {
-      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
+      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
       const boardIndex = boards.length
-      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageBackground: saved.pageBackground }])
+      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation), pageBackground: saved.pageBackground }])
       setActiveBoard(boardIndex)
       setPage(1)
-      setOrientation(saved.orientation)
+      setOrientation(saved.pageOrientations?.[0] ?? saved.orientation)
       setPageBackground(saved.pageBackground)
       setPageSize(saved.pageSize ?? 'A4')
       setInfinitePage(saved.infinite ?? false)
@@ -1344,20 +1345,21 @@ function App() {
         window.setTimeout(() => setSaveNotice(''), 2400)
         return
       }
-      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
       if (documentData.format !== 'doomnotes' || documentData.version !== 1 || typeof documentData.name !== 'string' || !Number.isInteger(documentData.pages) || (documentData.pages ?? 0) < 1 || !Array.isArray(documentData.pageStrokes) || documentData.pageStrokes.length !== documentData.pages) throw new Error('That file is not a valid OzooNotes document.')
       if (documentData.pageSize !== undefined && !['Infinite', 'A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'].includes(documentData.pageSize)) throw new Error('That OzooNotes file uses an unsupported page size.')
       const boardIndex = boards.length
       const importedSize = documentData.pageSize ?? 'A4'
       const importedInfinite = documentData.infinite ?? importedSize === 'Infinite'
       const importedOrientation = documentData.orientation ?? 'portrait'
+      const importedOrientations = Array.from({ length: documentData.pages! }, (_, index) => documentData.pageOrientations?.[index] ?? importedOrientation)
       const importedBackground = documentData.pageBackground ?? 'auto'
-      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageBackground: importedBackground }])
+      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageOrientations: importedOrientations, pageBackground: importedBackground }])
       setActiveBoard(boardIndex)
       setPage(1)
       setPageSize(importedSize)
       setInfinitePage(importedInfinite)
-      setOrientation(importedOrientation)
+      setOrientation(importedOrientations[0])
       setPageBackground(importedBackground)
       setGridEnabled(documentData.gridEnabled ?? false)
       setShowScale(documentData.showScale ?? false)
@@ -1627,7 +1629,7 @@ function App() {
   const createBoard = () => {
     const isInfinite = draftSize === 'Infinite'
     const name = draftName.trim() || `File ${nextFileNumber}`
-    setBoards((current) => [...current, { name, pages: 1, pageSize: draftSize, infinite: isInfinite, orientation: draftOrientation, pageBackground: draftBackground }])
+    setBoards((current) => [...current, { name, pages: 1, pageSize: draftSize, infinite: isInfinite, orientation: draftOrientation, pageOrientations: [draftOrientation], pageBackground: draftBackground }])
     setActiveBoard(boards.length)
     setPage(1)
     setPageSize(draftSize)
@@ -1655,7 +1657,7 @@ function App() {
   }
   const setActiveOrientation = (value: 'portrait' | 'landscape') => {
     setOrientation(value)
-    setBoards((current) => current.map((board, index) => index === activeBoard ? { ...board, orientation: value } : board))
+    setBoards((current) => current.map((board, index) => index === activeBoard ? { ...board, orientation: value, pageOrientations: Array.from({ length: board.pages }, (_, pageIndex) => pageIndex === page - 1 ? value : board.pageOrientations?.[pageIndex] ?? board.orientation ?? 'portrait') } : board))
   }
   const closeBoard = (index: number) => {
     if (boards.length === 1) {
@@ -1677,10 +1679,16 @@ function App() {
       setActiveBoard(activeBoard - 1)
     }
   }
-  const addPage = () => {
-    const updated = boards.map((board, index) => index === activeBoard ? { ...board, pages: board.pages + 1 } : board)
+  const addPage = (newOrientation: 'portrait' | 'landscape') => {
+    const updated = boards.map((board, index) => {
+      if (index !== activeBoard) return board
+      const pageOrientations = Array.from({ length: board.pages }, (_, pageIndex) => board.pageOrientations?.[pageIndex] ?? board.orientation ?? orientation)
+      return { ...board, pages: board.pages + 1, pageOrientations: [...pageOrientations, newOrientation] }
+    })
     setBoards(updated)
     setPage(updated[activeBoard].pages)
+    setOrientation(newOrientation)
+    setAddPageMenuOpen(false)
   }
 
   const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}>×</button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset>{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
@@ -1883,7 +1891,7 @@ function App() {
             </div>
             <div className="page-actions">
               {!infinitePage && <label className="orientation-select"><span className="orientation-icon">▯</span><select value={orientation} onChange={(event) => setActiveOrientation(event.target.value as 'portrait' | 'landscape')} aria-label="Page orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>}
-              {!infinitePage && <button className="add-page" onClick={addPage}><span>+</span> Add page</button>}
+              {!infinitePage && <div className="add-page-wrap"><button className="add-page" aria-haspopup="menu" aria-expanded={addPageMenuOpen} onClick={() => setAddPageMenuOpen((open) => !open)}><span>+</span> Add page</button>{addPageMenuOpen && <div className="add-page-menu" role="menu" aria-label="Choose new page orientation"><p>New page orientation</p><button role="menuitem" onClick={() => addPage('portrait')}>▯ Portrait</button><button role="menuitem" onClick={() => addPage('landscape')}>▭ Landscape</button></div>}</div>}
             </div>
           </div>
           <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
