@@ -954,6 +954,7 @@ function App() {
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
   useEffect(() => { setSelectedIndices([]); refreshHistoryState(pageKey) }, [pageKey])
+  useEffect(() => { const active = boards[activeBoard]; if (active) setOrientation(active.pageOrientations?.[page - 1] ?? active.orientation ?? 'portrait') }, [activeBoard, page])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1648,7 +1649,7 @@ function App() {
     setPage(1)
     setPageSize(board.pageSize ?? 'A4')
     setInfinitePage(board.infinite ?? false)
-    setOrientation(board.orientation ?? 'portrait')
+    setOrientation(board.pageOrientations?.[0] ?? board.orientation ?? 'portrait')
     setPageBackground(board.pageBackground ?? 'auto')
   }
   const setActiveBackground = (color: string) => {
@@ -1673,7 +1674,7 @@ function App() {
       setPage(1)
       setPageSize(nextBoard.pageSize ?? 'A4')
       setInfinitePage(nextBoard.infinite ?? false)
-      setOrientation(nextBoard.orientation ?? 'portrait')
+      setOrientation(nextBoard.pageOrientations?.[0] ?? nextBoard.orientation ?? 'portrait')
       setPageBackground(nextBoard.pageBackground ?? 'auto')
     } else if (index < activeBoard) {
       setActiveBoard(activeBoard - 1)
