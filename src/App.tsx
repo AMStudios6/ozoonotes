@@ -1426,10 +1426,6 @@ function App() {
 
   const exportPdf = async () => {
     if (infinitePage) return
-    const pageWidth = orientedPageMm[0] * 72 / 25.4
-    const pageHeight = orientedPageMm[1] * 72 / 25.4
-    const logicalWidth = canvasWidth
-    const logicalHeight = canvasHeight
     const activePdfBoard = boards[activeBoard]
     const exportSize = activePdfBoard.pageSize ?? pageSize
     const basePageMm = pageDimensionsMm[exportSize as Exclude<PageSize, 'Infinite'>]
@@ -1589,7 +1585,7 @@ function App() {
       const contentId = pageId + 1
       pageIds.push(pageId)
       objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`)
-      objects.push(`<< /Length ${new TextEncoder().encode(stream).length + 1} >>\nstream\n${stream}\nendstream`
+      objects.push(`<< /Length ${new TextEncoder().encode(stream).length + 1} >>\nstream\n${stream}\nendstream`)
     })
     objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
     let document = '%PDF-1.4\n'
