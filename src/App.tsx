@@ -623,8 +623,8 @@ function App() {
     const maxX = Math.max(...points.map((point) => point.x))
     const minY = Math.min(...points.map((point) => point.y))
     const maxY = Math.max(...points.map((point) => point.y))
-    const offsetX = infinitePage ? .5 - (minX + maxX) / 2 : Math.max(-minX, Math.min(1 - maxX, .5 - (minX + maxX) / 2))
-    const offsetY = infinitePage ? .5 - (minY + maxY) / 2 : Math.max(-minY, Math.min(1 - maxY, .5 - (minY + maxY) / 2))
+    const offsetX = infinitePage ? cameraOffset.x + .5 - (minX + maxX) / 2 : Math.max(-minX, Math.min(1 - maxX, .5 - (minX + maxX) / 2))
+    const offsetY = infinitePage ? cameraOffset.y + .5 - (minY + maxY) / 2 : Math.max(-minY, Math.min(1 - maxY, .5 - (minY + maxY) / 2))
     const added = item.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY })) }))
     const firstIndex = strokes.length
     editCurrentPage((current) => [...current, ...added])
@@ -976,7 +976,7 @@ function App() {
     setTextEditor(null)
   }
 
-  const insertImageBlob = (blob: Blob, point = lastTextPoint.current) => {
+  const insertImageBlob = (blob: Blob, point = { x: lastTextPoint.current.x + (infinitePage ? cameraOffset.x : 0), y: lastTextPoint.current.y + (infinitePage ? cameraOffset.y : 0) }) => {
     if (!blob.type.startsWith('image/')) return
     const reader = new FileReader()
     reader.onload = () => {
@@ -987,8 +987,8 @@ function App() {
         let width = 0.42
         let height = width / aspect
         if (height > 0.42) { height = 0.42; width = height * aspect }
-        const x = Math.max(0, Math.min(1 - width, point.x))
-        const y = Math.max(0, Math.min(1 - height, point.y))
+        const x = infinitePage ? point.x : Math.max(0, Math.min(1 - width, point.x))
+        const y = infinitePage ? point.y : Math.max(0, Math.min(1 - height, point.y))
         const imageItem: Stroke = { tool: 'Image', color: '#ffffff', width: 1, opacity: 100, points: [{ x, y }, { x: x + width, y: y + height }], imageData }
         imageCache.set(imageData, image)
         editCurrentPage((current) => [...current, imageItem])
@@ -1532,7 +1532,7 @@ function App() {
       const image = new Image()
       image.onload = () => {
         const width = 0.58, height = width * 580 / 900
-        const x = Math.max(0, Math.min(1 - width, 0.21)), y = Math.max(0, Math.min(1 - height, 0.28))
+        const x = infinitePage ? cameraOffset.x + 0.21 : Math.max(0, Math.min(1 - width, 0.21)), y = infinitePage ? cameraOffset.y + 0.28 : Math.max(0, Math.min(1 - height, 0.28))
         const graph: Stroke = { tool: 'Image', color: '#ffffff', width: 1, opacity: 100, points: [{ x, y }, { x: x + width, y: y + height }], imageData }
         imageCache.set(imageData, image)
         editCurrentPage((current) => [...current, graph])
@@ -1792,7 +1792,7 @@ function App() {
           <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: (current[cameraKey]?.x ?? 0) + event.deltaX / (canvasWidth * zoom / 100), y: (current[cameraKey]?.y ?? 0) + event.deltaY / (canvasHeight * zoom / 100) } })) } }}>
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
-              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${textEditor.point.x * 100}%`, top: `${textEditor.point.y * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
+              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
             </div>
           </div>
