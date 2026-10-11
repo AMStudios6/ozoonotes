@@ -1103,7 +1103,7 @@ function App() {
     downloadNamedBlob(blob, `${safeName}.${extension}`)
   }
   const saveBoardToFile = () => {
-    downloadBlob(new Blob([JSON.stringify(getBoardDocument(), null, 2)], { type: 'application/vnd.doomnotes+json' }), 'doomnotes')
+    downloadBlob(new Blob([JSON.stringify(getBoardDocument(), null, 2)], { type: 'application/vnd.ozoonotes+json' }), 'ozoonotes')
     setSaveNotice('OzooNotes file downloaded')
     window.setTimeout(() => setSaveNotice(''), 2400)
     setMenuOpen(false)
@@ -1628,7 +1628,7 @@ function App() {
             </section>
             <section className="landing-files" id="landing-files">
               <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={addBoard}>＋ New board</button></div>
-              <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
+              <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
               {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}<small>Saved in this browser</small></span><b>Open →</b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon">▤</span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}>↗ Open file</button></div>}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open →</b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
@@ -1700,7 +1700,7 @@ function App() {
             <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
-          <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
+          <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
           <div className="page-navigation">
             <button aria-label="Previous page" title="Previous page" disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))}>‹</button>
             <span>Page</span><input aria-label="Current page number" type="number" min={1} max={boards[activeBoard].pages} value={page} onChange={(event) => setPage(Math.min(boards[activeBoard].pages, Math.max(1, Number(event.target.value) || 1)))} />
