@@ -239,7 +239,6 @@
 .landing-open-file span {font-size:16px}
 .landing-local-note {max-width:415px;margin:18px 0 0;color:var(--muted);font-size:11px;line-height:1.6}
 .landing-art {position:relative;display:grid;place-items:center;min-height:390px}
-.landing-art-image {display:block;width:min(520px,100%);height:auto;border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 62px #0004}
 .landing-art-shadow {position:absolute;width:80%;height:70%;border-radius:50%;background:color-mix(in srgb,var(--accent) 19%,transparent);filter:blur(65px)}
 .art-paper {position:relative;width:min(440px,100%);aspect-ratio:1.08/1;padding:20px 22px;border:1px solid #e5dcee;border-radius:16px;background:#fff;color:#30233a;box-shadow:0 28px 70px #24173722;transform:rotate(2deg)}
 .art-toolbar {height:34px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #eee8f4;color:#6e5884;font-size:15px}
