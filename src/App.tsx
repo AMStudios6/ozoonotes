@@ -590,7 +590,7 @@ function App() {
   const duplicateSelection = () => {
     if (!selectedIndices.length) return
     const selected = selectedIndices.map((index) => strokes[index]).filter((stroke): stroke is Stroke => Boolean(stroke))
-    const copies = selected.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: Math.min(0.98, point.x + 0.025), y: Math.min(0.98, point.y + 0.025) })) }))
+    const copies = selected.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: infinitePage ? point.x + 0.025 : Math.min(0.98, point.x + 0.025), y: infinitePage ? point.y + 0.025 : Math.min(0.98, point.y + 0.025) })) }))
     editCurrentPage((current) => [...current, ...copies])
     setSelectedIndices(copies.map((_, index) => strokes.length + index))
   }
@@ -623,8 +623,8 @@ function App() {
     const maxX = Math.max(...points.map((point) => point.x))
     const minY = Math.min(...points.map((point) => point.y))
     const maxY = Math.max(...points.map((point) => point.y))
-    const offsetX = Math.max(-minX, Math.min(1 - maxX, .5 - (minX + maxX) / 2))
-    const offsetY = Math.max(-minY, Math.min(1 - maxY, .5 - (minY + maxY) / 2))
+    const offsetX = infinitePage ? .5 - (minX + maxX) / 2 : Math.max(-minX, Math.min(1 - maxX, .5 - (minX + maxX) / 2))
+    const offsetY = infinitePage ? .5 - (minY + maxY) / 2 : Math.max(-minY, Math.min(1 - maxY, .5 - (minY + maxY) / 2))
     const added = item.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY })) }))
     const firstIndex = strokes.length
     editCurrentPage((current) => [...current, ...added])
@@ -1068,7 +1068,7 @@ function App() {
       const dx = event.clientX - pan.startClient.x
       const dy = event.clientY - pan.startClient.y
       if (infinitePage) {
-        setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: pan.startCamera.x - dx / canvasWidth, y: pan.startCamera.y - dy / canvasHeight } }))
+        setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: pan.startCamera.x - dx / (canvasWidth * zoom / 100), y: pan.startCamera.y - dy / (canvasHeight * zoom / 100) } }))
       } else {
         setPanOffset({ x: pan.startOffset.x + dx, y: pan.startOffset.y + dy })
       }
@@ -1080,8 +1080,8 @@ function App() {
       const allPoints = move.originals.flatMap((stroke) => stroke.points)
       const xs = allPoints.map((item) => item.x)
       const ys = allPoints.map((item) => item.y)
-      const dx = Math.max(-Math.min(...xs), Math.min(1 - Math.max(...xs), point.x - move.start.x))
-      const dy = Math.max(-Math.min(...ys), Math.min(1 - Math.max(...ys), point.y - move.start.y))
+      const dx = infinitePage ? point.x - move.start.x : Math.max(-Math.min(...xs), Math.min(1 - Math.max(...xs), point.x - move.start.x))
+      const dy = infinitePage ? point.y - move.start.y : Math.max(-Math.min(...ys), Math.min(1 - Math.max(...ys), point.y - move.start.y))
       move.preview = move.originals.map((original) => ({ ...original, points: original.points.map((item) => ({ x: item.x + dx, y: item.y + dy })) }))
       const updated = [...strokes]
       move.indices.forEach((index, offset) => { updated[index] = move.preview[offset] })
@@ -1789,7 +1789,7 @@ function App() {
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
           </aside>}
 
-          <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: cameraOffset.x + event.deltaX / canvasWidth, y: cameraOffset.y + event.deltaY / canvasHeight } })) } }}>
+          <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: (current[cameraKey]?.x ?? 0) + event.deltaX / (canvasWidth * zoom / 100), y: (current[cameraKey]?.y ?? 0) + event.deltaY / (canvasHeight * zoom / 100) } })) } }}>
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${textEditor.point.x * 100}%`, top: `${textEditor.point.y * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
