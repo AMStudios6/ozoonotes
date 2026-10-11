@@ -1,5 +1,7 @@
 # OzooNotes
 
+![OzooNotes mascot](public/ozoo-mascot.svg)
+
 OzooNotes is a React whiteboard with local boards, multi-page A-series and US paper sizes, image import, PDF/PNG/SVG export, portable `.doomnotes` files, and a self-hostable collaboration API.
 
 ## Run locally
@@ -11,15 +13,7 @@ Open two terminals in this project folder:
 1. Start the API server with `npm run server`.
 2. Start the website with `npm run dev` and open the Vite URL it prints.
 
-The dev website forwards `/api` requests to the server on port 8787. Create an account from **Sign in**, then use **Save to server** in the board menu. A password must be at least 12 characters. You can also enable Google sign-in with the setup below.
-
-## Google sign-in
-
-1. Create a Web application OAuth client in Google Cloud Console and set the local authorized redirect URI to `http://localhost:5173/api/auth/google/callback`.
-2. Copy `.env.example` to `.env` and fill in the client ID and secret. Keep `.env` private; it is ignored by Git.
-3. Start the API with `npm run server`, then the site with `npm run dev`. The **Continue with Google** button appears when the server has all three OAuth values.
-
-Set `GOOGLE_REDIRECT_URI` to the exact callback URL you add in Google Cloud Console. For production, use your HTTPS site URL followed by `/api/auth/google/callback`. The OAuth flow only requests basic sign-in (`openid email profile`); cloud boards remain stored on the OzooNotes server. Google accounts create OzooNotes accounts and are identified by Google's stable account ID.
+The dev website forwards `/api` requests to the server on port 8787. Create an account from **Sign in**, then use **Save to server** in the board menu. A password must be at least 12 characters.
 
 ## Cloud and collaboration
 
@@ -40,9 +34,9 @@ Railway is a straightforward fit for this app because the Node server can serve 
 - Build command: `npm ci && npm run build`
 - Start command: `npm run server`
 - Volume mount path: `/app/data`
-- Variables: `HOST=0.0.0.0`, `NODE_ENV=production`, `DOOMNOTES_DB=/app/data/doomnotes.sqlite`, plus the three Google OAuth variables
+- Variables: `HOST=0.0.0.0`, `NODE_ENV=production`, `DOOMNOTES_DB=/app/data/doomnotes.sqlite`
 
-Use the service's public HTTPS domain when setting `GOOGLE_REDIRECT_URI`, then add that exact URL ending in `/api/auth/google/callback` to the Google OAuth client's authorized redirect URIs. Railway volumes provide persistent service data across deployments and restarts; keep a separate database backup as well.
+Railway volumes provide persistent service data across deployments and restarts; keep a separate database backup as well.
 
 The development server listens on `127.0.0.1` by default. Set `HOST=0.0.0.0` only behind a firewall and HTTPS reverse proxy when you intentionally make the API reachable from your network.
 
