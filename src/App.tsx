@@ -954,7 +954,7 @@ function App() {
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
   useEffect(() => { setSelectedIndices([]); refreshHistoryState(pageKey) }, [pageKey])
-  useEffect(() => { const active = boards[activeBoard]; if (active) setOrientation(active.pageOrientations?.[page - 1] ?? active.orientation ?? 'portrait') }, [activeBoard, page])
+  useEffect(() => { const active = boards[activeBoard]; if (active) setOrientation(active.pageOrientations?.[page - 1] ?? active.orientation ?? 'portrait') }, [activeBoard, page, boards])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
