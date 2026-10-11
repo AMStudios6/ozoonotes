@@ -289,7 +289,6 @@ function readSavedWorkspace(): RestoredWorkspace {
     const activeBoard = Math.max(0, Math.min(Number.isInteger(savedWorkspace.activeBoard) ? savedWorkspace.activeBoard : 0, boards.length - 1))
     const activeSaved = loaded[activeBoard].saved
     const strokesByPage = Object.fromEntries(loaded.flatMap(({ saved }, boardIndex) => (saved.pageStrokes ?? []).map((strokes, pageIndex) => [`${boardIndex}:${pageIndex + 1}`, strokes ?? []])))
-    const fileNumbers = boards.map(({ name }) => Number(name.match(/^File (\\d+)$/)?.[1] ?? 0))
     const activePage = Math.max(1, Math.min(Number.isInteger(savedWorkspace.page) ? savedWorkspace.page : 1, boards[activeBoard].pages))
     return {
       boards,
@@ -311,7 +310,7 @@ function readSavedWorkspace(): RestoredWorkspace {
 function App() {
   const [initialWorkspace] = useState(readSavedWorkspace)
   const [boards, setBoards] = useState<Board[]>(initialWorkspace.boards)
-  const [nextFileNumber, setNextFileNumber] = useState(() => Math.max(0, ...initialWorkspace.boards.map(({ name }) => Number(name.match(/^File (\\d+)$/)?.[1] ?? 0))) + 1)
+  const [nextFileNumber, setNextFileNumber] = useState(() => Math.max(0, ...initialWorkspace.boards.map(({ name }) => Number(name.match(/^File (\d+)$/)?.[1] ?? 0))) + 1)
   const [activeBoard, setActiveBoard] = useState(initialWorkspace.activeBoard)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [activeColor, setActiveColor] = useState(penColors[0])
