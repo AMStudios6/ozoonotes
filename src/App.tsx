@@ -261,7 +261,7 @@ function App() {
   const [activeBoard, setActiveBoard] = useState(0)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [activeColor, setActiveColor] = useState(penColors[0])
-  const [showColorOptions, setShowColorOptions] = useState(true)
+  const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [opacity, setOpacity] = useState(100)
   const [pageBackground, setPageBackground] = useState(pageColors[0])
@@ -338,7 +338,8 @@ function App() {
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const brushToolRef = useRef<HTMLButtonElement>(null)
-  const colorOptionsRef = useRef<HTMLDivElement>(null)
+  const settingsToggleRef = useRef<HTMLButtonElement>(null)
+  const settingsPanelRef = useRef<HTMLElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const lastTextPoint = useRef<Point>({ x: 0.3, y: 0.3 })
@@ -461,20 +462,20 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (activeTool !== 'Brush') setShowColorOptions(false)
+    if (activeTool !== 'Brush') setShowSettingsPanel(false)
   }, [activeTool])
 
   useEffect(() => {
-    if (!showColorOptions) return
+    if (!showSettingsPanel) return
     const dismissBrushColors = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
-      if (!brushToolRef.current?.contains(target) && !colorOptionsRef.current?.contains(target)) {
-        setShowColorOptions(false)
+      if (!settingsPanelRef.current?.contains(target) && !settingsToggleRef.current?.contains(target)) {
+        setShowSettingsPanel(false)
       }
     }
     const dismissBrushColorsOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowColorOptions(false)
+      if (event.key === 'Escape') setShowSettingsPanel(false)
     }
     document.addEventListener('pointerdown', dismissBrushColors)
     document.addEventListener('keydown', dismissBrushColorsOnEscape)
@@ -482,7 +483,7 @@ function App() {
       document.removeEventListener('pointerdown', dismissBrushColors)
       document.removeEventListener('keydown', dismissBrushColorsOnEscape)
     }
-  }, [showColorOptions])
+  }, [showSettingsPanel])
 
   useEffect(() => {
     if (!sharedToken) return
@@ -1473,7 +1474,8 @@ function App() {
           </div>
           <div className="toolbar" aria-label="Drawing tools">
             <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span>▧</span></button>
-            {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush') setShowColorOptions(true) }}><span>{toolIcons[tool]}</span></button>)}
+            {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush') setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span></button>)}
+            <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
@@ -1484,18 +1486,14 @@ function App() {
             <button aria-label="Next page" title="Next page" disabled={page >= boards[activeBoard].pages} onClick={() => setPage(Math.min(boards[activeBoard].pages, page + 1))}>›</button>
           </div>
 
-          <aside className="stroke-panel" aria-label="Selection and drawing settings">
-            <div className="color-options-wrap" ref={colorOptionsRef}>
-              {!showColorOptions ? <button type="button" className="color-options-toggle" onClick={() => setShowColorOptions(true)}>Show colors</button> : <>
-                {activeTool === 'Brush' && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
-                {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={`Page background ${color}`} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setActiveBackground(color)} />)}</div></div>}
-              </>}
-            </div>
+          {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
+            {activeTool === 'Brush' && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
+            {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={`Page background ${color}`} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}>▢</button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>▱</button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}>▰</button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}>▧</button></div>
             {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
-          </aside>
+          </aside>}
 
           <div className={`workspace ${zoom > 100 ? 'zoomed' : ''}`}>
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '2400px', aspectRatio: '1 / 1' } : { backgroundColor: pageBackground, aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
