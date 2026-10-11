@@ -15,6 +15,7 @@ type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
 type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
+type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
 function resolvePageBackground(background: string, dark: boolean) {
@@ -197,7 +198,7 @@ function hitTestObject(stroke: Stroke, point: Point, canvasWidth: number, canvas
   return segments.some(([a, b]) => pointToSegmentDistance(pointPx, a, b) <= 15 + stroke.width / 2)
 }
 
-function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }) {
+function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }, selectionBox?: SelectionBox) {
   const context = canvas.getContext('2d')
   if (!context) return
   context.clearRect(0, 0, canvas.width, canvas.height)
@@ -257,6 +258,21 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       context.strokeRect(boxX, boxY, boxWidth, boxHeight)
       context.restore()
     }
+  }
+  if (selectionBox) {
+    context.save()
+    context.globalAlpha = 1
+    context.fillStyle = 'rgba(169, 119, 235, .12)'
+    context.strokeStyle = '#a977eb'
+    context.lineWidth = 1.5
+    context.setLineDash([6, 4])
+    const left = Math.min(selectionBox.start.x, selectionBox.current.x) * canvas.width
+    const top = Math.min(selectionBox.start.y, selectionBox.current.y) * canvas.height
+    const width = Math.abs(selectionBox.current.x - selectionBox.start.x) * canvas.width
+    const height = Math.abs(selectionBox.current.y - selectionBox.start.y) * canvas.height
+    context.fillRect(left, top, width, height)
+    context.strokeRect(left, top, width, height)
+    context.restore()
   }
   if (eraserPoint && eraserRadius > 0) {
     context.save()
@@ -497,6 +513,7 @@ function App() {
   const [rulerUnit, setRulerUnit] = useState<RulerUnit>('cm')
   const [shapeKind, setShapeKind] = useState<ShapeKind>('Rectangle')
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
+  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [eraserHover, setEraserHover] = useState<Point | null>(null)
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
@@ -528,6 +545,7 @@ function App() {
   const lastTextPoint = useRef<Point>({ x: 0.3, y: 0.3 })
   const activeStroke = useRef<Stroke | null>(null)
   const activeMove = useRef<MoveSession | null>(null)
+  const activeMarquee = useRef<{ start: Point; additive: boolean; baseSelection: number[] } | null>(null)
   const selectionClipboard = useRef<{ strokes: Stroke[]; camera: Point; infinite: boolean } | null>(null)
   const cancelTextRef = useRef(false)
   const pageKey = `${activeBoard}:${page}`
@@ -929,8 +947,8 @@ function App() {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 })
-  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y])
+    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, selectionBox ?? undefined)
+  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
@@ -1058,7 +1076,14 @@ function App() {
     if (!hardwareEraser && activeTool === 'Select') {
       const canvas = event.currentTarget
       const hit = strokes.map((stroke, strokeIndex) => ({ stroke, strokeIndex })).reverse().find(({ stroke }) => hitTestObject(stroke, point, canvas.width, canvas.height))?.strokeIndex
-      if (hit === undefined) { if (!event.shiftKey) setSelectedIndices([]); return }
+      if (hit === undefined) {
+        if (!event.shiftKey) setSelectedIndices([])
+        activeMarquee.current = { start: point, additive: event.shiftKey, baseSelection: event.shiftKey ? selectedIndices : [] }
+        setSelectionBox({ start: point, current: point })
+        event.currentTarget.setPointerCapture(event.pointerId)
+        return
+      }
+      setSelectionBox(null)
       const next = event.shiftKey ? (selectedIndices.includes(hit) ? selectedIndices.filter((index) => index !== hit) : [...selectedIndices, hit]) : (selectedIndices.includes(hit) ? selectedIndices : [hit])
       setSelectedIndices(next)
       if (!next.includes(hit)) return
@@ -1100,6 +1125,10 @@ function App() {
       return
     }
     const point = pointFromEvent(event)
+    if (activeMarquee.current) {
+      setSelectionBox({ start: activeMarquee.current.start, current: point })
+      return
+    }
     if (activeMove.current) {
       const move = activeMove.current
       const allPoints = move.originals.flatMap((stroke) => stroke.points)
@@ -1343,6 +1372,23 @@ function App() {
   }
   const finishStroke = () => {
     if (activePan.current) { activePan.current = null; return }
+    const marquee = activeMarquee.current
+    if (marquee) {
+      const box = selectionBox ?? { start: marquee.start, current: marquee.start }
+      activeMarquee.current = null
+      setSelectionBox(null)
+      if (Math.hypot(box.current.x - box.start.x, box.current.y - box.start.y) > 0.006) {
+        const left = Math.min(box.start.x, box.current.x), right = Math.max(box.start.x, box.current.x)
+        const top = Math.min(box.start.y, box.current.y), bottom = Math.max(box.start.y, box.current.y)
+        const contained = strokes.map((stroke, index) => {
+          if (!stroke.points.length) return -1
+          const xs = stroke.points.map((point) => point.x), ys = stroke.points.map((point) => point.y)
+          return Math.max(...xs) >= left && Math.min(...xs) <= right && Math.max(...ys) >= top && Math.min(...ys) <= bottom ? index : -1
+        }).filter((index) => index >= 0)
+        setSelectedIndices(marquee.additive ? Array.from(new Set([...marquee.baseSelection, ...contained])) : contained)
+      }
+      return
+    }
     const move = activeMove.current
     activeMove.current = null
     if (move) {
