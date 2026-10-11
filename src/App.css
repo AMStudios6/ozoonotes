@@ -59,6 +59,14 @@
 .toolbar {position:absolute; z-index:4; top:65px; left:22px; display:flex; flex-direction:column; gap:5px; padding:8px 6px; border:1px solid var(--line); border-radius:17px; background:var(--panel); box-shadow:0 8px 22px #0003}
 .tool-button {width:42px;height:40px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--muted);cursor:pointer;transition:.15s}
 .tool-button span {font-size:18px;font-weight:600}.tool-button:hover{background:var(--panel-raised);color:var(--ink)}.tool-button.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 65%,var(--line));background:var(--accent-soft)}
+.drawing-tool-group {position:relative}
+.drawing-tool-toggle {position:relative}
+.drawing-tool-toggle small {position:absolute;right:3px;bottom:2px;font-size:9px;line-height:1}
+.drawing-tool-menu {position:absolute;z-index:8;top:0;left:calc(100% + 9px);display:grid;min-width:148px;gap:3px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 10px 28px #0004}
+.drawing-tool-option {height:36px;display:flex;align-items:center;gap:9px;padding:0 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);text-align:left;font-size:12px;cursor:pointer}
+.drawing-tool-option span:first-child {width:20px;text-align:center;font-size:16px;color:var(--ink)}
+.drawing-tool-option:hover,.drawing-tool-option.active {color:var(--accent);background:var(--accent-soft)}
+
 .image-import {border-right:1px solid var(--line);border-radius:7px 2px 2px 7px}.image-import span {font-size:19px}.image-file-input {display:none}
 .quick-actions {position:absolute;z-index:4;top:20px;left:70px;height:39px;display:flex;align-items:center;gap:3px;padding:4px 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 6px 18px #0002}
 .quick-actions button {width:30px;height:29px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:18px;cursor:pointer}.quick-actions button:hover:not(:disabled){background:var(--panel-raised);color:var(--ink)}.quick-actions button:disabled{opacity:.35;cursor:default}
