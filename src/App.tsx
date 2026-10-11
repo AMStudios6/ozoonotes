@@ -1584,7 +1584,7 @@ function App() {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`}>
         <section className="landing-window">
-          <header className="landing-topbar"><div className="brand"><img className="brand-mark" src="/ozoo-mascot.svg" alt="" /> OzooNotes</div><div className="landing-top-actions">{!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}<button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button></div></header>
+          <header className="landing-topbar"><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /> OzooNotes</div><div className="landing-top-actions">{!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}<button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button></div></header>
           <div className="landing-content">
             <aside className="landing-sidebar">
               <div className="landing-actions">
@@ -1597,7 +1597,7 @@ function App() {
             </aside>
             <section className="landing-hero">
               <div className="hero-decoration decoration-one" /><div className="hero-decoration decoration-two" />
-              <div className="hero-content"><img className="hero-mark" src="/ozoo-mascot.svg" alt="OzooNotes mascot" /><h1>OzooNotes</h1><p className="hero-description">Don’t Doomscroll, just OzooNotes</p><button className="hero-new-file" onClick={addBoard}>Create a new file <span>→</span></button></div>
+              <div className="hero-content"><img className="hero-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="OzooNotes mascot" /><h1>OzooNotes</h1><p className="hero-description">Don’t Doomscroll, just OzooNotes</p><button className="hero-new-file" onClick={addBoard}>Create a new file <span>→</span></button></div>
               <div className="hero-footnote"><span className="status-dot" /> Ready when you are</div>
             </section>
           </div>
@@ -1612,7 +1612,7 @@ function App() {
     <main className={`app ${dark ? 'dark' : 'light'}`}>
       <div className="window">
         <header className="window-top">
-          <div className="brand"><img className="brand-mark" src="/ozoo-mascot.svg" alt="" /> OzooNotes</div>
+          <div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /> OzooNotes</div>
           <nav className="file-tabs" aria-label="Whiteboard files">
             {boards.map((board, index) => <div key={board.name} className={`file-tab ${index === activeBoard ? 'selected' : ''}`}>
               <button className="tab-open" onClick={() => activateBoard(index)}>{board.name}</button>
