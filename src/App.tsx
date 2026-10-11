@@ -1682,6 +1682,7 @@ function App() {
             <nav className="landing-nav" aria-label="Main navigation">
               <a href="#landing-tools">What you can do</a>
               <a href="#landing-files">Your files</a>
+              <a href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">GitHub</a>
             </nav>
             <div className="landing-top-actions">
               {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}
@@ -1697,6 +1698,7 @@ function App() {
                 <div className="landing-cta-row">
                   <button className="hero-new-file" onClick={addBoard}>Start a new board <span>→</span></button>
                   <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><span>↗</span> Open a file</button>
+                  <a className="landing-github-link" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">See how it works on GitHub ↗</a>
                 </div>
                 <p className="landing-local-note">Your boards save in this browser. Export a file when you want a portable copy.</p>
               </div>
@@ -1769,6 +1771,7 @@ function App() {
               <button onClick={saveCurrentFile}>▣ <span>Save</span></button>
               <button onClick={saveBoardToFile}>↓ <span>Save OzooNotes file</span></button>
               <button onClick={() => documentInputRef.current?.click()}>↗ <span>Open OzooNotes file</span></button>
+              <a className="board-menu-github" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">⌘ <span>See how it works on GitHub</span></a>
               {!localOnly && <>
               <button onClick={openCloudSaveDialog}>☁ <span>Save to server</span></button>
               <button onClick={() => { void openShareManager() }}>♧ <span>Access and read-only links</span></button>
