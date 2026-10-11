@@ -1584,22 +1584,55 @@ function App() {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`}>
         <section className="landing-window">
-          <header className="landing-topbar"><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /> OzooNotes</div><div className="landing-top-actions">{!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}<button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button></div></header>
-          <div className="landing-content">
-            <aside className="landing-sidebar">
-              <div className="landing-actions">
-                <button className="landing-primary" onClick={addBoard}><span>＋</span> New file</button>
-                <button className="landing-secondary" onClick={() => documentInputRef.current?.click()}><span>↗</span> Open file</button>
-                <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
-              </div>
-              <div className="recent-section"><h2>Recent files</h2>{recentFiles.length ? <div className="recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}</span></button>)}</div> : <div className="recent-empty"><span className="recent-icon">▤</span><p>Your recent files will<br />appear here.</p></div>}</div>
-              {!localOnly && cloudUser && <div className="recent-section"><h2>Cloud boards</h2>{cloudBoards.length ? <div className="recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small className="cloud-board-subtitle">{board.folderId ? cloudFolders.find((folder) => folder.id === board.folderId)?.name ?? 'Folder' : board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span></button>)}</div> : <p className="empty-hint">No cloud boards yet. Open a board and choose Save to server.</p>}</div>}
-            </aside>
+          <header className="landing-topbar">
+            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /><span>OzooNotes</span></a>
+            <nav className="landing-nav" aria-label="Main navigation">
+              <a href="#landing-tools">What you can do</a>
+              <a href="#landing-files">Your files</a>
+            </nav>
+            <div className="landing-top-actions">
+              {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}
+              <button className="theme-toggle" onClick={() => setDark(!dark)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button>
+            </div>
+          </header>
+          <div className="landing-page">
             <section className="landing-hero">
-              <div className="hero-decoration decoration-one" /><div className="hero-decoration decoration-two" />
-              <div className="hero-content"><img className="hero-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="OzooNotes mascot" /><h1>OzooNotes</h1><p className="hero-description">Don’t Doomscroll, just OzooNotes</p><button className="hero-new-file" onClick={addBoard}>Create a new file <span>→</span></button></div>
-              <div className="hero-footnote"><span className="status-dot" /> Ready when you are</div>
+              <div className="landing-copy">
+                <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
+                <h1>Don’t Doomscroll.<br /><span>Make something.</span></h1>
+                <p className="hero-description">Sketch ideas, add notes, shape your thoughts, and plot a graph—all in one calm workspace.</p>
+                <div className="landing-cta-row">
+                  <button className="hero-new-file" onClick={addBoard}>Start a new board <span>→</span></button>
+                  <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><span>↗</span> Open a file</button>
+                </div>
+                <p className="landing-local-note">Your boards save in this browser. Export a file when you want a portable copy.</p>
+              </div>
+              <div className="landing-art" aria-label="Illustration of drawing and graph tools">
+                <div className="landing-art-shadow" />
+                <div className="art-paper">
+                  <div className="art-toolbar"><span>✎</span><span>▱</span><span>○</span><span>↗</span><i /><b /><b /><b /></div>
+                  <div className="art-note art-note-one"><span>ideas</span><strong>Make room<br />for a new thought.</strong><svg viewBox="0 0 120 42" aria-hidden="true"><path d="M4 30 C22 4 30 40 48 18 S75 8 82 26 S100 36 116 10" /></svg></div>
+                  <div className="art-note art-note-two"><span>GRAPH</span><svg viewBox="0 0 150 100" aria-hidden="true"><path className="graph-grid" d="M10 10H145M10 35H145M10 60H145M10 85H145M10 10V90M45 10V90M80 10V90M115 10V90M145 10V90" /><path className="graph-axis" d="M10 60H145M80 10V90" /><path className="graph-curve" d="M12 82 C40 80 47 67 62 46 S94 14 144 15" /></svg><small>y = x²</small></div>
+                  <div className="art-shape art-shape-circle" /><div className="art-shape art-shape-diamond" /><div className="art-caption">a little space for big ideas</div>
+                </div>
+                <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
+              </div>
             </section>
+            <section className="landing-tools" id="landing-tools">
+              <div className="landing-section-heading"><span>MAKE IT YOURS</span><h2>Simple tools. Room to explore.</h2></div>
+              <div className="landing-feature-grid">
+                <article className="landing-feature"><span className="feature-icon feature-draw">✎</span><h3>Draw and arrange</h3><p>Use the brush, pen, shapes, text, lines, and eraser. Move and organize what you create.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-graph">⌁</span><h3>Put ideas on a graph</h3><p>Plot equations or enter points, then add the graph to your board.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-pages">▤</span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
+              </div>
+            </section>
+            <section className="landing-files" id="landing-files">
+              <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={addBoard}>＋ New board</button></div>
+              <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
+              {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}<small>Saved in this browser</small></span><b>Open →</b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon">▤</span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}>↗ Open file</button></div>}
+              {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open →</b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
+            </section>
+            <footer className="landing-footer"><div className="landing-brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-mascot.svg`} alt="" /> OzooNotes</div><span>Don’t Doomscroll, just OzooNotes</span></footer>
           </div>
         </section>
         {newFileDialog}
