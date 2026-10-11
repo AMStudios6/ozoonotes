@@ -116,8 +116,6 @@
 .encryption-choice small {margin-top:5px;color:var(--muted);font-size:10px;line-height:1.45}
 .encryption-note {margin:7px 0 12px;color:var(--muted);font-size:11px;line-height:1.45}
 .auth-divider {display:flex;align-items:center;gap:10px;margin:17px 0;color:var(--muted);font-size:11px}.auth-divider::before,.auth-divider::after {content:"";height:1px;flex:1;background:var(--line)}
-.google-sign-in {height:40px;display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel-raised);color:var(--ink);font-size:12px;font-weight:650;text-decoration:none}.google-sign-in:hover {border-color:var(--accent);background:var(--accent-soft)}
-.google-mark {font-size:15px;font-weight:800;color:#4285f4}.auth-provider-note {margin:0;color:var(--muted);font-size:11px;line-height:1.45;text-align:center}
 .orientation-select,.add-page {height:38px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);font-size:12px}
 .orientation-icon {font-size:17px;color:var(--accent)}.orientation-select select{border:0;outline:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer}.orientation-select option{background:var(--panel)}
 .add-page {cursor:pointer}.add-page:hover{border-color:var(--accent);color:var(--accent)}.add-page span{font-size:19px;color:var(--accent)}
