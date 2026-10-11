@@ -255,18 +255,72 @@ const toolIcons: Record<Tool, string> = {
   Brush: '✎', Pen: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
 }
 
+type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
+type RestoredWorkspace = {
+  boards: Board[]
+  activeBoard: number
+  page: number
+  pageSize: PageSize
+  infinitePage: boolean
+  orientation: 'portrait' | 'landscape'
+  pageBackground: string
+  gridEnabled: boolean
+  showScale: boolean
+  strokesByPage: Record<string, Stroke[]>
+}
+const openWorkspaceStorageKey = 'ozoo:open-workspace'
+
+function readSavedWorkspace(): RestoredWorkspace {
+  const empty: RestoredWorkspace = { boards: [], activeBoard: 0, page: 1, pageSize: 'A4', infinitePage: false, orientation: 'portrait', pageBackground: '#ffffff', gridEnabled: false, showScale: false, strokesByPage: {} }
+  try {
+    const savedWorkspace = JSON.parse(localStorage.getItem(openWorkspaceStorageKey) ?? 'null') as SavedWorkspace | null
+    if (!savedWorkspace || !Array.isArray(savedWorkspace.names)) return empty
+
+    const loaded = savedWorkspace.names.filter((name): name is string => typeof name === 'string').map((name) => {
+      const raw = localStorage.getItem(`doomnotes:${name}`)
+      if (!raw) return null
+      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      if (typeof saved.name !== 'string' || typeof saved.pages !== 'number' || !Array.isArray(saved.pageStrokes)) return null
+      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageBackground: saved.pageBackground ?? '#ffffff' }, saved }
+    }).filter((item): item is NonNullable<typeof item> => item !== null)
+
+    if (!loaded.length) return empty
+    const boards = loaded.map(({ board }) => board)
+    const activeBoard = Math.max(0, Math.min(Number.isInteger(savedWorkspace.activeBoard) ? savedWorkspace.activeBoard : 0, boards.length - 1))
+    const activeSaved = loaded[activeBoard].saved
+    const strokesByPage = Object.fromEntries(loaded.flatMap(({ saved }, boardIndex) => (saved.pageStrokes ?? []).map((strokes, pageIndex) => [`${boardIndex}:${pageIndex + 1}`, strokes ?? []])))
+    const fileNumbers = boards.map(({ name }) => Number(name.match(/^File (\\d+)$/)?.[1] ?? 0))
+    const activePage = Math.max(1, Math.min(Number.isInteger(savedWorkspace.page) ? savedWorkspace.page : 1, boards[activeBoard].pages))
+    return {
+      boards,
+      activeBoard,
+      page: activePage,
+      pageSize: activeSaved.pageSize ?? 'A4',
+      infinitePage: activeSaved.infinite ?? false,
+      orientation: activeSaved.orientation ?? 'portrait',
+      pageBackground: activeSaved.pageBackground ?? '#ffffff',
+      gridEnabled: activeSaved.gridEnabled ?? false,
+      showScale: activeSaved.showScale ?? false,
+      strokesByPage,
+    }
+  } catch {
+    return empty
+  }
+}
+
 function App() {
-  const [boards, setBoards] = useState<Board[]>([])
-  const [nextFileNumber, setNextFileNumber] = useState(1)
-  const [activeBoard, setActiveBoard] = useState(0)
+  const [initialWorkspace] = useState(readSavedWorkspace)
+  const [boards, setBoards] = useState<Board[]>(initialWorkspace.boards)
+  const [nextFileNumber, setNextFileNumber] = useState(() => Math.max(0, ...initialWorkspace.boards.map(({ name }) => Number(name.match(/^File (\\d+)$/)?.[1] ?? 0))) + 1)
+  const [activeBoard, setActiveBoard] = useState(initialWorkspace.activeBoard)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [activeColor, setActiveColor] = useState(penColors[0])
   const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [opacity, setOpacity] = useState(100)
-  const [pageBackground, setPageBackground] = useState(pageColors[0])
-  const [pageSize, setPageSize] = useState<PageSize>('A4')
-  const [infinitePage, setInfinitePage] = useState(false)
+  const [pageBackground, setPageBackground] = useState(initialWorkspace.pageBackground)
+  const [pageSize, setPageSize] = useState<PageSize>(initialWorkspace.pageSize)
+  const [infinitePage, setInfinitePage] = useState(initialWorkspace.infinitePage)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
   const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
@@ -308,8 +362,8 @@ function App() {
   const [draftSize, setDraftSize] = useState<PageSize>('A4')
   const [draftOrientation, setDraftOrientation] = useState<'portrait' | 'landscape'>('portrait')
   const [draftBackground, setDraftBackground] = useState('#ffffff')
-  const [gridEnabled, setGridEnabled] = useState(false)
-  const [showScale, setShowScale] = useState(false)
+  const [gridEnabled, setGridEnabled] = useState(initialWorkspace.gridEnabled)
+  const [showScale, setShowScale] = useState(initialWorkspace.showScale)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [libraryName, setLibraryName] = useState('')
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>(() => {
@@ -328,11 +382,11 @@ function App() {
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:')).map((key) => key.slice('doomnotes:'.length)))
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(initialWorkspace.page)
   const [zoom, setZoom] = useState(100)
-  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialWorkspace.orientation)
   const [dark, setDark] = useState(true)
-  const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>({})
+  const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>(initialWorkspace.strokesByPage)
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
@@ -913,10 +967,16 @@ function App() {
     setMenuOpen(false)
   }
   useEffect(() => {
+    try {
+      localStorage.setItem(openWorkspaceStorageKey, JSON.stringify({ names: boards.map((board) => board.name), activeBoard, page }))
+    } catch { /* Keep the current workspace usable if browser storage is unavailable. */ }
+  }, [boards, activeBoard, page])
+
+  useEffect(() => {
     const board = boards[activeBoard]
     if (!board) { setAutoSaveStatus('idle'); return }
     setAutoSaveStatus('saving')
-    const timer = window.setTimeout(() => {
+    const saveBoard = () => {
       const payload = { name: board.name, pages: board.pages, pageSize, infinite: board.infinite ?? infinitePage, orientation: board.orientation ?? orientation, pageBackground: board.pageBackground ?? pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
       try {
         localStorage.setItem(`doomnotes:${board.name}`, JSON.stringify(payload))
@@ -925,8 +985,13 @@ function App() {
       } catch {
         setAutoSaveStatus('error')
       }
-    }, 650)
-    return () => window.clearTimeout(timer)
+    }
+    const timer = window.setTimeout(saveBoard, 650)
+    window.addEventListener('pagehide', saveBoard)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', saveBoard)
+    }
   }, [boards, activeBoard, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
   const getBoardDocument = () => ({ format: 'doomnotes', version: 1, name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
   const downloadNamedBlob = (blob: Blob, filename: string) => {
