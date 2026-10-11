@@ -1430,7 +1430,12 @@ function App() {
     const pageHeight = orientedPageMm[1] * 72 / 25.4
     const logicalWidth = canvasWidth
     const logicalHeight = canvasHeight
-    const boardPages = Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
+    const activePdfBoard = boards[activeBoard]
+    const exportSize = activePdfBoard.pageSize ?? pageSize
+    const basePageMm = pageDimensionsMm[exportSize as Exclude<PageSize, 'Infinite'>]
+    const pageOrientationAt = (pageIndex: number) => activePdfBoard.pageOrientations?.[pageIndex] ?? activePdfBoard.orientation ?? orientation
+    const pageDimensionsAt = (pageIndex: number): [number, number] => pageOrientationAt(pageIndex) === 'landscape' ? [basePageMm[1], basePageMm[0]] : [basePageMm[0], basePageMm[1]]
+    const boardPages = Array.from({ length: activePdfBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
     if (boardPages.some((pageStrokes) => pageStrokes.some((stroke) => stroke.tool === 'Image'))) {
       const encoder = new TextEncoder()
       const images = [...new Set(boardPages.flatMap((pageStrokes) => pageStrokes.flatMap((stroke) => stroke.tool === 'Image' && stroke.imageData ? [stroke.imageData] : [])))]
@@ -1440,11 +1445,14 @@ function App() {
         if (image.complete) resolve()
         else { image.addEventListener('load', () => resolve(), { once: true }); image.addEventListener('error', () => resolve(), { once: true }) }
       })))
-      const rasterPages = boardPages.map((pageStrokes) => {
+      const rasterPages = boardPages.map((pageStrokes, pageIndex) => {
         const scale = 2
+        const [pageWidthMm, pageHeightMm] = pageDimensionsAt(pageIndex)
+        const pagePixelWidth = Math.round(pageWidthMm * 3.78)
+        const pagePixelHeight = Math.round(pageHeightMm * 3.78)
         const canvas = window.document.createElement('canvas')
-        canvas.width = logicalWidth * scale
-        canvas.height = logicalHeight * scale
+        canvas.width = pagePixelWidth * scale
+        canvas.height = pagePixelHeight * scale
         const drawingCanvas = window.document.createElement('canvas')
         drawingCanvas.width = canvas.width
         drawingCanvas.height = canvas.height
@@ -1465,7 +1473,7 @@ function App() {
         const binary = window.atob(encoded)
         const jpeg = new Uint8Array(binary.length)
         for (let i = 0; i < binary.length; i++) jpeg[i] = binary.charCodeAt(i)
-        return { jpeg, width: canvas.width, height: canvas.height }
+        return { jpeg, width: canvas.width, height: canvas.height, pageWidth: pageWidthMm * 72 / 25.4, pageHeight: pageHeightMm * 72 / 25.4 }
       })
       const objects: Uint8Array[] = []
       const addObject = (contents: string | Uint8Array) => {
@@ -1487,8 +1495,8 @@ function App() {
         const pageId = objects.length + 1
         const contentId = pageId + 1
         pageIds.push(pageId)
-        addObject(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`)
-        const stream = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im0 Do\nQ`
+        addObject(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${raster.pageWidth} ${raster.pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`)
+        const stream = `q\n${raster.pageWidth} 0 0 ${raster.pageHeight} 0 0 cm\n/Im0 Do\nQ`
         addObject(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream`)
       })
       objects[1] = encoder.encode(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`)
@@ -1516,8 +1524,13 @@ function App() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       return
     }
-    const pageStreams = Array.from({ length: boards[activeBoard].pages }, (_, pageIndex) => {
+    const pageStreams = Array.from({ length: activePdfBoard.pages }, (_, pageIndex) => {
       const pageStrokes = strokesByPage[`${activeBoard}:${pageIndex + 1}`] ?? []
+      const [pageWidthMm, pageHeightMm] = pageDimensionsAt(pageIndex)
+      const pageWidth = pageWidthMm * 72 / 25.4
+      const pageHeight = pageHeightMm * 72 / 25.4
+      const logicalWidth = Math.round(pageWidthMm * 3.78)
+      const logicalHeight = Math.round(pageHeightMm * 3.78)
       const commands = ['q']
       const bg = resolvePageBackground(pageBackground, dark).replace('#', '')
       const bgRgb = [0, 2, 4].map((offset) => parseInt(bg.slice(offset, offset + 2), 16) / 255)
@@ -1566,17 +1579,17 @@ function App() {
         }
       }
       commands.push('Q')
-      return commands.join('\n')
+      return { stream: commands.join('\n'), width: pageWidth, height: pageHeight }
     })
 
     const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
     const pageIds: number[] = []
-    pageStreams.forEach((stream) => {
+    pageStreams.forEach(({ stream, width, height }) => {
       const pageId = objects.length + 1
       const contentId = pageId + 1
       pageIds.push(pageId)
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`)
-      objects.push(`<< /Length ${new TextEncoder().encode(stream).length + 1} >>\nstream\n${stream}\nendstream`)
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`)
+      objects.push(`<< /Length ${new TextEncoder().encode(stream).length + 1} >>\nstream\n${stream}\nendstream`
     })
     objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
     let document = '%PDF-1.4\n'
