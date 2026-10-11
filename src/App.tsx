@@ -261,6 +261,7 @@ function App() {
   const [activeBoard, setActiveBoard] = useState(0)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [activeColor, setActiveColor] = useState(penColors[0])
+  const [showBrushColors, setShowBrushColors] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [opacity, setOpacity] = useState(100)
   const [pageBackground, setPageBackground] = useState(pageColors[0])
@@ -336,6 +337,8 @@ function App() {
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const brushToolRef = useRef<HTMLButtonElement>(null)
+  const brushColorOptionsRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const lastTextPoint = useRef<Point>({ x: 0.3, y: 0.3 })
@@ -456,6 +459,23 @@ function App() {
     }).catch(() => undefined)
     apiRequest<{ google: boolean }>('/api/auth/providers').then(({ google }) => setGoogleLoginEnabled(google)).catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (activeTool !== 'Brush') setShowBrushColors(false)
+  }, [activeTool])
+
+  useEffect(() => {
+    if (!showBrushColors) return
+    const dismissBrushColors = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (!brushToolRef.current?.contains(target) && !brushColorOptionsRef.current?.contains(target)) {
+        setShowBrushColors(false)
+      }
+    }
+    document.addEventListener('pointerdown', dismissBrushColors)
+    return () => document.removeEventListener('pointerdown', dismissBrushColors)
+  }, [showBrushColors])
 
   useEffect(() => {
     if (!sharedToken) return
@@ -1446,7 +1466,7 @@ function App() {
           </div>
           <div className="toolbar" aria-label="Drawing tools">
             <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span>▧</span></button>
-            {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => setActiveTool(tool)}><span>{toolIcons[tool]}</span></button>)}
+            {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush') setShowBrushColors(true) }}><span>{toolIcons[tool]}</span></button>)}
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
@@ -1458,7 +1478,7 @@ function App() {
           </div>
 
           <aside className="stroke-panel" aria-label="Selection and drawing settings">
-            {activeTool === 'Brush' && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
+            {activeTool === 'Brush' && showBrushColors && <div className="settings-group" ref={brushColorOptionsRef}><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={`Page background ${color}`} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}>▢</button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>▱</button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}>▰</button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}>▧</button></div>
