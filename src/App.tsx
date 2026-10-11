@@ -277,7 +277,12 @@ function evaluateGraphExpression(expression: string, x: number): number {
     const functions: Record<string, (n: number) => number> = { sin: Math.sin, cos: Math.cos, tan: Math.tan, sqrt: Math.sqrt, abs: Math.abs, log: Math.log10, ln: Math.log, exp: Math.exp }
     const fn = functions[name]
     if (!fn) throw new Error(`Unknown value or function: ${token}`)
-    const input = peek() === '(' ? (take(), primary()) : unary()
+    let input: number
+    if (peek() === '(') {
+      take()
+      input = sum()
+      if (take() !== ')') throw new Error('Check the parentheses in the equation.')
+    } else input = unary()
     return fn(input)
   }
   const power = (): number => { const left = primary(); return peek() === '^' ? (take(), left ** unary()) : left }
