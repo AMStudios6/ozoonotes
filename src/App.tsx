@@ -528,6 +528,7 @@ function App() {
   const lastTextPoint = useRef<Point>({ x: 0.3, y: 0.3 })
   const activeStroke = useRef<Stroke | null>(null)
   const activeMove = useRef<MoveSession | null>(null)
+  const selectionClipboard = useRef<{ strokes: Stroke[]; camera: Point; infinite: boolean } | null>(null)
   const cancelTextRef = useRef(false)
   const pageKey = `${activeBoard}:${page}`
   const cameraKey = `${boards[activeBoard]?.name ?? activeBoard}:${page}`
@@ -954,18 +955,42 @@ function App() {
       if (!(event.ctrlKey || event.metaKey)) return
       const target = event.target
       if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
-      if (event.key.toLowerCase() === 'z') {
+      const key = event.key.toLowerCase()
+      if (key === 'a') {
+        event.preventDefault()
+        setSelectedIndices(strokes.map((_, index) => index))
+      } else if (key === 'c' || key === 'x') {
+        if (!selectedIndices.length) return
+        event.preventDefault()
+        const selected = new Set(selectedIndices)
+        const copied = strokes.filter((_, index) => selected.has(index)).map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) }))
+        selectionClipboard.current = { strokes: copied, camera: cameraOffset, infinite: infinitePage }
+        if (key === 'x') {
+          editCurrentPage((current) => current.filter((_, index) => !selected.has(index)))
+          setSelectedIndices([])
+        }
+      } else if (key === 'v') {
+        const clipboard = selectionClipboard.current
+        if (!clipboard?.strokes.length) return
+        event.preventDefault()
+        const dx = infinitePage ? cameraOffset.x - (clipboard.infinite ? clipboard.camera.x : 0) : 0
+        const dy = infinitePage ? cameraOffset.y - (clipboard.infinite ? clipboard.camera.y : 0) : 0
+        const pasted = clipboard.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) }))
+        const firstIndex = strokes.length
+        editCurrentPage((current) => [...current, ...pasted])
+        setSelectedIndices(pasted.map((_, index) => firstIndex + index))
+      } else if (key === 'z') {
         event.preventDefault()
         if (event.shiftKey) redo()
         else undo()
-      } else if (event.key.toLowerCase() === 'y') {
+      } else if (key === 'y') {
         event.preventDefault()
         redo()
       }
     }
     window.addEventListener('keydown', handleHistoryShortcut)
     return () => window.removeEventListener('keydown', handleHistoryShortcut)
-  }, [pageKey])
+  }, [pageKey, selectedIndices, strokes, infinitePage, cameraOffset.x, cameraOffset.y])
 
   const commitText = () => {
     const editor = textEditor
@@ -1675,15 +1700,8 @@ function App() {
                 </div>
                 <p className="landing-local-note">Your boards save in this browser. Export a file when you want a portable copy.</p>
               </div>
-              <div className="landing-art" aria-label="Illustration of drawing and graph tools">
-                <div className="landing-art-shadow" />
-                <div className="art-paper">
-                  <div className="art-toolbar"><span>✎</span><span>▱</span><span>○</span><span>↗</span><i /><b /><b /><b /></div>
-                  <div className="art-note art-note-one"><span>ideas</span><strong>Make room<br />for a new thought.</strong><svg viewBox="0 0 120 42" aria-hidden="true"><path d="M4 30 C22 4 30 40 48 18 S75 8 82 26 S100 36 116 10" /></svg></div>
-                  <div className="art-note art-note-two"><span>GRAPH</span><svg viewBox="0 0 150 100" aria-hidden="true"><path className="graph-grid" d="M10 10H145M10 35H145M10 60H145M10 85H145M10 10V90M45 10V90M80 10V90M115 10V90M145 10V90" /><path className="graph-axis" d="M10 60H145M80 10V90" /><path className="graph-curve" d="M12 82 C40 80 47 67 62 46 S94 14 144 15" /></svg><small>y = x²</small></div>
-                  <div className="art-shape art-shape-circle" /><div className="art-shape art-shape-diamond" /><div className="art-caption">a little space for big ideas</div>
-                </div>
-                <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
+              <div className="landing-art">
+                <img className="landing-art-image" src={`${import.meta.env.BASE_URL}ozoonotes-landing.png`} alt="OzooNotes workspace preview with its drawing tools, notes, and graph maker" />
               </div>
             </section>
             <section className="landing-tools" id="landing-tools">
