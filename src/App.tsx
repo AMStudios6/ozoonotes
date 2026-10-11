@@ -982,6 +982,7 @@ function App() {
     return { x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }
   }
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    setDrawingToolsOpen(false)
     const point = pointFromEvent(event)
     const hardwareEraser = event.pointerType === 'pen' && (event.button === 5 || (event.buttons & 32) === 32)
     if (!hardwareEraser && activeTool === 'Text') {
@@ -1004,7 +1005,6 @@ function App() {
     }
     const strokeTool = hardwareEraser ? 'Eraser' : activeTool
     if (strokeTool !== 'Brush' && strokeTool !== 'Pencil' && strokeTool !== 'Pen' && strokeTool !== 'Marker' && strokeTool !== 'Highlighter' && strokeTool !== 'Shape' && strokeTool !== 'Line' && strokeTool !== 'Eraser') return
-    setDrawingToolsOpen(false)
     event.currentTarget.setPointerCapture(event.pointerId)
     const stroke: Stroke = {
       tool: strokeTool,
