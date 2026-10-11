@@ -197,10 +197,12 @@ function hitTestObject(stroke: Stroke, point: Point, canvasWidth: number, canvas
   return segments.some(([a, b]) => pointToSegmentDistance(pointPx, a, b) <= 15 + stroke.width / 2)
 }
 
-function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0) {
+function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }) {
   const context = canvas.getContext('2d')
   if (!context) return
   context.clearRect(0, 0, canvas.width, canvas.height)
+  context.save()
+  context.translate(-cameraOffset.x * canvas.width, -cameraOffset.y * canvas.height)
   for (const [drawingIndex, drawing] of drawings.entries()) {
     if (!drawing.points.length || drawing.tool === 'Eraser') continue
     const first = drawing.points[0]
@@ -212,7 +214,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     context.lineJoin = 'round'
     context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Pencil' ? 0.62 : drawing.tool === 'Marker' ? 0.82 : drawing.tool === 'Highlighter' ? 0.24 : 1)
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
-      const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius))
+      const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
     } else if (drawing.tool === 'Text') {
       context.font = `${Math.max(16, drawing.width * 5)}px sans-serif`
@@ -270,6 +272,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     context.stroke()
     context.restore()
   }
+  context.restore()
   context.globalAlpha = 1
 }
 
@@ -511,8 +514,11 @@ function App() {
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 })
+  const [infiniteCameraByPage, setInfiniteCameraByPage] = useState<Record<string, Point>>(() => {
+    try { return JSON.parse(localStorage.getItem('ozoo:infinite-camera') ?? '{}') as Record<string, Point> } catch { return {} }
+  })
   const workspaceRef = useRef<HTMLDivElement>(null)
-  const activePan = useRef<{ startClient: Point; startScroll: Point; startOffset: Point } | null>(null)
+  const activePan = useRef<{ startClient: Point; startCamera: Point; startOffset: Point } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const brushToolRef = useRef<HTMLButtonElement>(null)
   const settingsToggleRef = useRef<HTMLButtonElement>(null)
@@ -524,6 +530,8 @@ function App() {
   const activeMove = useRef<MoveSession | null>(null)
   const cancelTextRef = useRef(false)
   const pageKey = `${activeBoard}:${page}`
+  const cameraKey = `${boards[activeBoard]?.name ?? activeBoard}:${page}`
+  const cameraOffset = infiniteCameraByPage[cameraKey] ?? { x: 0, y: 0 }
   const strokes = strokesByPage[pageKey] ?? []
 
   const refreshHistoryState = (key: string) => {
@@ -920,8 +928,8 @@ function App() {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0)
-  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool])
+    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 })
+  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
@@ -1003,7 +1011,7 @@ function App() {
 
   const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect()
-    return { x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }
+    return { x: (event.clientX - bounds.left) / bounds.width + (infinitePage ? cameraOffset.x : 0), y: (event.clientY - bounds.top) / bounds.height + (infinitePage ? cameraOffset.y : 0) }
   }
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     setDrawingToolsOpen(false)
@@ -1013,7 +1021,7 @@ function App() {
       const workspace = workspaceRef.current
       if (!workspace) return
       event.currentTarget.setPointerCapture(event.pointerId)
-      activePan.current = { startClient: { x: event.clientX, y: event.clientY }, startScroll: { x: workspace.scrollLeft, y: workspace.scrollTop }, startOffset: panOffset }
+      activePan.current = { startClient: { x: event.clientX, y: event.clientY }, startCamera: cameraOffset, startOffset: panOffset }
       return
     }
     if (!hardwareEraser && activeTool === 'Text') {
@@ -1060,8 +1068,7 @@ function App() {
       const dx = event.clientX - pan.startClient.x
       const dy = event.clientY - pan.startClient.y
       if (infinitePage) {
-        const workspace = workspaceRef.current
-        if (workspace) { workspace.scrollLeft = pan.startScroll.x - dx; workspace.scrollTop = pan.startScroll.y - dy }
+        setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: pan.startCamera.x - dx / canvasWidth, y: pan.startCamera.y - dy / canvasHeight } }))
       } else {
         setPanOffset({ x: pan.startOffset.x + dx, y: pan.startOffset.y + dy })
       }
@@ -1115,18 +1122,10 @@ function App() {
     } catch { /* Keep the current workspace usable if browser storage is unavailable. */ }
   }, [boards, activeBoard, page])
 
+  useEffect(() => { setPanOffset({ x: 0, y: 0 }) }, [activeBoard, page])
   useEffect(() => {
-    setPanOffset({ x: 0, y: 0 })
-    if (!infinitePage) return
-    const frame = window.requestAnimationFrame(() => {
-      const workspace = workspaceRef.current
-      if (workspace) {
-        workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2)
-        workspace.scrollTop = Math.max(0, (workspace.scrollHeight - workspace.clientHeight) / 2)
-      }
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeBoard, page, infinitePage])
+    try { localStorage.setItem('ozoo:infinite-camera', JSON.stringify(infiniteCameraByPage)) } catch { /* Keep panning usable when storage is unavailable. */ }
+  }, [infiniteCameraByPage])
 
   useEffect(() => {
     const board = boards[activeBoard]
@@ -1168,7 +1167,7 @@ function App() {
     window.setTimeout(() => setSaveNotice(''), 2400)
     setMenuOpen(false)
   }
-  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)) => {
+  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark), camera: Point = infinitePage ? cameraOffset : { x: 0, y: 0 }) => {
     const sources = [...new Set(pageStrokes.flatMap((stroke) => stroke.tool === 'Image' && stroke.imageData ? [stroke.imageData] : []))]
     await Promise.all(sources.map((source) => new Promise<void>((resolve) => {
         let image = imageCache.get(source)
@@ -1192,11 +1191,11 @@ function App() {
     const drawing = window.document.createElement('canvas')
     drawing.width = width
     drawing.height = height
-    renderDrawings(drawing, pageStrokes)
+    renderDrawings(drawing, pageStrokes, [], [], undefined, 0, camera)
     context.drawImage(drawing, 0, 0)
     return output
   }
-  const svgForPage = (pageStrokes: Stroke[], width: number, height: number, background: string) => {
+  const svgForPage = (pageStrokes: Stroke[], width: number, height: number, background: string, camera: Point = { x: 0, y: 0 }) => {
     const escapeXml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character]!)
     const gridLines: string[] = []
     if (gridEnabled && !infinitePage) {
@@ -1216,7 +1215,8 @@ function App() {
       const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : 'polyline'
       return `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="round" stroke-linejoin="round" opacity="${alpha}"/>`
     }).join('')
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${gridLines.join('')}${paths}</svg>`
+    const cameraGroup = infinitePage ? `<g transform="translate(${-camera.x * width} ${-camera.y * height})">${paths}</g>` : paths
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${gridLines.join('')}${cameraGroup}</svg>`
   }
   const exportDrawing = async (format: 'png' | 'svg') => {
     const pageStrokes = strokesByPage[pageKey] ?? []
@@ -1225,7 +1225,7 @@ function App() {
       output.toBlob((blob) => { if (blob) downloadBlob(blob, 'png') }, 'image/png')
     } else {
       const background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)
-      downloadBlob(new Blob([svgForPage(pageStrokes, canvasWidth, canvasHeight, background)], { type: 'image/svg+xml;charset=utf-8' }), 'svg')
+      downloadBlob(new Blob([svgForPage(pageStrokes, canvasWidth, canvasHeight, background, infinitePage ? cameraOffset : { x: 0, y: 0 })], { type: 'image/svg+xml;charset=utf-8' }), 'svg')
     }
     setMenuOpen(false)
   }
@@ -1789,8 +1789,8 @@ function App() {
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
           </aside>}
 
-          <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`}>
-            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1' } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
+          <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: cameraOffset.x + event.deltaX / canvasWidth, y: cameraOffset.y + event.deltaY / canvasHeight } })) } }}>
+            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${textEditor.point.x * 100}%`, top: `${textEditor.point.y * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
