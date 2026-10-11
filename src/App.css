@@ -80,6 +80,7 @@
 .page-navigation input {width:34px;height:25px;padding:0 2px;border:1px solid var(--line);border-radius:5px;background:var(--workspace);color:var(--ink);text-align:center;font-size:12px}.page-navigation input::-webkit-inner-spin-button,.page-navigation input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .workspace {flex:1;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;padding:25px 24px 18px;overflow:auto}
 .workspace.zoomed {align-items:safe center;justify-content:safe center}
+.workspace.infinite-workspace {align-items:flex-start;justify-content:flex-start}
 .paper {position:relative;flex:none;width:min(43vw,390px);aspect-ratio:210 / 297;background:#fff;border-radius:2px;transform-origin:center center;box-shadow:0 9px 35px #0004;transition:width .2s,aspect-ratio .2s}
 .paper.grid-enabled {background-image:linear-gradient(to right,color-mix(in srgb,var(--accent) 38%,transparent) 1px,transparent 1px),linear-gradient(to bottom,color-mix(in srgb,var(--accent) 38%,transparent) 1px,transparent 1px);background-size:20px 20px}
 .rulers {position:absolute;z-index:3;inset:0;pointer-events:none;color:var(--muted);font-size:8px}
@@ -92,6 +93,8 @@
 .paper.landscape {width:min(58vw,530px);aspect-ratio:297 / 210}
 .paper.infinite {flex:none;max-width:none;min-width:2400px;border:1px solid color-mix(in srgb,var(--accent) 20%,var(--line));border-radius:0;background:var(--workspace);box-shadow:none}
 .drawing-canvas {position:relative;z-index:1;display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.drawing-canvas.hand-cursor {cursor:grab}
+.drawing-canvas.hand-cursor:active {cursor:grabbing}
 .drawing-canvas.move-cursor {cursor:move}
 .drawing-canvas.erase-cursor {cursor:cell}
 .bottom-controls {position:fixed;z-index:10;left:23px;right:23px;bottom:20px;display:flex;align-items:center;gap:8px;pointer-events:none}
