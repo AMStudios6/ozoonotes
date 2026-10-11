@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
 
-type Tool = 'Brush' | 'Pen' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
+type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
@@ -13,7 +13,7 @@ type CloudBoard = { id: number; name: string; folderId: number | null; state: Bo
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
 type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
-type Stroke = { tool: 'Brush' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string }
+type Stroke = { tool: 'Brush' | 'Pencil' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 const penColors = ['#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['#ffffff', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
@@ -185,10 +185,10 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     const last = drawing.points[drawing.points.length - 1]
     context.strokeStyle = drawing.color
     context.fillStyle = drawing.color
-    context.lineWidth = drawing.width
+    context.lineWidth = drawing.width * (drawing.tool === 'Pencil' ? 0.7 : 1)
     context.lineCap = 'round'
     context.lineJoin = 'round'
-    context.globalAlpha = drawing.opacity / 100
+    context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Pencil' ? 0.62 : 1)
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
       const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
@@ -343,7 +343,7 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
 }
 
 const toolIcons: Record<Tool, string> = {
-  Brush: '✎', Pen: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
+  Brush: '✎', Pencil: '✏', Pen: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
 }
 
 type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
@@ -612,7 +612,7 @@ function App() {
   }, [localOnly])
 
   useEffect(() => {
-    if (activeTool !== 'Brush') setShowSettingsPanel(false)
+    if (activeTool !== 'Brush' && activeTool !== 'Pencil') setShowSettingsPanel(false)
   }, [activeTool])
 
   useEffect(() => {
@@ -1000,12 +1000,12 @@ function App() {
       return
     }
     const strokeTool = hardwareEraser ? 'Eraser' : activeTool
-    if (strokeTool !== 'Brush' && strokeTool !== 'Shape' && strokeTool !== 'Line' && strokeTool !== 'Eraser') return
+    if (strokeTool !== 'Brush' && strokeTool !== 'Pencil' && strokeTool !== 'Shape' && strokeTool !== 'Line' && strokeTool !== 'Eraser') return
     event.currentTarget.setPointerCapture(event.pointerId)
     const stroke: Stroke = {
       tool: strokeTool,
       color: activeColor,
-      width: strokeTool === 'Eraser' ? 44 : strokeWidth * (strokeTool === 'Brush' ? 2.5 : 1),
+      width: strokeTool === 'Eraser' ? 44 : strokeWidth * (strokeTool === 'Brush' ? 2.5 : strokeTool === 'Pencil' ? 0.68 : 1),
       opacity,
       points: [point],
       ...(strokeTool === 'Shape' ? { shapeKind } : {}),
@@ -1141,7 +1141,7 @@ function App() {
     const paths = pageStrokes.map((stroke) => {
       if (!stroke.points.length || stroke.tool === 'Eraser') return ''
       const [first, last] = [stroke.points[0], stroke.points[stroke.points.length - 1]]
-      const alpha = stroke.opacity / 100 * (stroke.tool === 'Brush' ? .72 : 1)
+      const alpha = stroke.opacity / 100 * (stroke.tool === 'Brush' ? .72 : stroke.tool === 'Pencil' ? .62 : 1)
       if (stroke.tool === 'Image' && stroke.imageData && stroke.points.length > 1) return `<image href="${stroke.imageData}" x="${first.x * width}" y="${first.y * height}" width="${(last.x - first.x) * width}" height="${(last.y - first.y) * height}" preserveAspectRatio="none"/>`
       if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(16, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
       const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last).points : stroke.points
@@ -1696,7 +1696,7 @@ function App() {
           <div className="toolbar" aria-label="Drawing tools">
             <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span>▧</span></button>
             <button type="button" className="tool-button graph-tool" title="Add graph" aria-label="Add graph" onClick={() => { setGraphError(''); setGraphOpen(true) }}><span>⌁</span></button>
-            {(['Brush', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush') setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span></button>)}
+            {(['Brush', 'Pencil', 'Pen', 'Select', 'Shape', 'Text', 'Line', 'Eraser'] as Tool[]).map((tool) => <button key={tool} ref={tool === 'Brush' ? brushToolRef : undefined} title={tool === 'Pen' ? 'Pen: move strokes and text' : tool} aria-label={tool === 'Pen' ? 'Pen: move strokes and text' : tool} className={`tool-button ${activeTool === tool ? 'active' : ''}`} onClick={() => { setActiveTool(tool); if (tool === 'Brush' || tool === 'Pencil') setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span></button>)}
             <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
@@ -1709,7 +1709,7 @@ function App() {
           </div>
 
           {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
-            {activeTool === 'Brush' && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
+            {(activeTool === 'Brush' || activeTool === 'Pencil') && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={`Page background ${color}`} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}>▢</button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>▱</button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}>▰</button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}>▧</button></div>
