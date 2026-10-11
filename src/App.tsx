@@ -16,7 +16,24 @@ type Point = { x: number; y: number }
 type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 const penColors = ['#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
-const pageColors = ['#ffffff', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
+const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
+function resolvePageBackground(background: string, dark: boolean) {
+  if (background === 'auto' || background === '#ffffff') return dark ? '#08060d' : '#ffffff'
+  if (background === 'white') return '#ffffff'
+  return background
+}
+function pageBackgroundSwatchStyle(background: string): React.CSSProperties {
+  if (background === 'auto') return { background: 'linear-gradient(135deg, #08060d 50%, #fff 50%)' }
+  return { backgroundColor: background === 'white' ? '#ffffff' : background }
+}
+function pageBackgroundLabel(background: string) {
+  if (background === 'auto') return 'Page background follows theme'
+  if (background === 'white') return 'Page background white'
+  return 'Page background ' + background
+}
+function gridLineColor(dark: boolean) {
+  return dark ? 'rgba(189, 139, 255, .48)' : 'rgba(130, 70, 193, .34)'
+}
 const inkTools: Tool[] = ['Brush', 'Pen', 'Pencil', 'Marker', 'Highlighter']
 const drawingToolGroup: Tool[] = [...inkTools, 'Eraser']
 const imageCache = new Map<string, HTMLImageElement>()
@@ -364,7 +381,7 @@ type RestoredWorkspace = {
 const openWorkspaceStorageKey = 'ozoo:open-workspace'
 
 function readSavedWorkspace(): RestoredWorkspace {
-  const empty: RestoredWorkspace = { boards: [], activeBoard: 0, page: 1, pageSize: 'A4', infinitePage: false, orientation: 'portrait', pageBackground: '#ffffff', gridEnabled: false, showScale: false, strokesByPage: {} }
+  const empty: RestoredWorkspace = { boards: [], activeBoard: 0, page: 1, pageSize: 'A4', infinitePage: false, orientation: 'portrait', pageBackground: 'auto', gridEnabled: false, showScale: false, strokesByPage: {} }
   try {
     const savedWorkspace = JSON.parse(localStorage.getItem(openWorkspaceStorageKey) ?? 'null') as SavedWorkspace | null
     if (!savedWorkspace || !Array.isArray(savedWorkspace.names)) return empty
@@ -374,7 +391,7 @@ function readSavedWorkspace(): RestoredWorkspace {
       if (!raw) return null
       const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
       if (typeof saved.name !== 'string' || typeof saved.pages !== 'number' || !Array.isArray(saved.pageStrokes)) return null
-      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageBackground: saved.pageBackground ?? '#ffffff' }, saved }
+      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageBackground: saved.pageBackground ?? 'auto' }, saved }
     }).filter((item): item is NonNullable<typeof item> => item !== null)
 
     if (!loaded.length) return empty
@@ -390,7 +407,7 @@ function readSavedWorkspace(): RestoredWorkspace {
       pageSize: activeSaved.pageSize ?? 'A4',
       infinitePage: activeSaved.infinite ?? false,
       orientation: activeSaved.orientation ?? 'portrait',
-      pageBackground: activeSaved.pageBackground ?? '#ffffff',
+      pageBackground: activeSaved.pageBackground ?? 'auto',
       gridEnabled: activeSaved.gridEnabled ?? false,
       showScale: activeSaved.showScale ?? false,
       strokesByPage,
@@ -460,7 +477,7 @@ function App() {
   const [draftName, setDraftName] = useState('')
   const [draftSize, setDraftSize] = useState<PageSize>('A4')
   const [draftOrientation, setDraftOrientation] = useState<'portrait' | 'landscape'>('portrait')
-  const [draftBackground, setDraftBackground] = useState('#ffffff')
+  const [draftBackground, setDraftBackground] = useState('auto')
   const [gridEnabled, setGridEnabled] = useState(initialWorkspace.gridEnabled)
   const [showScale, setShowScale] = useState(initialWorkspace.showScale)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -1112,7 +1129,7 @@ function App() {
     window.setTimeout(() => setSaveNotice(''), 2400)
     setMenuOpen(false)
   }
-  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? '#17121e' : '#f5f0fa') : pageBackground) => {
+  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)) => {
     const sources = [...new Set(pageStrokes.flatMap((stroke) => stroke.tool === 'Image' && stroke.imageData ? [stroke.imageData] : []))]
     await Promise.all(sources.map((source) => new Promise<void>((resolve) => {
         let image = imageCache.get(source)
@@ -1128,7 +1145,7 @@ function App() {
     context.fillStyle = background
     context.fillRect(0, 0, width, height)
     if (gridEnabled && !infinitePage) {
-      context.strokeStyle = 'rgba(145, 130, 160, .34)'
+      context.strokeStyle = gridLineColor(dark)
       context.lineWidth = 1
       for (let x = 40; x < width; x += 40) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke() }
       for (let y = 40; y < height; y += 40) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke() }
@@ -1161,7 +1178,7 @@ function App() {
       const output = await renderPageCanvas(pageStrokes)
       output.toBlob((blob) => { if (blob) downloadBlob(blob, 'png') }, 'image/png')
     } else {
-      const background = infinitePage ? (dark ? '#17121e' : '#f5f0fa') : pageBackground
+      const background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)
       downloadBlob(new Blob([svgForPage(pageStrokes, canvasWidth, canvasHeight, background)], { type: 'image/svg+xml;charset=utf-8' }), 'svg')
     }
     setMenuOpen(false)
@@ -1183,7 +1200,7 @@ function App() {
   }
   const exportObsidianNote = () => {
     const safeName = boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
-    const background = infinitePage ? (dark ? '#17121e' : '#f5f0fa') : pageBackground
+    const background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)
     const pageStrokes = Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
     const markdownPages = pageStrokes.map((items, index) => {
       const imageName = `${safeName} - page ${index + 1}.svg`
@@ -1234,7 +1251,7 @@ function App() {
       const importedSize = documentData.pageSize ?? 'A4'
       const importedInfinite = documentData.infinite ?? importedSize === 'Infinite'
       const importedOrientation = documentData.orientation ?? 'portrait'
-      const importedBackground = documentData.pageBackground ?? '#ffffff'
+      const importedBackground = documentData.pageBackground ?? 'auto'
       setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageBackground: importedBackground }])
       setActiveBoard(boardIndex)
       setPage(1)
@@ -1314,10 +1331,10 @@ function App() {
         const context = canvas.getContext('2d')
         if (!context || !drawingContext) throw new Error('Could not render the page for PDF export')
         renderDrawings(drawingCanvas, pageStrokes.map((stroke) => ({ ...stroke, width: stroke.width * scale })))
-        context.fillStyle = pageBackground
+        context.fillStyle = resolvePageBackground(pageBackground, dark)
         context.fillRect(0, 0, canvas.width, canvas.height)
         if (gridEnabled) {
-          context.strokeStyle = 'rgba(145, 130, 160, .34)'
+          context.strokeStyle = gridLineColor(dark)
           context.lineWidth = 1
           for (let x = 40; x < canvas.width; x += 40) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke() }
           for (let y = 40; y < canvas.height; y += 40) { context.beginPath(); context.moveTo(0, y); context.lineTo(canvas.width, y); context.stroke() }
@@ -1381,7 +1398,7 @@ function App() {
     const pageStreams = Array.from({ length: boards[activeBoard].pages }, (_, pageIndex) => {
       const pageStrokes = strokesByPage[`${activeBoard}:${pageIndex + 1}`] ?? []
       const commands = ['q']
-      const bg = pageBackground.replace('#', '')
+      const bg = resolvePageBackground(pageBackground, dark).replace('#', '')
       const bgRgb = [0, 2, 4].map((offset) => parseInt(bg.slice(offset, offset + 2), 16) / 255)
       commands.push(`${bgRgb.map((value) => value.toFixed(4)).join(' ')} rg`, `0 0 ${pageWidth} ${pageHeight} re f`)
       if (gridEnabled) {
@@ -1486,7 +1503,7 @@ function App() {
     setDraftName(`File ${nextFileNumber}`)
     setDraftSize('A4')
     setDraftOrientation('portrait')
-    setDraftBackground('#ffffff')
+    setDraftBackground('auto')
     setShowNewFileDialog(true)
   }
   const createBoard = () => {
@@ -1512,7 +1529,7 @@ function App() {
     setPageSize(board.pageSize ?? 'A4')
     setInfinitePage(board.infinite ?? false)
     setOrientation(board.orientation ?? 'portrait')
-    setPageBackground(board.pageBackground ?? '#ffffff')
+    setPageBackground(board.pageBackground ?? 'auto')
   }
   const setActiveBackground = (color: string) => {
     setPageBackground(color)
@@ -1537,7 +1554,7 @@ function App() {
       setPageSize(nextBoard.pageSize ?? 'A4')
       setInfinitePage(nextBoard.infinite ?? false)
       setOrientation(nextBoard.orientation ?? 'portrait')
-      setPageBackground(nextBoard.pageBackground ?? '#ffffff')
+      setPageBackground(nextBoard.pageBackground ?? 'auto')
     } else if (index < activeBoard) {
       setActiveBoard(activeBoard - 1)
     }
@@ -1548,7 +1565,7 @@ function App() {
     setPage(updated[activeBoard].pages)
   }
 
-  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}>×</button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset>{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={`Choose background ${color}`} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={draftBackground} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}>×</button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset>{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={draftBackground} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
 
   const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}>×</button><p className="eyebrow">SELF-HOSTED CLOUD</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}><label className="dialog-label">Username<input required minLength={3} maxLength={32} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} /></label><button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => setAuthMode(authMode === 'register' ? 'login' : 'register')}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
@@ -1581,7 +1598,7 @@ function App() {
     const sharedMmOriented = state?.orientation === 'landscape' ? [sharedMm[1], sharedMm[0]] : sharedMm
     const sharedWidth = state?.infinite ? 2800 : Math.round(sharedMmOriented[0] * 3.78)
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
-    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : state?.pageBackground }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
+    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
   if (boards.length === 0) {
@@ -1718,7 +1735,7 @@ function App() {
 
           {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
             {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
-            {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={`Page background ${color}`} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => setActiveBackground(color)} />)}</div></div>}
+            {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}>▢</button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>▱</button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}>▰</button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}>▧</button></div>
             {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div></div>}
@@ -1726,7 +1743,7 @@ function App() {
           </aside>}
 
           <div className={`workspace ${zoom > 100 ? 'zoomed' : ''}`}>
-            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '2400px', aspectRatio: '1 / 1' } : { backgroundColor: pageBackground, aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
+            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '2400px', aspectRatio: '1 / 1' } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${textEditor.point.x * 100}%`, top: `${textEditor.point.y * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
