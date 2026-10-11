@@ -2,7 +2,7 @@
 
 ![OzooNotes mascot](public/ozoo-mascot.svg)
 
-OzooNotes is a browser-based whiteboard with local boards, multiple page sizes, image import, graph creation, PDF/PNG/SVG export, and portable `.doomnotes` files.
+OzooNotes is a browser-based whiteboard with local boards, multiple page sizes, image import, graph creation, PDF/PNG/SVG export, and portable `.ozoonotes` files.
 
 ## Use the website
 
