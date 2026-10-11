@@ -952,7 +952,7 @@ function App() {
 
   useEffect(() => {
     const handleHistoryShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return
+      if (!(event.ctrlKey || event.metaKey) || boards.length === 0 || sharedToken) return
       const target = event.target
       if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       const key = event.key.toLowerCase()
@@ -973,8 +973,8 @@ function App() {
         const clipboard = selectionClipboard.current
         if (!clipboard?.strokes.length) return
         event.preventDefault()
-        const dx = infinitePage ? cameraOffset.x - (clipboard.infinite ? clipboard.camera.x : 0) : 0
-        const dy = infinitePage ? cameraOffset.y - (clipboard.infinite ? clipboard.camera.y : 0) : 0
+        const dx = (infinitePage ? cameraOffset.x : 0) - (clipboard.infinite ? clipboard.camera.x : 0)
+        const dy = (infinitePage ? cameraOffset.y : 0) - (clipboard.infinite ? clipboard.camera.y : 0)
         const pasted = clipboard.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) }))
         const firstIndex = strokes.length
         editCurrentPage((current) => [...current, ...pasted])
@@ -990,7 +990,7 @@ function App() {
     }
     window.addEventListener('keydown', handleHistoryShortcut)
     return () => window.removeEventListener('keydown', handleHistoryShortcut)
-  }, [pageKey, selectedIndices, strokes, infinitePage, cameraOffset.x, cameraOffset.y])
+  }, [pageKey, selectedIndices, strokes, infinitePage, cameraOffset.x, cameraOffset.y, boards.length, sharedToken])
 
   const commitText = () => {
     const editor = textEditor
