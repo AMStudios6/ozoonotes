@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
 
-type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
+type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
@@ -365,7 +365,7 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
 }
 
 const toolIcons: Record<Tool, string> = {
-  Brush: '✎', Pencil: '✏', Pen: '✒', Marker: '▰', Highlighter: '▱', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
+  Brush: '✎', Pencil: '✏', Pen: '✒', Marker: '▰', Highlighter: '▱', Hand: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
 }
 
 type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
@@ -510,6 +510,9 @@ function App() {
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
+  const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 })
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const activePan = useRef<{ startClient: Point; startScroll: Point; startOffset: Point } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const brushToolRef = useRef<HTMLButtonElement>(null)
   const settingsToggleRef = useRef<HTMLButtonElement>(null)
@@ -1006,6 +1009,13 @@ function App() {
     setDrawingToolsOpen(false)
     const point = pointFromEvent(event)
     const hardwareEraser = event.pointerType === 'pen' && (event.button === 5 || (event.buttons & 32) === 32)
+    if (!hardwareEraser && activeTool === 'Hand') {
+      const workspace = workspaceRef.current
+      if (!workspace) return
+      event.currentTarget.setPointerCapture(event.pointerId)
+      activePan.current = { startClient: { x: event.clientX, y: event.clientY }, startScroll: { x: workspace.scrollLeft, y: workspace.scrollTop }, startOffset: panOffset }
+      return
+    }
     if (!hardwareEraser && activeTool === 'Text') {
       lastTextPoint.current = point
       cancelTextRef.current = false
@@ -1045,6 +1055,18 @@ function App() {
     }
   }
   const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const pan = activePan.current
+    if (pan) {
+      const dx = event.clientX - pan.startClient.x
+      const dy = event.clientY - pan.startClient.y
+      if (infinitePage) {
+        const workspace = workspaceRef.current
+        if (workspace) { workspace.scrollLeft = pan.startScroll.x - dx; workspace.scrollTop = pan.startScroll.y - dy }
+      } else {
+        setPanOffset({ x: pan.startOffset.x + dx, y: pan.startOffset.y + dy })
+      }
+      return
+    }
     const point = pointFromEvent(event)
     if (activeMove.current) {
       const move = activeMove.current
@@ -1092,6 +1114,19 @@ function App() {
       localStorage.setItem(openWorkspaceStorageKey, JSON.stringify({ names: boards.map((board) => board.name), activeBoard, page }))
     } catch { /* Keep the current workspace usable if browser storage is unavailable. */ }
   }, [boards, activeBoard, page])
+
+  useEffect(() => {
+    setPanOffset({ x: 0, y: 0 })
+    if (!infinitePage) return
+    const frame = window.requestAnimationFrame(() => {
+      const workspace = workspaceRef.current
+      if (workspace) {
+        workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2)
+        workspace.scrollTop = Math.max(0, (workspace.scrollHeight - workspace.clientHeight) / 2)
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeBoard, page, infinitePage])
 
   useEffect(() => {
     const board = boards[activeBoard]
@@ -1282,6 +1317,7 @@ function App() {
     }
   }
   const finishStroke = () => {
+    if (activePan.current) { activePan.current = null; return }
     const move = activeMove.current
     activeMove.current = null
     if (move) {
@@ -1599,8 +1635,8 @@ function App() {
 
   const pageSizeMm = pageSize === 'Infinite' ? [1, 1] : pageDimensionsMm[pageSize]
   const orientedPageMm = orientation === 'portrait' || pageSize === 'Infinite' ? pageSizeMm : [pageSizeMm[1], pageSizeMm[0]]
-  const canvasWidth = infinitePage ? 2800 : Math.round(orientedPageMm[0] * 3.78)
-  const canvasHeight = infinitePage ? 2800 : Math.round(orientedPageMm[1] * 3.78)
+  const canvasWidth = infinitePage ? 3600 : Math.round(orientedPageMm[0] * 3.78)
+  const canvasHeight = infinitePage ? 3600 : Math.round(orientedPageMm[1] * 3.78)
 
   if (sharedToken) {
     const state = sharedBoard && !isEncryptedBoardState(sharedBoard.state) ? sharedBoard.state : undefined
@@ -1732,7 +1768,7 @@ function App() {
               <button type="button" ref={brushToolRef} className={'tool-button drawing-tool-toggle ' + (drawingToolGroup.includes(activeTool) ? 'active' : '')} title={'Drawing tools: ' + (drawingToolGroup.includes(activeTool) ? activeTool : 'choose a tool')} aria-label="Choose drawing tool" aria-expanded={drawingToolsOpen} aria-controls="drawing-tool-menu" onClick={() => setDrawingToolsOpen((open) => !open)}><span>{toolIcons[drawingToolGroup.includes(activeTool) ? activeTool : 'Brush']}</span><small>⌄</small></button>
               {drawingToolsOpen && <div id="drawing-tool-menu" className="drawing-tool-menu" role="group" aria-label="Drawing tools">{drawingToolGroup.map((tool) => <button key={tool} type="button" className={'drawing-tool-option ' + (activeTool === tool ? 'active' : '')} aria-pressed={activeTool === tool} onClick={() => { setActiveTool(tool); setDrawingToolsOpen(false); if (inkTools.includes(tool)) setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span><span>{tool}</span></button>)}</div>}
             </div>
-            {(['Select', 'Shape', 'Text', 'Line'] as Tool[]).map((tool) => <button key={tool} type="button" title={tool} aria-label={tool} className={'tool-button ' + (activeTool === tool ? 'active' : '')} onClick={() => { setDrawingToolsOpen(false); setActiveTool(tool) }}><span>{toolIcons[tool]}</span></button>)}
+            {(['Hand', 'Select', 'Shape', 'Text', 'Line'] as Tool[]).map((tool) => <button key={tool} type="button" title={tool} aria-label={tool} className={'tool-button ' + (activeTool === tool ? 'active' : '')} onClick={() => { setDrawingToolsOpen(false); setActiveTool(tool) }}><span>{toolIcons[tool]}</span></button>)}
             <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
@@ -1753,11 +1789,11 @@ function App() {
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
           </aside>}
 
-          <div className={`workspace ${zoom > 100 ? 'zoomed' : ''}`}>
-            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '2400px', aspectRatio: '1 / 1' } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
+          <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`}>
+            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1' } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${textEditor.point.x * 100}%`, top: `${textEditor.point.y * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
-              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
+              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
             </div>
           </div>
 
