@@ -26,6 +26,9 @@ function pageBackgroundSwatchStyle(background: string): React.CSSProperties {
   if (background === 'auto') return { background: 'linear-gradient(135deg, #08060d 50%, #fff 50%)' }
   return { backgroundColor: background === 'white' ? '#ffffff' : background }
 }
+function isBackgroundChoiceSelected(current: string, choice: string) {
+  return current === choice || (choice === 'auto' && current === '#ffffff')
+}
 function pageBackgroundLabel(background: string) {
   if (background === 'auto') return 'Page background follows theme'
   if (background === 'white') return 'Page background white'
@@ -1159,6 +1162,13 @@ function App() {
   }
   const svgForPage = (pageStrokes: Stroke[], width: number, height: number, background: string) => {
     const escapeXml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character]!)
+    const gridLines: string[] = []
+    if (gridEnabled && !infinitePage) {
+      const gridColor = dark ? '#bd8bff' : '#8246c1'
+      const gridOpacity = dark ? '.48' : '.34'
+      for (let x = 40; x < width; x += 40) gridLines.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="' + gridColor + '" stroke-opacity="' + gridOpacity + '" stroke-width="1"/>')
+      for (let y = 40; y < height; y += 40) gridLines.push('<line x1="0" y1="' + y + '" x2="' + width + '" y2="' + y + '" stroke="' + gridColor + '" stroke-opacity="' + gridOpacity + '" stroke-width="1"/>')
+    }
     const paths = pageStrokes.map((stroke) => {
       if (!stroke.points.length || stroke.tool === 'Eraser') return ''
       const [first, last] = [stroke.points[0], stroke.points[stroke.points.length - 1]]
@@ -1170,7 +1180,7 @@ function App() {
       const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : 'polyline'
       return `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="round" stroke-linejoin="round" opacity="${alpha}"/>`
     }).join('')
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${paths}</svg>`
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${gridLines.join('')}${paths}</svg>`
   }
   const exportDrawing = async (format: 'png' | 'svg') => {
     const pageStrokes = strokesByPage[pageKey] ?? []
@@ -1401,8 +1411,8 @@ function App() {
       const bg = resolvePageBackground(pageBackground, dark).replace('#', '')
       const bgRgb = [0, 2, 4].map((offset) => parseInt(bg.slice(offset, offset + 2), 16) / 255)
       commands.push(`${bgRgb.map((value) => value.toFixed(4)).join(' ')} rg`, `0 0 ${pageWidth} ${pageHeight} re f`)
-      if (gridEnabled) {
-        commands.push('0.82 0.80 0.86 RG', '0.35 w')
+      if (gridEnabled && !infinitePage) {
+        commands.push((dark ? '0.74 0.54 0.94' : '0.51 0.27 0.76') + ' RG', '0.35 w')
         for (let x = 20; x < pageWidth; x += 20) commands.push(`${x} 0 m ${x} ${pageHeight} l S`)
         for (let y = 20; y < pageHeight; y += 20) commands.push(`0 ${y} m ${pageWidth} ${y} l S`)
       }
@@ -1735,7 +1745,7 @@ function App() {
 
           {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
             {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
-            {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={pageBackground === color} className={`settings-swatch ${pageBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
+            {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}>▢</button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>▱</button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}>▰</button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}>▧</button></div>
             {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div></div>}
