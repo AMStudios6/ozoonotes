@@ -520,3 +520,27 @@
  .page-navigation .page-title-action,.page-navigation .page-index-action {height:26px;padding:0 6px;font-size:9px}
  .tool-status {display:none}
 }
+
+/* Align the top controls below the file bar without framing the app. */
+.window {width:100%;min-height:100dvh;margin:0;border:0;border-radius:0;box-shadow:none}
+.board-area {height:calc(100dvh - 54px);padding:0 18px 12px}
+.board-menu-wrap {top:16px;left:20px}
+.quick-actions {top:16px;left:66px}
+.toolbar {top:16px;left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:calc(100% - 300px);justify-content:center}
+.stroke-panel {top:68px;left:20px}
+.workspace {padding:112px 28px 72px}
+@media(max-width:1200px) {
+ .board-menu-wrap {top:12px;left:12px}
+ .quick-actions {top:12px;left:56px}
+ .toolbar {top:62px;left:50%;right:auto;width:max-content;max-width:calc(100% - 24px);transform:translateX(-50%);justify-content:flex-start}
+ .stroke-panel {top:108px;left:12px}
+ .workspace {padding:112px 10px 80px}
+}
+@media(max-width:650px) {
+ .board-area {height:calc(100dvh - 50px);padding:0 7px 8px}
+ .board-menu-wrap {top:8px;left:8px}
+ .quick-actions {top:8px;left:50px}
+ .toolbar {top:52px;left:50%;right:auto;width:max-content;max-width:calc(100% - 16px);transform:translateX(-50%);justify-content:flex-start}
+ .stroke-panel {top:96px;left:8px}
+ .workspace {padding:144px 4px 104px}
+}
