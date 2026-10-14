@@ -1590,8 +1590,10 @@ function App() {
       setScreenRecordingError('Screen recording is not supported in this browser. Try the latest version of Chrome or Edge.')
       return
     }
+    let acquiredStream: MediaStream | null = null
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 60 } }, audio: false })
+      acquiredStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 60 } }, audio: false })
+      const stream = acquiredStream
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type))
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       screenStreamRef.current = stream
@@ -1624,8 +1626,23 @@ function App() {
       recorder.start(1000)
       setScreenRecordingState('recording')
     } catch (error) {
-      const name = error instanceof DOMException ? error.name : ''
-      setScreenRecordingError(name === 'NotAllowedError' ? 'Screen sharing was canceled or permission was denied.' : 'Could not start screen recording. Check the browser’s screen-capture permissions.')
+      acquiredStream?.getTracks().forEach((track) => track.stop())
+      screenStreamRef.current = null
+      screenRecorderRef.current = null
+      screenChunksRef.current = []
+      setScreenRecordingState('idle')
+      const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+      const messages: Record<string, string> = {
+        NotAllowedError: 'Screen sharing was canceled or blocked. Choose a screen or window in the picker and allow sharing if your browser asks.',
+        AbortError: 'The screen picker closed before a source was selected. Try recording again and choose a screen or window.',
+        NotFoundError: 'No screen or window is available to record. Connect or enable a display, then try again.',
+        NotReadableError: 'The selected screen could not be captured. Close other recording or screen-sharing apps and try again.',
+        SecurityError: 'Screen recording requires a secure page. Open OzooNotes over HTTPS or localhost.',
+        TypeError: 'This browser could not start screen capture. Update Chrome or Edge and try again.',
+        InvalidStateError: 'The recording window is not active. Focus OzooNotes and try again.',
+      }
+      console.error('Screen recording could not start:', error)
+      setScreenRecordingError(messages[name] ?? `Could not start screen recording${name ? ` (${name})` : ''}. Check the browser’s screen-capture permissions and try again.`)
     }
   }
   const stopScreenRecording = () => {
