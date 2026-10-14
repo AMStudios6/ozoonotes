@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import './App.css'
-import StudentSpace from './StudentSpace'
 import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
 import folderPng from './assets/folder.png'
+import StudentSpace from './StudentSpace'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -14,16 +14,18 @@ type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
 type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart' | 'Mood board'
 type SectionTitle = { id: string; title: string; page: number }
-type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[] }
+type LayerName = 'writing' | 'text' | 'images'
+type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
+type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
 type CloudUser = { id: number; username: string }
-type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
+type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
 type CloudBoard = { id: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; ownerName?: string }
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
 type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
-type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string }
+type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
@@ -331,24 +333,27 @@ function hitTestObject(stroke: Stroke, point: Point, canvasWidth: number, canvas
   return segments.some(([a, b]) => pointToSegmentDistance(pointPx, a, b) <= 15 + stroke.width / 2)
 }
 
-function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }, selectionBox?: SelectionBox) {
+function strokeLayer(stroke: Stroke): LayerName { return stroke.layer ?? (stroke.tool === 'Text' ? 'text' : stroke.tool === 'Image' ? 'images' : 'writing') }
+function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }, selectionBox?: SelectionBox, hiddenLayers: LayerName[] = []) {
   const context = canvas.getContext('2d')
   if (!context) return
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.save()
   context.translate(-cameraOffset.x * canvas.width, -cameraOffset.y * canvas.height)
   for (const [drawingIndex, drawing] of drawings.entries()) {
-    if (!drawing.points.length || drawing.tool === 'Eraser') continue
+    if (!drawing.points.length || drawing.tool === 'Eraser' || hiddenLayers.includes(strokeLayer(drawing))) continue
     const first = drawing.points[0]
     const last = drawing.points[drawing.points.length - 1]
     context.strokeStyle = drawing.color
     context.fillStyle = drawing.color
     context.lineWidth = drawing.width
-    context.lineCap = 'round'
+    context.lineCap = drawing.drawingStyle === 'calligraphy' ? 'square' : 'round'
     context.lineJoin = 'round'
+    context.setLineDash(drawing.drawingStyle === 'dashed' ? [drawing.width * 2.5, drawing.width * 1.8] : drawing.drawingStyle === 'dotted' ? [drawing.width * .15, drawing.width * 1.8] : [])
+    if (drawing.drawingStyle === 'calligraphy') context.lineWidth *= 1.7
     context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Pencil' ? 0.62 : drawing.tool === 'Marker' ? 0.82 : drawing.tool === 'Highlighter' ? 0.24 : 1)
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
-      const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset))
+      const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset, undefined, hiddenLayers))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
     } else if (drawing.tool === 'Text') {
       context.font = `${Math.max(8, drawing.width * 5)}px sans-serif`
@@ -366,6 +371,13 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       context.moveTo(first.x * canvas.width, first.y * canvas.height)
       if (drawing.tool === 'Line') {
         context.lineTo(last.x * canvas.width, last.y * canvas.height)
+      } else if (drawing.drawingStyle === 'handwriting' && drawing.points.length > 2) {
+        for (let index = 1; index < drawing.points.length - 1; index++) {
+          const point = drawing.points[index], next = drawing.points[index + 1]
+          context.quadraticCurveTo(point.x * canvas.width, point.y * canvas.height, (point.x + next.x) * canvas.width / 2, (point.y + next.y) * canvas.height / 2)
+        }
+        const lastPoint = drawing.points[drawing.points.length - 1]
+        context.lineTo(lastPoint.x * canvas.width, lastPoint.y * canvas.height)
       } else {
         for (const point of drawing.points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height)
       }
@@ -616,9 +628,9 @@ function readSavedWorkspace(): RestoredWorkspace {
     const loaded = savedWorkspace.names.filter((name): name is string => typeof name === 'string').map((name) => {
       const raw = localStorage.getItem(`doomnotes:${name}`)
       if (!raw) return null
-      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
       if (typeof saved.name !== 'string' || typeof saved.pages !== 'number' || !Array.isArray(saved.pageStrokes)) return null
-      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation ?? 'portrait'), pageBackground: saved.pageBackground ?? 'auto', notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [] }, saved }
+      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation ?? 'portrait'), pageBackground: saved.pageBackground ?? 'auto', notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [], hiddenLayers: saved.hiddenLayers ?? [] }, saved }
     }).filter((item): item is NonNullable<typeof item> => item !== null)
 
     if (!loaded.length) return empty
@@ -665,6 +677,7 @@ function App() {
   const [activeColor, setActiveColor] = useState(penColors[0])
   const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
+  const [drawingStyle, setDrawingStyle] = useState<DrawingStyle>('solid')
   const [opacity, setOpacity] = useState(100)
   const [pageBackground, setPageBackground] = useState(initialWorkspace.pageBackground)
   const [pageSize, setPageSize] = useState<PageSize>(initialWorkspace.pageSize)
@@ -741,11 +754,27 @@ function App() {
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [moreFeaturesOpen, setMoreFeaturesOpen] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renameError, setRenameError] = useState('')
+  const [timerMinutes, setTimerMinutes] = useState(25)
+  const [timerSeconds, setTimerSeconds] = useState(25 * 60)
+  const [timerRunning, setTimerRunning] = useState(false)
+  const hiddenLayers = boards[activeBoard]?.hiddenLayers ?? []
   const [quickStartOpen, setQuickStartOpen] = useState(false)
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:')).map((key) => key.slice('doomnotes:'.length)))
+  useEffect(() => {
+    if (!timerRunning) return
+    const interval = window.setInterval(() => setTimerSeconds((seconds) => {
+      if (seconds <= 1) { setTimerRunning(false); return 0 }
+      return seconds - 1
+    }), 1000)
+    return () => window.clearInterval(interval)
+  }, [timerRunning])
   useEffect(() => { try { localStorage.setItem('ozoo:notebooks', JSON.stringify(notebooks)) } catch { /* Notebook organization remains optional if storage is full. */ } }, [notebooks])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
   const [page, setPage] = useState(initialWorkspace.page)
@@ -865,6 +894,17 @@ function App() {
     if (!selectedIndices.length) return
     const removed = new Set(selectedIndices)
     editCurrentPage((current) => current.filter((_, index) => !removed.has(index)))
+    setSelectedIndices([])
+  }
+  const toggleLayerVisibility = (layer: LayerName) => setBoards((current) => current.map((board, index) => {
+    if (index !== activeBoard) return board
+    const hidden = board.hiddenLayers ?? []
+    return { ...board, hiddenLayers: hidden.includes(layer) ? hidden.filter((item) => item !== layer) : [...hidden, layer] }
+  }))
+  const clearCurrentLayer = (layer: LayerName) => {
+    const count = strokes.filter((stroke) => strokeLayer(stroke) === layer).length
+    if (!count || !window.confirm(`Delete ${count} ${layer === 'images' ? 'image' : layer} item${count === 1 ? '' : 's'} from this page?`)) return
+    editCurrentPage((current) => current.filter((stroke) => strokeLayer(stroke) !== layer))
     setSelectedIndices([])
   }
   const duplicateSelection = () => {
@@ -998,7 +1038,7 @@ function App() {
   const saveToCloud = async (passphrase?: string) => {
     if (!cloudUser) { setAccountOpen(true); setCloudMessage('Sign in or create an account to save this board to your server.'); return }
     const currentBoard = boards[activeBoard]
-    const state = { pages: currentBoard.pages, pageSize, infinite: infinitePage, orientation, pageOrientations: currentBoard.pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: currentBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
+    const state = { pages: currentBoard.pages, pageSize, infinite: infinitePage, orientation, pageOrientations: currentBoard.pageOrientations, pageBackground, gridEnabled, showScale, hiddenLayers: currentBoard.hiddenLayers ?? [], pageStrokes: Array.from({ length: currentBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
     const existingId = cloudBoardIds[currentBoard.name]
     try {
       const cloudId = existingId
@@ -1032,7 +1072,7 @@ function App() {
       try { state = await decryptBoardState(remote.state, passphrase); cloudKeys.current[remote.id] = passphrase }
       catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not unlock this board.'); return }
     } else state = remote.state
-    setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground }])
+    setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground, hiddenLayers: state.hiddenLayers ?? [] }])
     setActiveBoard(newIndex)
     setPage(1)
     setIndexView(false)
@@ -1196,7 +1236,7 @@ function App() {
           if (!key) return
           remoteState = await decryptBoardState(remote.state, key)
         } else remoteState = remote.state
-        setBoards((current) => current.map((item, index) => index === localIndex ? { ...item, pages: remoteState.pages, pageSize: remoteState.pageSize ?? 'A4', infinite: remoteState.infinite ?? false, orientation: remoteState.orientation, pageOrientations: remoteState.pageOrientations, pageBackground: remoteState.pageBackground } : item))
+        setBoards((current) => current.map((item, index) => index === localIndex ? { ...item, pages: remoteState.pages, pageSize: remoteState.pageSize ?? 'A4', infinite: remoteState.infinite ?? false, orientation: remoteState.orientation, pageOrientations: remoteState.pageOrientations, pageBackground: remoteState.pageBackground, hiddenLayers: remoteState.hiddenLayers ?? [] } : item))
         setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(remoteState.pageStrokes.map((items, index) => [`${localIndex}:${index + 1}`, items])) }))
         if (localIndex === activeBoard) {
           setPageSize(remoteState.pageSize ?? 'A4'); setInfinitePage(remoteState.infinite ?? false); setOrientation(remoteState.pageOrientations?.[page - 1] ?? remoteState.orientation); setPageBackground(remoteState.pageBackground); setGridEnabled(remoteState.gridEnabled ?? false); setShowScale(remoteState.showScale ?? false)
@@ -1210,8 +1250,8 @@ function App() {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, selectionBox ?? undefined)
-  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox])
+    if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, selectionBox ?? undefined, hiddenLayers)
+  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
@@ -1277,7 +1317,7 @@ function App() {
   const commitText = () => {
     const editor = textEditor
     if (editor?.value.trim()) {
-      const textItem: Stroke = { tool: 'Text', color: activeColor, width: strokeWidth * pageContentScale(pageSize), opacity, points: [editor.point], text: editor.value.trim() }
+      const textItem: Stroke = { tool: 'Text', color: activeColor, width: strokeWidth * pageContentScale(pageSize), opacity, points: [editor.point], text: editor.value.trim(), layer: 'text' }
       editCurrentPage((current) => [...current, textItem])
     }
     setTextEditor(null)
@@ -1296,7 +1336,7 @@ function App() {
         if (height > 0.42) { height = 0.42; width = height * aspect }
         const x = infinitePage ? point.x : Math.max(0, Math.min(1 - width, point.x))
         const y = infinitePage ? point.y : Math.max(0, Math.min(1 - height, point.y))
-        const imageItem: Stroke = { tool: 'Image', color: '#ffffff', width: 1, opacity: 100, points: [{ x, y }, { x: x + width, y: y + height }], imageData }
+        const imageItem: Stroke = { tool: 'Image', color: '#ffffff', width: 1, opacity: 100, points: [{ x, y }, { x: x + width, y: y + height }], imageData, layer: 'images' }
         imageCache.set(imageData, image)
         editCurrentPage((current) => [...current, imageItem])
       }
@@ -1339,7 +1379,7 @@ function App() {
     }
     if (!hardwareEraser && activeTool === 'Select') {
       const canvas = event.currentTarget
-      const hit = strokes.map((stroke, strokeIndex) => ({ stroke, strokeIndex })).reverse().find(({ stroke }) => hitTestObject(stroke, point, canvas.width, canvas.height))?.strokeIndex
+      const hit = strokes.map((stroke, strokeIndex) => ({ stroke, strokeIndex })).reverse().find(({ stroke }) => !hiddenLayers.includes(strokeLayer(stroke)) && hitTestObject(stroke, point, canvas.width, canvas.height))?.strokeIndex
       if (hit === undefined) {
         if (!event.shiftKey) setSelectedIndices([])
         activeMarquee.current = { start: point, additive: event.shiftKey, baseSelection: event.shiftKey ? selectedIndices : [] }
@@ -1365,15 +1405,16 @@ function App() {
       width: strokeTool === 'Eraser' ? 44 : strokeWidth * (strokeTool === 'Brush' ? 2.5 : strokeTool === 'Pencil' ? 0.68 : strokeTool === 'Marker' ? 1.8 : strokeTool === 'Highlighter' ? 3 : 1),
       opacity,
       points: [point],
+      ...(strokeTool !== 'Eraser' ? { layer: 'writing' as const, drawingStyle } : {}),
       ...(strokeTool === 'Shape' ? { shapeKind } : {}),
     }
     activeStroke.current = stroke
-    if (strokeTool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, stroke], selectedIndices)
+    if (strokeTool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, stroke], selectedIndices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
-      const candidates = strokes.map((item, index) => strokeTouchesEraser(item, stroke, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+      const candidates = strokes.map((item, index) => !hiddenLayers.includes(strokeLayer(item)) && strokeTouchesEraser(item, stroke, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
-      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, stroke.width)
+      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, stroke.width, { x: 0, y: 0 }, undefined, hiddenLayers)
     }
   }
   const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1403,27 +1444,27 @@ function App() {
       move.preview = move.originals.map((original) => ({ ...original, points: original.points.map((item) => ({ x: item.x + dx, y: item.y + dy })) }))
       const updated = [...strokes]
       move.indices.forEach((index, offset) => { updated[index] = move.preview[offset] })
-      renderDrawings(event.currentTarget, updated, move.indices)
+      renderDrawings(event.currentTarget, updated, move.indices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
       return
     }
     if (!activeStroke.current) {
       if (activeTool === 'Eraser') {
         setEraserHover(point)
         const eraser = { tool: 'Eraser' as const, color: '#ff535d', width: 44, opacity: 100, points: [point] }
-        const candidates = strokes.map((stroke, index) => strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+        const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
         setErasePreviewIndices(candidates)
-        renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width)
+        renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, { x: 0, y: 0 }, undefined, hiddenLayers)
       }
       return
     }
     activeStroke.current.points.push(point)
-    if (activeStroke.current.tool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, activeStroke.current], selectedIndices)
+    if (activeStroke.current.tool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, activeStroke.current], selectedIndices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
       const eraser = activeStroke.current
-      const candidates = strokes.map((stroke, index) => strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+      const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
-      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width)
+      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, { x: 0, y: 0 }, undefined, hiddenLayers)
     }
   }
   const saveCurrentFile = () => {
@@ -1509,7 +1550,7 @@ function App() {
     const drawing = window.document.createElement('canvas')
     drawing.width = width
     drawing.height = height
-    renderDrawings(drawing, pageStrokes, [], [], undefined, 0, camera)
+    renderDrawings(drawing, pageStrokes, [], [], undefined, 0, camera, undefined, hiddenLayers)
     context.drawImage(drawing, 0, 0)
     return output
   }
@@ -1530,14 +1571,19 @@ function App() {
       if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(8, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
       const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last).points : stroke.points
       const pointString = points.map((point) => `${point.x * width},${point.y * height}`).join(' ')
-      const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : 'polyline'
-      return `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="round" stroke-linejoin="round" opacity="${alpha}"/>`
+      const handwriting = stroke.drawingStyle === 'handwriting' && points.length > 2 && stroke.tool !== 'Shape'
+      const pathData = handwriting ? `M ${points[0].x * width} ${points[0].y * height} ${points.slice(1, -1).map((point, index) => { const next = points[index + 2]; return `Q ${point.x * width} ${point.y * height} ${(point.x + next.x) * width / 2} ${(point.y + next.y) * height / 2}` }).join(' ')} L ${last.x * width} ${last.y * height}` : ''
+      const dash = stroke.drawingStyle === 'dashed' ? ` stroke-dasharray="${stroke.width * 2.5} ${stroke.width * 1.8}"` : stroke.drawingStyle === 'dotted' ? ` stroke-dasharray="${stroke.width * .15} ${stroke.width * 1.8}"` : ''
+      const cap = stroke.drawingStyle === 'calligraphy' ? 'square' : 'round'
+      const widthScale = stroke.drawingStyle === 'calligraphy' ? 1.7 : 1
+      const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : handwriting ? 'path' : 'polyline'
+      return handwriting ? `<path d="${pathData}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>` : `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>`
     }).join('')
     const cameraGroup = infinitePage ? `<g transform="translate(${-camera.x * width} ${-camera.y * height})">${paths}</g>` : paths
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${gridLines.join('')}${cameraGroup}</svg>`
   }
   const exportDrawing = async (format: 'png' | 'svg') => {
-    const pageStrokes = strokesByPage[pageKey] ?? []
+    const pageStrokes = (strokesByPage[pageKey] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke)))
     if (format === 'png') {
       const output = await renderPageCanvas(pageStrokes)
       output.toBlob((blob) => { if (blob) downloadBlob(blob, 'png') }, 'image/png')
@@ -1548,7 +1594,7 @@ function App() {
     setMenuOpen(false)
   }
   const copyPageForNotion = async () => {
-    const output = await renderPageCanvas(strokesByPage[pageKey] ?? [])
+    const output = await renderPageCanvas((strokesByPage[pageKey] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke))))
     const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'))
     if (!blob) return
     try {
@@ -1610,7 +1656,7 @@ function App() {
     }
     const pages: { strokes: Stroke[]; label: string; pageIndex: number | null }[] = [
       ...(exportIncludeIndex && (board.titles?.length ?? 0) > 1 ? Array.from({ length: indexPageCount }, (_, i) => ({ strokes: indexStrokes(i), label: `Index ${i + 1}`, pageIndex: null })) : []),
-      ...selectedNumbers.map((number) => ({ strokes: strokesByPage[`${activeBoard}:${number}`] ?? [], label: `Page ${number}`, pageIndex: number - 1 })),
+      ...selectedNumbers.map((number) => ({ strokes: (strokesByPage[`${activeBoard}:${number}`] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke))), label: `Page ${number}`, pageIndex: number - 1 })),
     ]
     const safeName = board.name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
     for (const [index, item] of pages.entries()) {
@@ -1631,7 +1677,7 @@ function App() {
   const exportObsidianNote = () => {
     const safeName = boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
     const background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme)
-    const pageStrokes = Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
+    const pageStrokes = Array.from({ length: boards[activeBoard].pages }, (_, index) => (strokesByPage[`${activeBoard}:${index + 1}`] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke))))
     const markdownPages = pageStrokes.map((items, index) => {
       const imageName = `${safeName} - page ${index + 1}.svg`
       downloadNamedBlob(new Blob([svgForPage(items, canvasWidth, canvasHeight, background)], { type: 'image/svg+xml;charset=utf-8' }), imageName)
@@ -1648,9 +1694,9 @@ function App() {
     const raw = localStorage.getItem(`doomnotes:${name}`)
     if (!raw) return
     try {
-      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
+      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
       const boardIndex = boards.length
-      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation), pageBackground: saved.pageBackground, notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [] }])
+      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation), pageBackground: saved.pageBackground, notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [], hiddenLayers: saved.hiddenLayers ?? [] }])
       setActiveBoard(boardIndex)
       setPage(1)
       setIndexView((saved.titles?.length ?? 0) > 1)
@@ -1676,7 +1722,7 @@ function App() {
         window.setTimeout(() => setSaveNotice(''), 2400)
         return
       }
-      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; titles?: SectionTitle[]; pageStrokes?: Stroke[][] }
+      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; titles?: SectionTitle[]; hiddenLayers?: LayerName[]; pageStrokes?: Stroke[][] }
       if (documentData.format !== 'doomnotes' || documentData.version !== 1 || typeof documentData.name !== 'string' || !Number.isInteger(documentData.pages) || (documentData.pages ?? 0) < 1 || !Array.isArray(documentData.pageStrokes) || documentData.pageStrokes.length !== documentData.pages) throw new Error('That file is not a valid OzooNotes document.')
       if (documentData.pageSize !== undefined && !['Infinite', 'A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'].includes(documentData.pageSize)) throw new Error('That OzooNotes file uses an unsupported page size.')
       const boardIndex = boards.length
@@ -1685,7 +1731,7 @@ function App() {
       const importedOrientation = documentData.orientation ?? 'portrait'
       const importedOrientations = Array.from({ length: documentData.pages! }, (_, index) => documentData.pageOrientations?.[index] ?? importedOrientation)
       const importedBackground = documentData.pageBackground ?? 'auto'
-      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageOrientations: importedOrientations, pageBackground: importedBackground, titles: documentData.titles ?? [] }])
+      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageOrientations: importedOrientations, pageBackground: importedBackground, titles: documentData.titles ?? [], hiddenLayers: documentData.hiddenLayers ?? [] }])
       setActiveBoard(boardIndex)
       setPage(1)
       setIndexView((documentData.titles?.length ?? 0) > 1)
@@ -1716,6 +1762,7 @@ function App() {
         const left = Math.min(box.start.x, box.current.x), right = Math.max(box.start.x, box.current.x)
         const top = Math.min(box.start.y, box.current.y), bottom = Math.max(box.start.y, box.current.y)
         const contained = strokes.map((stroke, index) => {
+          if (hiddenLayers.includes(strokeLayer(stroke))) return -1
           if (!stroke.points.length) return -1
           const xs = stroke.points.map((point) => point.x), ys = stroke.points.map((point) => point.y)
           return Math.max(...xs) >= left && Math.min(...xs) <= right && Math.max(...ys) >= top && Math.min(...ys) <= bottom ? index : -1
@@ -1799,7 +1846,7 @@ function App() {
         const drawingContext = drawingCanvas.getContext('2d')
         const context = canvas.getContext('2d')
         if (!context || !drawingContext) throw new Error('Could not render the page for PDF export')
-        renderDrawings(drawingCanvas, pageStrokes.map((stroke) => ({ ...stroke, width: stroke.width * scale })))
+        renderDrawings(drawingCanvas, pageStrokes.map((stroke) => ({ ...stroke, width: stroke.width * scale })), [], [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
         context.fillStyle = resolvePageBackground(pageBackground, dark, colorTheme)
         context.fillRect(0, 0, canvas.width, canvas.height)
         if (gridEnabled && exportPages[pageIndex].pageIndex !== null) {
@@ -2022,6 +2069,50 @@ function App() {
     setNextFileNumber(nextFileNumber + 1)
     setShowNewFileDialog(false)
   }
+  const openRenameDialog = (name = boards[activeBoard]?.name) => {
+    if (!name) return
+    setRenameTarget(name)
+    setRenameDraft(name)
+    setRenameError('')
+  }
+  const renameBoard = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!renameTarget) return
+    const nextName = renameDraft.trim()
+    if (!nextName) { setRenameError('Enter a file name.'); return }
+    if (boards.some((board) => board.name !== renameTarget && normalizeBoardName(board.name) === normalizeBoardName(nextName)) || recentFiles.some((name) => name !== renameTarget && normalizeBoardName(name) === normalizeBoardName(nextName)) || (localStorage.getItem(`doomnotes:${nextName}`) !== null && normalizeBoardName(nextName) !== normalizeBoardName(renameTarget))) {
+      setRenameError('A file with this name already exists. Choose another name.')
+      return
+    }
+    let renamedData: Record<string, unknown> = {}
+    try {
+      const oldKey = `doomnotes:${renameTarget}`
+      const newKey = `doomnotes:${nextName}`
+      const saved = localStorage.getItem(oldKey)
+      if (saved) {
+        const data = JSON.parse(saved) as Record<string, unknown>
+        renamedData = { ...data, name: nextName }
+        localStorage.setItem(newKey, JSON.stringify(renamedData))
+        localStorage.removeItem(oldKey)
+      }
+    } catch { setRenameError('Could not update this file in browser storage.'); return }
+    setBoards((current) => current.map((board) => board.name === renameTarget ? { ...board, name: nextName } : board))
+    setRecentFiles((current) => current.map((name) => name === renameTarget ? nextName : name))
+    setCloudBoardIds((current) => {
+      const updated = { ...current }
+      if (updated[renameTarget] !== undefined) { updated[nextName] = updated[renameTarget]; delete updated[renameTarget] }
+      try { localStorage.setItem('doomnotes:cloud-board-ids', JSON.stringify(updated)) } catch { /* The local file rename is already saved. */ }
+      return updated
+    })
+    setInfiniteCameraByPage((current) => Object.fromEntries(Object.entries(current).map(([key, value]) => [key.startsWith(`${renameTarget}:`) ? `${nextName}:${key.slice(renameTarget.length + 1)}` : key, value])))
+    const cloudId = cloudBoardIds[renameTarget]
+    if (cloudId && cloudUser) {
+      const remoteState = cloudBoards.find((board) => board.id === cloudId)?.state
+      const state = remoteState && isEncryptedBoardState(remoteState) ? remoteState : Array.isArray(renamedData.pageStrokes) ? { pages: renamedData.pages, pageSize: renamedData.pageSize, infinite: renamedData.infinite, orientation: renamedData.orientation, pageOrientations: renamedData.pageOrientations, pageBackground: renamedData.pageBackground, gridEnabled: renamedData.gridEnabled, showScale: renamedData.showScale, hiddenLayers: renamedData.hiddenLayers ?? [], pageStrokes: renamedData.pageStrokes } : remoteState
+      if (state) void apiRequest(`/api/boards/${cloudId}`, { method: 'PUT', body: JSON.stringify({ name: nextName, folderId: selectedFolderId, state }) }).then(() => refreshCloudBoards()).catch((error) => setCloudMessage(error instanceof Error ? `Renamed locally; server rename failed: ${error.message}` : 'Renamed locally; server rename failed.'))
+    }
+    setRenameTarget(null)
+  }
   const activateBoard = (index: number) => {
     const board = boards[index]
     if (!board) return
@@ -2077,6 +2168,7 @@ function App() {
   }
 
   const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} aria-invalid={Boolean(draftNameError)} aria-describedby={draftNameError ? "draft-name-error" : undefined} onChange={(event) => { setDraftName(event.target.value); setDraftNameError("") }} placeholder={`File ${nextFileNumber}`} /></label>{draftNameError && <p className="field-error" id="draft-name-error" role="alert">{draftNameError}</p>}<fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option><option>Mood board</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const renameDialog = renameTarget && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenameTarget(null) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-file-title"><button className="dialog-close" aria-label="Close rename dialog" onClick={() => setRenameTarget(null)}><Icon name="close" size={16} /></button><p className="eyebrow">FILE OPTIONS</p><h2 id="rename-file-title">Rename file</h2><form onSubmit={renameBoard}><label className="dialog-label">File name<input autoFocus required maxLength={120} value={renameDraft} onChange={(event) => { setRenameDraft(event.target.value); setRenameError('') }} /></label>{renameError && <p className="field-error" role="alert">{renameError}</p>}<footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setRenameTarget(null)}>Cancel</button><button className="dialog-create">Save name</button></footer></form></section></div>
   const titleDialog = titleDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTitleDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="section-title-heading"><button className="dialog-close" aria-label="Close section titles" onClick={() => setTitleDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">PAGE {page} SECTION</p><h2 id="section-title-heading">Add a section title</h2><p className="infinite-note">Titles appear in a separate contents page before your notes. They never take up or renumber a document page.</p><form onSubmit={(event) => { event.preventDefault(); addSectionTitle() }}><label className="dialog-label">Title for page {page}<input autoFocus maxLength={100} value={sectionTitleDraft} onChange={(event) => setSectionTitleDraft(event.target.value)} placeholder="e.g. Research links" /></label><button className="dialog-create full-button" disabled={!sectionTitleDraft.trim()}>Add title</button></form>{(boards[activeBoard].titles?.length ?? 0) > 0 && <><h3 className="small-heading">Titles in this board</h3><ul className="section-title-list">{boards[activeBoard].titles?.map((item) => <li key={item.id}><span>{item.title}<small>Page {item.page}</small></span><button type="button" aria-label={`Remove ${item.title}`} onClick={() => removeSectionTitle(item.id)}>Remove</button></li>)}</ul></>}</section></div>
   const exportDialog = exportDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title"><button className="dialog-close" aria-label="Close export options" onClick={() => setExportDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">CUSTOM EXPORT</p><h2 id="export-dialog-title">Choose pages to export</h2><label className="dialog-label">Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'pdf' | 'png' | 'svg')}><option value="pdf">PDF document</option><option value="png">PNG images</option><option value="svg">SVG images</option></select></label><label className="dialog-label">Page numbers<input value={exportPageSelection} onChange={(event) => setExportPageSelection(event.target.value)} placeholder="1, 3-5" /><small>Use commas and ranges, for example: 1, 3-5</small></label>{(boards[activeBoard].titles?.length ?? 0) > 1 && <label className="encryption-choice"><input type="checkbox" checked={exportIncludeIndex} onChange={(event) => setExportIncludeIndex(event.target.checked)} /><span><strong>Include contents index</strong><small>Add the title index before the selected note pages.</small></span></label>}{exportFormat !== 'pdf' && <p className="infinite-note">Each selected page downloads as its own {exportFormat.toUpperCase()} file.</p>}{infinitePage && exportFormat === 'pdf' && <p className="field-error">PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setExportDialogOpen(false)}>Cancel</button><button className="dialog-create" disabled={infinitePage && exportFormat === 'pdf'} onClick={() => void exportSelectedPages()}>Export</button></footer></section></div>
 
@@ -2189,13 +2281,14 @@ function App() {
               </div>
               <form className="notebook-create" onSubmit={(event) => { event.preventDefault(); createNotebook() }}><input aria-label="New notebook name" placeholder="Create a notebook…" value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} /><button className="landing-new-small" type="submit">＋ Add notebook</button><small>Notebooks group related files; add several tags separated by commas.</small></form>
               <div className="library-shortcuts"><strong>Quick views</strong><button type="button" className={tagFilter === 'active' ? 'selected' : ''} onClick={() => setTagFilter(tagFilter === 'active' ? '' : 'active')}>◉ Active</button><button type="button" className={tagFilter === 'favorite' ? 'selected' : ''} onClick={() => setTagFilter(tagFilter === 'favorite' ? '' : 'favorite')}>★ Favorites</button><span className="para-shortcut-label">PARA notebooks</span>{['Projects', 'Areas', 'Resources', 'Archives'].map((book) => <button type="button" key={book} onClick={() => { setNotebooks((current) => [...new Set([...current, book])]); setNotebookFilter(book) }}>{book}</button>)}</div>
-              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><div className="library-file-meta"><label>Notebook<select aria-label={`Notebook for ${name}`} value={meta.notebook ?? 'Inbox'} onChange={(event) => saveFileOrganization(name, event.target.value, (meta.tags ?? []).join(', '))}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label>Tags<input aria-label={`Tags for ${name}`} defaultValue={(meta.tags ?? []).join(', ')} placeholder="ideas, article, #active…" onBlur={(event) => saveFileOrganization(name, meta.notebook ?? 'Inbox', event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
+              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-rename" onClick={() => openRenameDialog(name)}>Rename file</button><div className="library-file-meta"><label>Notebook<select aria-label={`Notebook for ${name}`} value={meta.notebook ?? 'Inbox'} onChange={(event) => saveFileOrganization(name, event.target.value, (meta.tags ?? []).join(', '))}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label>Tags<input aria-label={`Tags for ${name}`} defaultValue={(meta.tags ?? []).join(', ')} placeholder="ideas, article, #active…" onBlur={(event) => saveFileOrganization(name, meta.notebook ?? 'Inbox', event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
             <footer className="landing-footer"><div className="landing-brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span>Don’t Doomscroll, just OzooNotes</span></footer>
           </div>
         </section>
         {newFileDialog}
+        {renameDialog}
         {quickStartDialog}
         {!localOnly && accountDialog}
       </main>
@@ -2209,7 +2302,7 @@ function App() {
           <div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div>
           <nav className="file-tabs" aria-label="Whiteboard files">
             {boards.map((board, index) => <div key={board.name} className={`file-tab ${index === activeBoard ? 'selected' : ''}`}>
-              <button className="tab-open" onClick={() => activateBoard(index)}>{board.name}</button>
+              <button className="tab-open" title="Double-click to rename" onClick={() => activateBoard(index)} onDoubleClick={() => openRenameDialog(board.name)}>{board.name}</button>
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}><Icon name="close" size={13} /></button>
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
@@ -2217,6 +2310,17 @@ function App() {
             <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync"><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
           </nav>
+          <div className="more-features-wrap">
+            <button className="more-features-trigger" aria-expanded={moreFeaturesOpen} aria-haspopup="true" onClick={() => setMoreFeaturesOpen((open) => !open)}><Icon name="settings" size={16} /> {timerRunning ? `More features · ${String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:${String(timerSeconds % 60).padStart(2, '0')}` : 'More features'} <Icon name="chevronDown" size={12} /></button>
+            {moreFeaturesOpen && <section className="more-features-panel" aria-label="More features">
+              <div className="more-features-heading"><strong>More features</strong><button aria-label="Close more features" onClick={() => setMoreFeaturesOpen(false)}>×</button></div>
+              <div className="more-feature-section"><span className="more-feature-label">LAYERS</span>
+                {([['writing', 'Writing & shapes'], ['text', 'Text'], ['images', 'Pictures']] as [LayerName, string][]).map(([layer, label]) => <div className="feature-layer-row" key={layer}><button className="feature-layer-visibility" aria-pressed={!hiddenLayers.includes(layer)} onClick={() => toggleLayerVisibility(layer)}><span>{hiddenLayers.includes(layer) ? '◌' : '◉'}</span><span>{label}</span><small>{hiddenLayers.includes(layer) ? 'Hidden' : 'Visible'}</small></button><button className="feature-layer-clear" title={`Delete ${label.toLowerCase()} from this page`} aria-label={`Delete ${label.toLowerCase()} from this page`} onClick={() => clearCurrentLayer(layer)}>×</button></div>)}
+                <p className="more-feature-hint">Hide a layer to focus. Delete removes that layer’s objects from this page.</p>
+              </div>
+              <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
+            </section>}
+          </div>
         </header>
 
         <section className="board-area">
@@ -2230,6 +2334,7 @@ function App() {
               {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
               <div className="menu-divider" />
               <button onClick={() => { setLibraryName(''); setLibraryOpen(true); setMenuOpen(false) }}><Icon name="layer" size={17} /> <span>Libraries</span></button>
+              <button onClick={() => { setMenuOpen(false); openRenameDialog() }}><Icon name="text" size={17} /> <span>Rename this file…</span></button>
               <button onClick={openExportDialog}><ThemeIcon source={downloadPng} size={18} /> <span>Export pages…</span></button>
               <button onClick={openTitleDialog}><Icon name="notes" size={17} /> <span>Add section title to page {page}</span></button>
               <button onClick={() => { void exportDrawing('png') }}><Icon name="image" size={17} /> <span>Export this page as PNG</span></button>
@@ -2277,6 +2382,7 @@ function App() {
           </div>
 
           {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
+            {inkTools.includes(activeTool) && <div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div>}
             {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
@@ -2313,6 +2419,7 @@ function App() {
         </section>
       </div>
       {newFileDialog}
+        {renameDialog}
       {quickStartDialog}
       {!localOnly && accountDialog}
       {!localOnly && shareDialog}
