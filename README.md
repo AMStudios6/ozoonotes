@@ -28,15 +28,19 @@ OzooNotes gives you one flexible paper-like workspace for those mixed notes. Sta
 ## What you can make
 
 ### Notes, study guides, and coding notes
+
 Write or sketch with the brush, pencil, pen, and marker. Add typed notes, highlight important details, and use ready-made layouts. The coding-notes template puts a theory and explanation area alongside numbered code lines, with room below to record output and tests.
 
 ### Diagrams, graphs, and visual plans
+
 Arrange shapes and images, map relationships between concepts, build a mood board, or plot equations and data points with the graph tools.
 
 ### Multi-page work
+
 Create boards with pages in A1, A2, A3, A4, A5, Letter, Legal, or Tabloid size. Set page orientation to portrait or landscape, add pages as your work grows, and export selected pages as PDF.
 
 ### Student and teacher spaces
+
 Student starters support class notes, study guides, concept maps, planners, and more. Teacher starters include lesson plans, worksheets, rubrics, exit tickets, seating charts, and code walkthroughs.
 
 ## Saving and privacy
@@ -47,20 +51,22 @@ The repository also includes an optional self-hosted server and account features
 
 ## Windows desktop app
 
-OzooNotes can also run as a Windows desktop app. Its boards remain saved locally in the app's browser storage, and exports such as PDF open the Windows Save dialog.
+OzooNotes can also run as an independent Windows desktop app. The packaged app opens the live GitHub Pages site in its own window and refreshes its web cache at launch. After a GitHub Pages deployment completes, the app loads the updated website the next time it starts. An internet connection is required to use the desktop app.
 
-To run it in development, install dependencies and run npm run desktop:dev. To build the installer and portable executable on Windows, run npm run desktop:dist; the .exe files will be written to release/.
+Boards are saved in the desktop app's local browser storage on this device, separate from files saved in a regular browser. Exports such as PDF open the Windows Save dialog.
 
-You can also build it from GitHub: open **Actions → Build OzooNotes for Windows → Run workflow**, then download the **OzooNotes-Windows** artifact from the completed run. Tagged releases named desktop-v* run the same build automatically. The Windows executable is currently unsigned, so Windows may show a SmartScreen warning when it is first opened.
+To run it in development, install dependencies and run `npm run desktop:dev`. To build the installer and portable executable on Windows, run `npm run desktop:dist`; the `.exe` files will be written to `release/`. The installer contains the desktop shell rather than a bundled copy of the website, so it follows the hosted app as it is updated.
+
+You can also build it from GitHub: open **Actions → Build OzooNotes for Windows → Run workflow**, then download the **OzooNotes-Windows** artifact from the completed run. Tagged releases named `desktop-v*` run the same build automatically. The Windows executable is currently unsigned, so Windows may show a SmartScreen warning when it is first opened.
 
 ## Run locally
 
 Use Node.js 24 or newer.
 
-1. Run npm ci.
-2. Run npm run dev and open the Vite URL it prints.
+1. Run `npm ci`.
+2. Run `npm run dev` and open the Vite URL it prints.
 
-The API server is optional for local editing. To develop the server-backed features, run npm run server in another terminal. It stores account and board data in data/doomnotes.sqlite.
+The API server is optional for local editing. To develop the server-backed features, run `npm run server` in another terminal. It stores account and board data in `data/doomnotes.sqlite`.
 
 ## Deploy to GitHub Pages
 
@@ -70,4 +76,5 @@ The site URL is [https://AMStudios6.github.io/ozoonotes/](https://AMStudios6.git
 
 ## Build
 
-Run npm run build to build the website into dist/.
+Run `npm run build` to build the website into `dist/`.
+
