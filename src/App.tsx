@@ -1929,7 +1929,8 @@ function App() {
           <header className="landing-topbar">
             <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
             <nav className="landing-nav" aria-label="Main navigation">
-              <a href="#landing-tools">What you can do</a>
+              <a href="#audience-starters">Board starters</a>
+              <a href="#landing-tools">Tools</a>
               <a href="#landing-files">Your files</a>
               <a href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">GitHub</a>
             </nav>
@@ -1968,7 +1969,7 @@ function App() {
                 <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
               </div>
             </section>
-            <section className="audience-starters" aria-labelledby="audience-title">
+            <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
               <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : 'TEACHER STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
                 {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
