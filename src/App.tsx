@@ -7,7 +7,7 @@ type AudienceRole = 'student' | 'teacher'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
-type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner'
+type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string }
 type CloudUser = { id: number; username: string }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
@@ -27,8 +27,9 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
   const [widthMm, heightMm] = orientation === 'landscape' ? [dimensions[1], dimensions[0]] : dimensions
   const soft = '#b9a7cb'
   const accent = '#9a6bc4'
+  const textScale = pageContentScale(size)
   const line = (x1: number, y1: number, x2: number, y2: number, color = soft, opacity = 42, width = 0.8): Stroke => ({ tool: 'Line', color, width, opacity, points: [{ x: x1 / widthMm, y: y1 / heightMm }, { x: x2 / widthMm, y: y2 / heightMm }] })
-  const text = (value: string, xMm: number, yMm: number, width = 3): Stroke => ({ tool: 'Text', color: accent, width, opacity: 100, text: value, points: [{ x: xMm / widthMm, y: yMm / heightMm }] })
+  const text = (value: string, xMm: number, yMm: number, width = 3): Stroke => ({ tool: 'Text', color: accent, width: width * textScale, opacity: 100, text: value, points: [{ x: xMm / widthMm, y: yMm / heightMm }] })
   const lines: Stroke[] = []
   if (template === 'Lined notes') {
     for (let y = 22; y < heightMm - 10; y += 8) lines.push(line(12, y, widthMm - 10, y))
@@ -51,6 +52,45 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
       lines.push(line(14, y, widthMm - 12, y))
       lines.push(text(day, 16, top + rowHeight * index + rowHeight * 0.35, 2.8))
     })
+  } else if (template === 'Lesson plan') {
+    const divider = widthMm * 0.34
+    lines.push(text('LESSON PLAN', 14, 10, 3.6), text('OBJECTIVE', 14, 30, 2.8), text('MATERIALS', divider + 5, 30, 2.8), line(14, 25, widthMm - 14, 25, accent, 58, 1), line(divider, 27, divider, 105, accent, 50, 0.9))
+    for (let y = 42; y <= 98; y += 12) lines.push(line(14, y, divider - 5, y), line(divider + 5, y, widthMm - 14, y))
+    lines.push(text('LESSON FLOW', 14, 118, 2.8))
+    for (let y = 132; y < heightMm - 12; y += 16) lines.push(line(14, y, widthMm - 14, y))
+  } else if (template === 'Worksheet') {
+    lines.push(text('WORKSHEET', 14, 9, 3.6), text('Name:', 14, 25, 2.8), line(31, 32, widthMm * 0.62, 32), text('Date:', widthMm * 0.68, 25, 2.8), line(widthMm * 0.79, 32, widthMm - 14, 32, soft, 42, 0.8))
+    for (let question = 0, y = 52; y < heightMm - 35; question++, y += 42) {
+      lines.push(text(`${question + 1}.`, 14, y, 3), line(25, y + 6, widthMm - 14, y + 6, accent, 48, 0.9), line(25, y + 20, widthMm - 14, y + 20), line(25, y + 32, widthMm - 14, y + 32))
+    }
+  } else if (template === 'Class diagram') {
+    const centerX = widthMm / 2, centerY = heightMm / 2
+    lines.push(text('CONCEPT MAP', 14, 10, 3.4), line(centerX, 42, centerX, heightMm - 42, soft, 34, 0.7), line(22, centerY, widthMm - 22, centerY, soft, 34, 0.7), line(centerX, 42, widthMm * 0.25, heightMm * 0.25, accent, 52, 1), line(centerX, 42, widthMm * 0.75, heightMm * 0.25, accent, 52, 1), line(centerX, heightMm - 42, widthMm * 0.25, heightMm * 0.75, accent, 52, 1), line(centerX, heightMm - 42, widthMm * 0.75, heightMm * 0.75, accent, 52, 1))
+  } else if (template === 'Exit ticket') {
+    lines.push(text('EXIT TICKET', 14, 10, 3.6), text('Name:', 14, 27, 2.8), line(32, 34, widthMm - 14, 34, soft, 42, 0.8))
+    const prompts = ['ONE THING I LEARNED', 'ONE QUESTION I STILL HAVE', 'AN EXAMPLE OR CONNECTION']
+    prompts.forEach((label, index) => {
+      const top = 52 + index * Math.max(46, (heightMm - 105) / 3)
+      lines.push(text(label, 14, top, 2.7), line(14, top + 15, widthMm - 14, top + 15, accent, 46, 0.9), line(14, top + 30, widthMm - 14, top + 30), line(14, top + 42, widthMm - 14, top + 42))
+    })
+  } else if (template === 'Rubric') {
+    const top = 42, bottom = heightMm - 20, columns = 4, rows = 6
+    lines.push(text('ASSESSMENT RUBRIC', 14, 10, 3.5), text('CRITERIA', 14, 27, 2.4))
+    for (let column = 0; column <= columns; column++) {
+      const x = 14 + (widthMm - 28) * column / columns
+      lines.push(line(x, top, x, bottom, accent, 44, 0.8))
+    }
+    for (let row = 0; row <= rows; row++) {
+      const y = top + (bottom - top) * row / rows
+      lines.push(line(14, y, widthMm - 14, y, accent, row === 0 ? 56 : 38, row === 0 ? 1 : 0.75))
+    }
+  } else if (template === 'Seating chart') {
+    const columns = 4, rows = 5, gapX = (widthMm - 36) / columns, gapY = Math.min(38, (heightMm - 70) / rows)
+    lines.push(text('SEATING CHART', 14, 10, 3.5))
+    for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
+      const x = 14 + column * gapX, y = 40 + row * gapY
+      lines.push(line(x, y, x + gapX - 7, y, accent, 48, 0.8), line(x, y, x, y + gapY - 8, accent, 48, 0.8), line(x + gapX - 7, y, x + gapX - 7, y + gapY - 8, accent, 48, 0.8), line(x, y + gapY - 8, x + gapX - 7, y + gapY - 8, accent, 48, 0.8))
+    }
   }
   return lines
 }
@@ -80,6 +120,12 @@ const imageCache = new Map<string, HTMLImageElement>()
 const pageDimensionsMm: Record<Exclude<PageSize, 'Infinite'>, [number, number]> = {
   A1: [594, 841], A2: [420, 594], A3: [297, 420], A4: [210, 297], A5: [148, 210],
   Letter: [216, 279], Legal: [216, 356], Tabloid: [279, 432],
+}
+const pageSizes: PageSize[] = ['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite']
+function pageContentScale(size: PageSize) {
+  if (size === 'Infinite') return 1
+  const [width, height] = pageDimensionsMm[size]
+  return Math.sqrt((width * height) / (210 * 297))
 }
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -254,7 +300,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
     } else if (drawing.tool === 'Text') {
-      context.font = `${Math.max(16, drawing.width * 5)}px sans-serif`
+      context.font = `${Math.max(8, drawing.width * 5)}px sans-serif`
       context.textBaseline = 'top'
       context.fillText(drawing.text ?? '', first.x * canvas.width, first.y * canvas.height)
     } else if (drawing.tool === 'Shape') {
@@ -420,16 +466,26 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
 }
 
 const toolIcons: Record<Tool, IconName> = { Brush: 'brush', Pencil: 'pencil', Pen: 'pen', Marker: 'marker', Highlighter: 'highlighter', Hand: 'hand', Select: 'select', Shape: 'shape', Text: 'text', Line: 'line', Eraser: 'eraser' }
+const roleTemplates: Record<AudienceRole, PageTemplate[]> = {
+  student: ['Blank', 'Lined notes', 'Cornell notes', 'Graph paper', 'Weekly planner'],
+  teacher: ['Blank', 'Lesson plan', 'Worksheet', 'Class diagram', 'Exit ticket', 'Rubric', 'Seating chart', 'Weekly planner', 'Lined notes', 'Graph paper'],
+}
 const roleStarters: Record<AudienceRole, { title: string; description: string; fileName: string; template: PageTemplate; icon: IconName }[]> = {
   student: [
     { title: 'Class notes', description: 'Capture key ideas and review them later.', fileName: 'Class notes', template: 'Cornell notes', icon: 'notes' },
     { title: 'Study guide', description: 'Build a tidy page for revision.', fileName: 'Study guide', template: 'Lined notes', icon: 'study' },
     { title: 'Concept map', description: 'Connect topics with sketches and shapes.', fileName: 'Concept map', template: 'Graph paper', icon: 'diagram' },
+    { title: 'Weekly planner', description: 'Plan assignments and study sessions.', fileName: 'Weekly planner', template: 'Weekly planner', icon: 'lesson' },
+    { title: 'Blank page', description: 'Start with a clean page for any subject.', fileName: 'Student board', template: 'Blank', icon: 'addPage' },
   ],
   teacher: [
-    { title: 'Lesson plan', description: 'Organize the flow of a class session.', fileName: 'Lesson plan', template: 'Weekly planner', icon: 'lesson' },
-    { title: 'Worksheet', description: 'Prepare a clean page to print or share.', fileName: 'Worksheet', template: 'Blank', icon: 'worksheet' },
-    { title: 'Class diagram', description: 'Explain a topic with visual connections.', fileName: 'Class diagram', template: 'Graph paper', icon: 'diagram' },
+    { title: 'Lesson plan', description: 'Organize the flow of a class session.', fileName: 'Lesson plan', template: 'Lesson plan', icon: 'lesson' },
+    { title: 'Worksheet', description: 'Prepare a clean page to print or share.', fileName: 'Worksheet', template: 'Worksheet', icon: 'worksheet' },
+    { title: 'Class diagram', description: 'Explain a topic with visual connections.', fileName: 'Class diagram', template: 'Class diagram', icon: 'diagram' },
+    { title: 'Exit ticket', description: 'Collect a quick reflection before class ends.', fileName: 'Exit ticket', template: 'Exit ticket', icon: 'notes' },
+    { title: 'Assessment rubric', description: 'Lay out criteria and performance levels.', fileName: 'Assessment rubric', template: 'Rubric', icon: 'worksheet' },
+    { title: 'Seating chart', description: 'Arrange a room plan with open desk spaces.', fileName: 'Seating chart', template: 'Seating chart', icon: 'diagram' },
+    { title: 'Lesson outline', description: 'Map objectives, materials, and lesson flow.', fileName: 'Lesson outline', template: 'Lesson plan', icon: 'lesson' },
   ],
 }
 
@@ -539,6 +595,8 @@ function App() {
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
   const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
+  const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
+  const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
   const [activeColor, setActiveColor] = useState(penColors[0])
   const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
@@ -1136,7 +1194,7 @@ function App() {
   const commitText = () => {
     const editor = textEditor
     if (editor?.value.trim()) {
-      const textItem: Stroke = { tool: 'Text', color: activeColor, width: strokeWidth, opacity, points: [editor.point], text: editor.value.trim() }
+      const textItem: Stroke = { tool: 'Text', color: activeColor, width: strokeWidth * pageContentScale(pageSize), opacity, points: [editor.point], text: editor.value.trim() }
       editCurrentPage((current) => [...current, textItem])
     }
     setTextEditor(null)
@@ -1386,7 +1444,7 @@ function App() {
       const [first, last] = [stroke.points[0], stroke.points[stroke.points.length - 1]]
       const alpha = stroke.opacity / 100 * (stroke.tool === 'Brush' ? .72 : stroke.tool === 'Pencil' ? .62 : stroke.tool === 'Marker' ? .82 : stroke.tool === 'Highlighter' ? .24 : 1)
       if (stroke.tool === 'Image' && stroke.imageData && stroke.points.length > 1) return `<image href="${stroke.imageData}" x="${first.x * width}" y="${first.y * height}" width="${(last.x - first.x) * width}" height="${(last.y - first.y) * height}" preserveAspectRatio="none"/>`
-      if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(16, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
+      if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(8, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
       const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last).points : stroke.points
       const pointString = points.map((point) => `${point.x * width},${point.y * height}`).join(' ')
       const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : 'polyline'
@@ -1750,9 +1808,9 @@ function App() {
     }
   }
 
-  const addBoard = (name?: string, template?: PageTemplate) => {
+  const addBoard = (name?: string, template?: PageTemplate, size: PageSize = 'A4') => {
     setDraftName(name ?? `File ${nextFileNumber}`)
-    setDraftSize('A4')
+    setDraftSize(size)
     setDraftTemplate(template ?? 'Blank')
     setDraftOrientation('portrait')
     setDraftBackground('auto')
@@ -1826,7 +1884,7 @@ function App() {
     setAddPageMenuOpen(false)
   }
 
-  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
 
   const quickStartDialog = quickStartOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickStartOpen(false) }}><section className="new-file-dialog compact-dialog quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title"><button className="dialog-close" aria-label="Close Quick Start guide" onClick={() => setQuickStartOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES BASICS</p><h2 id="quick-start-title">Quick Start Guide</h2><ol className="quick-start-steps"><li><span>1</span><div><strong>Start with a board</strong><p>Choose <b>Start a new board</b>, or open an OzooNotes file you already have.</p></div></li><li><span>2</span><div><strong>Draw and create</strong><p>Pick a pen from the drawing tools. Use the shape, text, image, or graph tools to add more to your page.</p></div></li><li><span>3</span><div><strong>Select and move objects</strong><p>Choose Select. Drag over empty space to select several objects, or Shift-click to add or remove an object. Drag a selected object to move the group. Ctrl+A selects everything on the current page.</p></div></li><li><span>4</span><div><strong>Move around and add pages</strong><p>Use the Hand tool to pan across an infinite board. For regular boards, add a page and choose portrait or landscape; each page keeps its own orientation.</p></div></li><li><span>5</span><div><strong>Keep a copy of your work</strong><p>Your boards save in this browser on this device. Choose <b>Save OzooNotes file</b> to download a portable copy. You can also export pages as PNG or SVG, or regular boards as PDF.</p></div></li></ol><footer className="dialog-actions"><button className="dialog-create" onClick={() => setQuickStartOpen(false)}>Got it</button></footer></section></div>
 
@@ -1887,12 +1945,17 @@ function App() {
                 <h1>Don’t Doomscroll.<br /><span>Make something.</span></h1>
                 <p className="hero-description">Sketch ideas, add notes, shape your thoughts, and plot a graph—all in one calm workspace.</p>
                 <div className="landing-cta-row">
-                  <button className="hero-new-file" onClick={() => addBoard()}>Start a new board <Icon name="next" size={17} /></button>
+                  <button className="hero-new-file" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Start a new board <Icon name="next" size={17} /></button>
                   <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><Icon name="pdf" size={16} /> Open a file</button>
                   <a className="landing-github-link" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">See how it works on GitHub ↗</a>
                   <button type="button" className="landing-help-link" onClick={() => setQuickStartOpen(true)}>Read the Quick Start guide</button>
                 </div>
-                <p className="landing-local-note">Your boards save in this browser. Export a file when you want a portable copy.</p>
+                <div className="landing-quick-setup" aria-label="Board setup options">
+                  <label htmlFor="landing-audience"><span>Make this for</span><select id="landing-audience" value={landingAudience} onChange={(event) => { const role = event.target.value as AudienceRole; setLandingAudience(role); setLandingTemplate(role === 'student' ? 'Cornell notes' : 'Lesson plan') }}><option value="student">Student</option><option value="teacher">Teacher</option></select></label>
+                  <label htmlFor="landing-page-size"><span>Paper size</span><select id="landing-page-size" value={landingPageSize} onChange={(event) => setLandingPageSize(event.target.value as PageSize)}>{pageSizes.map((size) => <option key={size} value={size}>{size === 'Infinite' ? '∞ Infinite' : size}</option>)}</select></label>
+                  <label htmlFor="landing-template"><span>Starter template</span><select id="landing-template" value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value as PageTemplate)}>{roleTemplates[landingAudience].map((template) => <option key={template} value={template}>{template}</option>)}</select></label>
+                </div>
+                <p className="landing-local-note">Paper size also scales the starter layout, text, and image placement to fit your page.</p>
               </div>
               <div className="landing-art" aria-label="Illustration of drawing and graph tools">
                 <div className="landing-art-shadow" />
@@ -1906,12 +1969,9 @@ function App() {
               </div>
             </section>
             <section className="audience-starters" aria-labelledby="audience-title">
-              <div className="audience-heading-row">
-                <div className="landing-section-heading"><span>MADE FOR THE CLASSROOM</span><h2 id="audience-title">Start with what you need.</h2></div>
-                <label className="audience-picker" htmlFor="landing-audience"><span>I’m using OzooNotes as a</span><span className="audience-picker-control"><select id="landing-audience" value={landingAudience} onChange={(event) => setLandingAudience(event.target.value as AudienceRole)}><option value="student">Student</option><option value="teacher">Teacher</option></select><Icon name="chevronDown" size={17} /></span></label>
-              </div>
+              <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : 'TEACHER STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
-                {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
+                {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
               </div>
             </section>
             <section className="landing-tools" id="landing-tools">
@@ -2023,7 +2083,7 @@ function App() {
           <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: (current[cameraKey]?.x ?? 0) + event.deltaX / (canvasWidth * zoom / 100), y: (current[cameraKey]?.y ?? 0) + event.deltaY / (canvasHeight * zoom / 100) } })) } }}>
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
-              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(16, strokeWidth * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
+              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
             </div>
           </div>
