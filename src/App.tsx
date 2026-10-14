@@ -4,6 +4,7 @@ import './App.css'
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
 type AudienceRole = 'student' | 'teacher'
+type ColorTheme = 'forest' | 'purple' | 'white-purple' | 'red-white' | 'red-black' | 'doom'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
@@ -21,6 +22,17 @@ type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; previ
 type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
+function themedCanvasBackground(theme: ColorTheme) {
+  return theme === 'doom' ? '#090d0a' : theme === 'red-black' ? '#130909' : '#08060d'
+}
+const colorThemes: { id: ColorTheme; name: string; dark: boolean }[] = [
+  { id: 'forest', name: 'Forest & Mint', dark: true },
+  { id: 'purple', name: 'Purple & Black', dark: true },
+  { id: 'white-purple', name: 'White & Purple', dark: false },
+  { id: 'red-white', name: 'Red & White', dark: false },
+  { id: 'red-black', name: 'Red & Black', dark: true },
+  { id: 'doom', name: 'Doom • Emerald Armor', dark: true },
+]
 function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation: 'portrait' | 'landscape'): Stroke[] {
   if (template === 'Blank') return []
   const dimensions = size === 'Infinite' ? [210, 297] : pageDimensionsMm[size]
@@ -94,13 +106,13 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
   }
   return lines
 }
-function resolvePageBackground(background: string, dark: boolean) {
-  if (background === 'auto' || background === '#ffffff') return dark ? '#08060d' : '#ffffff'
+function resolvePageBackground(background: string, dark: boolean, theme: ColorTheme = 'forest') {
+  if (background === 'auto' || background === '#ffffff') return dark ? themedCanvasBackground(theme) : '#ffffff'
   if (background === 'white') return '#ffffff'
   return background
 }
 function pageBackgroundSwatchStyle(background: string): React.CSSProperties {
-  if (background === 'auto') return { background: 'linear-gradient(135deg, #08060d 50%, #fff 50%)' }
+  if (background === 'auto') return { background: 'linear-gradient(135deg, var(--workspace) 50%, #fff 50%)' }
   return { backgroundColor: background === 'white' ? '#ffffff' : background }
 }
 function isBackgroundChoiceSelected(current: string, choice: string) {
@@ -111,7 +123,10 @@ function pageBackgroundLabel(background: string) {
   if (background === 'white') return 'Page background white'
   return 'Page background ' + background
 }
-function gridLineColor(dark: boolean) {
+function gridLineColor(dark: boolean, theme: ColorTheme = 'forest') {
+  if (theme === 'red-black' || theme === 'red-white') return dark ? 'rgba(245, 92, 92, .48)' : 'rgba(194, 44, 52, .30)'
+  if (theme === 'doom') return dark ? 'rgba(92, 220, 117, .46)' : 'rgba(38, 136, 57, .30)'
+  if (theme === 'forest') return dark ? 'rgba(115, 213, 178, .46)' : 'rgba(20, 124, 97, .30)'
   return dark ? 'rgba(189, 139, 255, .48)' : 'rgba(130, 70, 193, .34)'
 }
 const inkTools: Tool[] = ['Brush', 'Pen', 'Pencil', 'Marker', 'Highlighter']
@@ -677,7 +692,12 @@ function App() {
   const [page, setPage] = useState(initialWorkspace.page)
   const [zoom, setZoom] = useState(100)
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialWorkspace.orientation)
-  const [dark, setDark] = useState(true)
+  const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
+    const saved = localStorage.getItem('ozoo:color-theme') as ColorTheme | null
+    return colorThemes.some((theme) => theme.id === saved) ? saved! : 'forest'
+  })
+  const dark = colorThemes.find((theme) => theme.id === colorTheme)?.dark ?? true
+  useEffect(() => { localStorage.setItem('ozoo:color-theme', colorTheme) }, [colorTheme])
   const brandLogo = `${import.meta.env.BASE_URL}${dark ? 'ozoo-logo-white-notes.png' : 'ozoo-logo-black-notes.png'}`
   const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>(initialWorkspace.strokesByPage)
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
@@ -1402,7 +1422,7 @@ function App() {
     window.setTimeout(() => setSaveNotice(''), 2400)
     setMenuOpen(false)
   }
-  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark), camera: Point = infinitePage ? cameraOffset : { x: 0, y: 0 }) => {
+  const renderPageCanvas = async (pageStrokes: Stroke[], width = canvasWidth, height = canvasHeight, background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme), camera: Point = infinitePage ? cameraOffset : { x: 0, y: 0 }) => {
     const sources = [...new Set(pageStrokes.flatMap((stroke) => stroke.tool === 'Image' && stroke.imageData ? [stroke.imageData] : []))]
     await Promise.all(sources.map((source) => new Promise<void>((resolve) => {
         let image = imageCache.get(source)
@@ -1418,7 +1438,7 @@ function App() {
     context.fillStyle = background
     context.fillRect(0, 0, width, height)
     if (gridEnabled && !infinitePage) {
-      context.strokeStyle = gridLineColor(dark)
+      context.strokeStyle = gridLineColor(dark, colorTheme)
       context.lineWidth = 1
       for (let x = 40; x < width; x += 40) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke() }
       for (let y = 40; y < height; y += 40) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke() }
@@ -1459,7 +1479,7 @@ function App() {
       const output = await renderPageCanvas(pageStrokes)
       output.toBlob((blob) => { if (blob) downloadBlob(blob, 'png') }, 'image/png')
     } else {
-      const background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)
+      const background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme)
       downloadBlob(new Blob([svgForPage(pageStrokes, canvasWidth, canvasHeight, background, infinitePage ? cameraOffset : { x: 0, y: 0 })], { type: 'image/svg+xml;charset=utf-8' }), 'svg')
     }
     setMenuOpen(false)
@@ -1481,7 +1501,7 @@ function App() {
   }
   const exportObsidianNote = () => {
     const safeName = boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
-    const background = infinitePage ? (dark ? '#08060d' : '#ffffff') : resolvePageBackground(pageBackground, dark)
+    const background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme)
     const pageStrokes = Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
     const markdownPages = pageStrokes.map((items, index) => {
       const imageName = `${safeName} - page ${index + 1}.svg`
@@ -1635,10 +1655,10 @@ function App() {
         const context = canvas.getContext('2d')
         if (!context || !drawingContext) throw new Error('Could not render the page for PDF export')
         renderDrawings(drawingCanvas, pageStrokes.map((stroke) => ({ ...stroke, width: stroke.width * scale })))
-        context.fillStyle = resolvePageBackground(pageBackground, dark)
+        context.fillStyle = resolvePageBackground(pageBackground, dark, colorTheme)
         context.fillRect(0, 0, canvas.width, canvas.height)
         if (gridEnabled) {
-          context.strokeStyle = gridLineColor(dark)
+          context.strokeStyle = gridLineColor(dark, colorTheme)
           context.lineWidth = 1
           for (let x = 40; x < canvas.width; x += 40) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke() }
           for (let y = 40; y < canvas.height; y += 40) { context.beginPath(); context.moveTo(0, y); context.lineTo(canvas.width, y); context.stroke() }
@@ -1707,7 +1727,7 @@ function App() {
       const logicalWidth = Math.round(pageWidthMm * 3.78)
       const logicalHeight = Math.round(pageHeightMm * 3.78)
       const commands = ['q']
-      const bg = resolvePageBackground(pageBackground, dark).replace('#', '')
+      const bg = resolvePageBackground(pageBackground, dark, colorTheme).replace('#', '')
       const bgRgb = [0, 2, 4].map((offset) => parseInt(bg.slice(offset, offset + 2), 16) / 255)
       commands.push(`${bgRgb.map((value) => value.toFixed(4)).join(' ')} rg`, `0 0 ${pageWidth} ${pageHeight} re f`)
       if (gridEnabled && !infinitePage) {
@@ -1884,7 +1904,7 @@ function App() {
     setAddPageMenuOpen(false)
   }
 
-  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={`File ${nextFileNumber}`} /></label><fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
 
   const quickStartDialog = quickStartOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickStartOpen(false) }}><section className="new-file-dialog compact-dialog quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title"><button className="dialog-close" aria-label="Close Quick Start guide" onClick={() => setQuickStartOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES BASICS</p><h2 id="quick-start-title">Quick Start Guide</h2><ol className="quick-start-steps"><li><span>1</span><div><strong>Start with a board</strong><p>Choose <b>Start a new board</b>, or open an OzooNotes file you already have.</p></div></li><li><span>2</span><div><strong>Draw and create</strong><p>Pick a pen from the drawing tools. Use the shape, text, image, or graph tools to add more to your page.</p></div></li><li><span>3</span><div><strong>Select and move objects</strong><p>Choose Select. Drag over empty space to select several objects, or Shift-click to add or remove an object. Drag a selected object to move the group. Ctrl+A selects everything on the current page.</p></div></li><li><span>4</span><div><strong>Move around and add pages</strong><p>Use the Hand tool to pan across an infinite board. For regular boards, add a page and choose portrait or landscape; each page keeps its own orientation.</p></div></li><li><span>5</span><div><strong>Keep a copy of your work</strong><p>Your boards save in this browser on this device. Choose <b>Save OzooNotes file</b> to download a portable copy. You can also export pages as PNG or SVG, or regular boards as PDF.</p></div></li></ol><footer className="dialog-actions"><button className="dialog-create" onClick={() => setQuickStartOpen(false)}>Got it</button></footer></section></div>
 
@@ -1919,12 +1939,12 @@ function App() {
     const sharedMmOriented = state?.orientation === 'landscape' ? [sharedMm[1], sharedMm[0]] : sharedMm
     const sharedWidth = state?.infinite ? 2800 : Math.round(sharedMmOriented[0] * 3.78)
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
-    return <main className={`app ${dark ? 'dark' : 'light'}`}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
+    return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark, colorTheme) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
   if (boards.length === 0) {
     return (
-      <main className={`app ${dark ? 'dark' : 'light'}`}>
+      <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
         <section className="landing-window">
           <header className="landing-topbar">
             <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
@@ -1936,7 +1956,7 @@ function App() {
             </nav>
             <div className="landing-top-actions">
               {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
-              <button className="theme-toggle" onClick={() => setDark(!dark)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}><Icon name={dark ? 'sun' : 'moon'} size={16} /> <span>{dark ? 'Light' : 'Dark'} mode</span></button>
+              <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             </div>
           </header>
           <div className="landing-page">
@@ -2000,7 +2020,7 @@ function App() {
   }
 
   return (
-    <main className={`app ${dark ? 'dark' : 'light'}`}>
+    <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
       <div className="window">
         <header className="window-top">
           <div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div>
@@ -2011,7 +2031,7 @@ function App() {
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
             <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><Icon name="pdf" size={16} /> Download PDF</button>
-            <button className="theme-toggle" onClick={() => setDark(!dark)} title="Toggle theme"><Icon name={dark ? 'sun' : 'moon'} size={16} /> <span>{dark ? 'Light' : 'Dark'} mode</span></button>
+            <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync"><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
           </nav>
         </header>
@@ -2082,7 +2102,7 @@ function App() {
           </aside>}
 
           <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: (current[cameraKey]?.x ?? 0) + event.deltaX / (canvasWidth * zoom / 100), y: (current[cameraKey]?.y ?? 0) + event.deltaY / (canvasHeight * zoom / 100) } })) } }}>
-            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
+            <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark, colorTheme), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
