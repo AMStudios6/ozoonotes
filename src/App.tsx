@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import './App.css'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
+type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
+type AudienceRole = 'student' | 'teacher'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
@@ -417,8 +419,63 @@ function makeGraphSvg(options: { mode: 'equation' | 'points'; equation: string; 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" rx="20" fill="#fff"/><text x="${width/2}" y="25" text-anchor="middle" fill="#18202a" font-family="Arial,sans-serif" font-size="18" font-weight="700">${options.mode === 'equation' ? esc(options.equation.split(/\n|;/)[0]) : 'Data points'}</text>${grid.join('')}<line x1="${left}" y1="${xAxisY}" x2="${width-right}" y2="${xAxisY}" stroke="#667085" stroke-width="2"/><line x1="${yAxisX}" y1="${top}" x2="${yAxisX}" y2="${height-bottom}" stroke="#667085" stroke-width="2"/>${series.join('')}<text x="${width-right}" y="${height-16}" text-anchor="end" fill="#667085" font-family="Arial,sans-serif" font-size="16">x</text><text x="20" y="${top}" fill="#667085" font-family="Arial,sans-serif" font-size="16">y</text></svg>`
 }
 
-const toolIcons: Record<Tool, string> = {
-  Brush: '✎', Pencil: '✏', Pen: '✒', Marker: '▰', Highlighter: '▱', Hand: '✋', Select: '⌖', Shape: '▢', Text: 'T', Line: '╱', Eraser: '◩',
+const toolIcons: Record<Tool, IconName> = { Brush: 'brush', Pencil: 'pencil', Pen: 'pen', Marker: 'marker', Highlighter: 'highlighter', Hand: 'hand', Select: 'select', Shape: 'shape', Text: 'text', Line: 'line', Eraser: 'eraser' }
+const roleStarters: Record<AudienceRole, { title: string; description: string; fileName: string; template: PageTemplate; icon: IconName }[]> = {
+  student: [
+    { title: 'Class notes', description: 'Capture key ideas and review them later.', fileName: 'Class notes', template: 'Cornell notes', icon: 'notes' },
+    { title: 'Study guide', description: 'Build a tidy page for revision.', fileName: 'Study guide', template: 'Lined notes', icon: 'study' },
+    { title: 'Concept map', description: 'Connect topics with sketches and shapes.', fileName: 'Concept map', template: 'Graph paper', icon: 'diagram' },
+  ],
+  teacher: [
+    { title: 'Lesson plan', description: 'Organize the flow of a class session.', fileName: 'Lesson plan', template: 'Weekly planner', icon: 'lesson' },
+    { title: 'Worksheet', description: 'Prepare a clean page to print or share.', fileName: 'Worksheet', template: 'Blank', icon: 'worksheet' },
+    { title: 'Class diagram', description: 'Explain a topic with visual connections.', fileName: 'Class diagram', template: 'Graph paper', icon: 'diagram' },
+  ],
+}
+
+function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, ReactNode> = {
+    brush: <><path d="m14.5 5.5 4 4-8.7 8.7a2.8 2.8 0 0 1-4-4z"/><path d="m12.5 7.5 4 4M5.4 18.2c-1.2.2-2.3 1-2.8 2.5 2.3.4 4.5-.3 5.4-2"/></>,
+    pencil: <><path d="m4 16.5 10.7-10.7a2.1 2.1 0 0 1 3 3L7 19.5 3 21z"/><path d="m12.8 7.7 3.5 3.5M4 16.5l3.5 3.5"/></>,
+    pen: <><path d="m4 19 1-5L16.7 2.3a2.1 2.1 0 0 1 3 3L7 18z"/><path d="m13.5 5.5 5 5M4 19l5-1"/></>,
+    marker: <><path d="m5 16 9-12a2 2 0 0 1 3.2 2.4l-9 12z"/><path d="m5 16 4.5 3.5-3 1-3-2zM13 7l4 3"/></>,
+    highlighter: <><path d="m4 15 10-11a2 2 0 0 1 3 0l4 4a2 2 0 0 1 0 3L10 22H4z"/><path d="m11 8 6 6M4 18h9"/></>,
+    hand: <><path d="M8 12V5a1.5 1.5 0 0 1 3 0v6-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6l.6-2a1.6 1.6 0 0 1 3.1.8L19 19a4 4 0 0 1-4 3h-3a5 5 0 0 1-4-2l-3-4a1.7 1.7 0 0 1 2.5-2.2z"/></>,
+    select: <><path d="m4 3 13 12-6 .8-2.8 5z"/><path d="m14.5 17.5 4 4"/></>,
+    shape: <><rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m5 18 5-5 3 3 3-4 4 5"/></>,
+    text: <><path d="M4 6V4h16v2M12 4v16M8.5 20h7"/></>,
+    line: <><path d="M5 19 19 5"/><path d="M12 5h7v7"/></>,
+    eraser: <><path d="m7 19-3-3a2 2 0 0 1 0-2.8l8.2-8.2a2 2 0 0 1 2.8 0l6 6a2 2 0 0 1 0 2.8L16 20H7z"/><path d="m9 9 7 7M12 20h9"/></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></>,
+    graph: <><path d="M4 20V4M4 20h17"/><path d="m6 16 4-5 3 2 6-8"/><circle cx="10" cy="11" r="1"/><circle cx="13" cy="13" r="1"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.7 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.7-1l-1.7.6-1.4-2.4L7.3 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.7-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.7 1l1.7-.6 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 2z"/></>,
+    undo: <><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></>,
+    redo: <><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></>,
+    delete: <><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></>,
+    duplicate: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></>,
+    layer: <><path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></>,
+    addPage: <><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7M12 13v6m-3-3h6"/></>,
+    portrait: <><rect x="7" y="3" width="10" height="18" rx="1.5"/><path d="M10 6h4"/></>,
+    landscape: <><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M6 10v4"/></>,
+    zoomIn: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7m-3.5-3.5h7"/></>,
+    zoomOut: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5m-14-10.5h7"/></>,
+    next: <><path d="m9 5 7 7-7 7"/></>,
+    previous: <><path d="m15 5-7 7 7 7"/></>,
+    notes: <><path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M8 12h8m-8 4h8"/></>,
+    study: <><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zM21 5.5A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z"/><path d="M6 7h2m-2 4h2m10-4h-2m2 4h-2"/></>,
+    lesson: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8m-4-3v3M7 9h10M7 13h6"/></>,
+    worksheet: <><path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M8 12l1 1 2-2m2 2h3m-8 4 1 1 2-2m2 2h3"/></>,
+    diagram: <><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="m8.4 7 7.1-.1M7.5 8l3.2 7.5m6-5.5-3.4 6"/></>,
+    share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4"/></>,
+    cloud: <><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 8.5 4.8 4.8 0 0 0 7 18z"/></>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
+    moon: <><path d="M20.4 15.6A8.5 8.5 0 0 1 8.4 3.6 8.5 8.5 0 1 0 20.4 15.6z"/></>,
+    close: <><path d="m6 6 12 12M18 6 6 18"/></>,
+    menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
+    pdf: <><path d="M12 3v12m-5-5 5 5 5-5M4 19v2h16v-2"/><path d="M5 3h7l4 4v3"/></>,
+    chevronDown: <><path d="m6 9 6 6 6-6"/></>,
+  }
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>
 }
 
 type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
@@ -481,6 +538,7 @@ function App() {
   const [activeBoard, setActiveBoard] = useState(initialWorkspace.activeBoard)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
+  const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
   const [activeColor, setActiveColor] = useState(penColors[0])
   const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
@@ -575,6 +633,9 @@ function App() {
   const activePan = useRef<{ startClient: Point; startCamera: Point; startOffset: Point } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const brushToolRef = useRef<HTMLButtonElement>(null)
+  const toolHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toolHoldTriggered = useRef(false)
+  const lastDrawingTool = useRef<Tool>('Brush')
   const settingsToggleRef = useRef<HTMLButtonElement>(null)
   const settingsPanelRef = useRef<HTMLElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -589,6 +650,30 @@ function App() {
   const cameraKey = `${boards[activeBoard]?.name ?? activeBoard}:${page}`
   const cameraOffset = infiniteCameraByPage[cameraKey] ?? { x: 0, y: 0 }
   const strokes = strokesByPage[pageKey] ?? []
+
+  useEffect(() => {
+    if (drawingToolGroup.includes(activeTool)) lastDrawingTool.current = activeTool
+  }, [activeTool])
+  useEffect(() => () => { if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current) }, [])
+  const startDrawingToolHold = () => {
+    toolHoldTriggered.current = false
+    if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current)
+    toolHoldTimer.current = setTimeout(() => {
+      toolHoldTriggered.current = true
+      setDrawingToolsOpen(true)
+    }, 1000)
+  }
+  const cancelDrawingToolHold = () => {
+    if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current)
+    toolHoldTimer.current = null
+  }
+  const selectLastDrawingTool = () => {
+    cancelDrawingToolHold()
+    if (toolHoldTriggered.current) { toolHoldTriggered.current = false; return }
+    setActiveTool(lastDrawingTool.current)
+    setShowSettingsPanel(true)
+    setDrawingToolsOpen(false)
+  }
 
   const refreshHistoryState = (key: string) => {
     const history = historyByPage.current[key] ?? { past: [], future: [] }
@@ -1665,10 +1750,10 @@ function App() {
     }
   }
 
-  const addBoard = () => {
-    setDraftName(`File ${nextFileNumber}`)
+  const addBoard = (name?: string, template?: PageTemplate) => {
+    setDraftName(name ?? `File ${nextFileNumber}`)
     setDraftSize('A4')
-    setDraftTemplate('Blank')
+    setDraftTemplate(template ?? 'Blank')
     setDraftOrientation('portrait')
     setDraftBackground('auto')
     setShowNewFileDialog(true)
@@ -1791,8 +1876,8 @@ function App() {
               <a href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">GitHub</a>
             </nav>
             <div className="landing-top-actions">
-              {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}>{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}
-              <button className="theme-toggle" onClick={() => setDark(!dark)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button>
+              {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
+              <button className="theme-toggle" onClick={() => setDark(!dark)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}><Icon name={dark ? 'sun' : 'moon'} size={16} /> <span>{dark ? 'Light' : 'Dark'} mode</span></button>
             </div>
           </header>
           <div className="landing-page">
@@ -1802,8 +1887,8 @@ function App() {
                 <h1>Don’t Doomscroll.<br /><span>Make something.</span></h1>
                 <p className="hero-description">Sketch ideas, add notes, shape your thoughts, and plot a graph—all in one calm workspace.</p>
                 <div className="landing-cta-row">
-                  <button className="hero-new-file" onClick={addBoard}>Start a new board <span>→</span></button>
-                  <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><span>↗</span> Open a file</button>
+                  <button className="hero-new-file" onClick={() => addBoard()}>Start a new board <Icon name="next" size={17} /></button>
+                  <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><Icon name="pdf" size={16} /> Open a file</button>
                   <a className="landing-github-link" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">See how it works on GitHub ↗</a>
                   <button type="button" className="landing-help-link" onClick={() => setQuickStartOpen(true)}>Read the Quick Start guide</button>
                 </div>
@@ -1812,7 +1897,7 @@ function App() {
               <div className="landing-art" aria-label="Illustration of drawing and graph tools">
                 <div className="landing-art-shadow" />
                 <div className="art-paper">
-                  <div className="art-toolbar"><span>✎</span><span>▱</span><span>○</span><span>↗</span><i /><b /><b /><b /></div>
+                  <div className="art-toolbar"><span><Icon name="pen" size={16} /></span><span><Icon name="shape" size={16} /></span><span><Icon name="text" size={16} /></span><span><Icon name="graph" size={16} /></span><i /><b /><b /><b /></div>
                   <div className="art-note art-note-one"><span>ideas</span><strong>Make room<br />for a new thought.</strong><svg viewBox="0 0 120 42" aria-hidden="true"><path d="M4 30 C22 4 30 40 48 18 S75 8 82 26 S100 36 116 10" /></svg></div>
                   <div className="art-note art-note-two"><span>GRAPH</span><svg viewBox="0 0 150 100" aria-hidden="true"><path className="graph-grid" d="M10 10H145M10 35H145M10 60H145M10 85H145M10 10V90M45 10V90M80 10V90M115 10V90M145 10V90" /><path className="graph-axis" d="M10 60H145M80 10V90" /><path className="graph-curve" d="M12 82 C40 80 47 67 62 46 S94 14 144 15" /></svg><small>y = x²</small></div>
                   <div className="art-shape art-shape-circle" /><div className="art-shape art-shape-diamond" /><div className="art-caption">a little space for big ideas</div>
@@ -1820,16 +1905,25 @@ function App() {
                 <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
               </div>
             </section>
+            <section className="audience-starters" aria-labelledby="audience-title">
+              <div className="landing-section-heading"><span>MADE FOR THE CLASSROOM</span><h2 id="audience-title">Start with what you need.</h2></div>
+              <div className="audience-switch" role="tablist" aria-label="Choose your workspace">
+                {(['student', 'teacher'] as AudienceRole[]).map((role) => <button key={role} type="button" role="tab" aria-selected={landingAudience === role} className={landingAudience === role ? 'selected' : ''} onClick={() => setLandingAudience(role)}>{role === 'student' ? 'For students' : 'For teachers'}</button>)}
+              </div>
+              <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
+                {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
+              </div>
+            </section>
             <section className="landing-tools" id="landing-tools">
               <div className="landing-section-heading"><span>MAKE IT YOURS</span><h2>Simple tools. Room to explore.</h2></div>
               <div className="landing-feature-grid">
-                <article className="landing-feature"><span className="feature-icon feature-draw">✎</span><h3>Draw and arrange</h3><p>Use the brush, pen, shapes, text, lines, and eraser. Move and organize what you create.</p></article>
-                <article className="landing-feature"><span className="feature-icon feature-graph">⌁</span><h3>Put ideas on a graph</h3><p>Plot equations or enter points, then add the graph to your board.</p></article>
-                <article className="landing-feature"><span className="feature-icon feature-pages">▤</span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-draw"><Icon name="pen" /></span><h3>Draw and arrange</h3><p>Use the brush, pen, shapes, text, lines, and eraser. Move and organize what you create.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-graph"><Icon name="graph" /></span><h3>Put ideas on a graph</h3><p>Plot equations or enter points, then add the graph to your board.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-pages"><Icon name="pdf" /></span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
               </div>
             </section>
             <section className="landing-files" id="landing-files">
-              <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={addBoard}>＋ New board</button></div>
+              <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={() => addBoard()}>＋ New board</button></div>
               <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
               {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon">▤</span><span>{name}<small>Saved in this browser</small></span><b>Open →</b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon">▤</span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}>↗ Open file</button></div>}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon">☁</span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open →</b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
@@ -1854,7 +1948,7 @@ function App() {
               <button className="tab-open" onClick={() => activateBoard(index)}>{board.name}</button>
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}>×</button>
             </div>)}
-            <button className="add-file" onClick={addBoard} aria-label="Create new file">+</button>
+            <button className="add-file" onClick={() => addBoard()} aria-label="Create new file">+</button>
             <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><span>↓</span> Download PDF</button>
             <button className="theme-toggle" onClick={() => setDark(!dark)} title="Toggle theme">{dark ? '☼' : '☾'} <span>{dark ? 'Light' : 'Dark'} mode</span></button>
             {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync">{cloudUser ? `☁ ${cloudUser.username}` : '☁ Sign in'}</button>}
@@ -1899,14 +1993,14 @@ function App() {
             <button title="Send selection backward" aria-label="Send selection backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}>⋯</button>
           </div>
           <div className="toolbar" aria-label="Drawing tools">
-            <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span>▧</span></button>
-            <button type="button" className="tool-button graph-tool" title="Add graph" aria-label="Add graph" onClick={() => { setGraphError(''); setGraphOpen(true) }}><span>⌁</span></button>
+            <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span><Icon name="image" /></span></button>
+            <button type="button" className="tool-button graph-tool" title="Add graph" aria-label="Add graph" onClick={() => { setGraphError(''); setGraphOpen(true) }}><span><Icon name="graph" /></span></button>
             <div className="drawing-tool-group">
-              <button type="button" ref={brushToolRef} className={'tool-button drawing-tool-toggle ' + (drawingToolGroup.includes(activeTool) ? 'active' : '')} title={'Drawing tools: ' + (drawingToolGroup.includes(activeTool) ? activeTool : 'choose a tool')} aria-label="Choose drawing tool" aria-expanded={drawingToolsOpen} aria-controls="drawing-tool-menu" onClick={() => setDrawingToolsOpen((open) => !open)}><span>{toolIcons[drawingToolGroup.includes(activeTool) ? activeTool : 'Brush']}</span><small>⌄</small></button>
-              {drawingToolsOpen && <div id="drawing-tool-menu" className="drawing-tool-menu" role="group" aria-label="Drawing tools">{drawingToolGroup.map((tool) => <button key={tool} type="button" className={'drawing-tool-option ' + (activeTool === tool ? 'active' : '')} aria-pressed={activeTool === tool} onClick={() => { setActiveTool(tool); setDrawingToolsOpen(false); if (inkTools.includes(tool)) setShowSettingsPanel(true) }}><span>{toolIcons[tool]}</span><span>{tool}</span></button>)}</div>}
+              <button type="button" ref={brushToolRef} className={'tool-button drawing-tool-toggle ' + (drawingToolGroup.includes(activeTool) ? 'active' : '')} title="Tap to use the last drawing tool; hold for tool options" aria-label="Select the last drawing tool; hold for drawing tools" aria-expanded={drawingToolsOpen} aria-controls="drawing-tool-menu" onPointerDown={startDrawingToolHold} onPointerUp={cancelDrawingToolHold} onPointerLeave={cancelDrawingToolHold} onPointerCancel={cancelDrawingToolHold} onContextMenu={(event) => event.preventDefault()} onClick={selectLastDrawingTool}><span><Icon name={toolIcons[drawingToolGroup.includes(activeTool) ? activeTool : 'Brush']} /></span><small><Icon name="chevronDown" size={11} /></small></button>
+              {drawingToolsOpen && <div id="drawing-tool-menu" className="drawing-tool-menu" role="group" aria-label="Drawing tools">{drawingToolGroup.map((tool) => <button key={tool} type="button" className={'drawing-tool-option ' + (activeTool === tool ? 'active' : '')} aria-pressed={activeTool === tool} onClick={() => { setActiveTool(tool); lastDrawingTool.current = tool; setDrawingToolsOpen(false); if (inkTools.includes(tool)) setShowSettingsPanel(true) }}><span><Icon name={toolIcons[tool]} size={18} /></span><span>{tool}</span></button>)}</div>}
             </div>
-            {(['Hand', 'Select', 'Shape', 'Text', 'Line'] as Tool[]).map((tool) => <button key={tool} type="button" title={tool} aria-label={tool} className={'tool-button ' + (activeTool === tool ? 'active' : '')} onClick={() => { setDrawingToolsOpen(false); setActiveTool(tool) }}><span>{toolIcons[tool]}</span></button>)}
-            <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span>⚙</span></button>
+            {(['Hand', 'Select', 'Shape', 'Text', 'Line'] as Tool[]).map((tool) => <button key={tool} type="button" title={tool} aria-label={tool} className={'tool-button ' + (activeTool === tool ? 'active' : '')} onClick={() => { setDrawingToolsOpen(false); setActiveTool(tool) }}><span><Icon name={toolIcons[tool]} /></span></button>)}
+            <button type="button" ref={settingsToggleRef} className="tool-button settings-toggle" title={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-label={showSettingsPanel ? 'Hide drawing settings' : 'Show drawing settings'} aria-expanded={showSettingsPanel} aria-controls="drawing-settings" onClick={() => setShowSettingsPanel((visible) => !visible)}><span><Icon name="settings" /></span></button>
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
@@ -1936,17 +2030,17 @@ function App() {
 
           <div className="bottom-controls">
             <div className="zoom-control">
-              <button aria-label="Zoom out" onClick={() => setZoom(Math.max(50, zoom - 10))}>−</button>
+              <button aria-label="Zoom out" title="Zoom out" onClick={() => setZoom(Math.max(50, zoom - 10))}><Icon name="zoomOut" size={17} /></button>
               <span className="zoom-value">{zoom}%</span>
-              <button aria-label="Zoom in" onClick={() => setZoom(Math.min(150, zoom + 10))}>+</button>
+              <button aria-label="Zoom in" title="Zoom in" onClick={() => setZoom(Math.min(150, zoom + 10))}><Icon name="zoomIn" size={17} /></button>
             </div>
             <div className="history-controls" aria-label="Edit history">
               <button aria-label="Undo (Ctrl+Z)" title="Undo · Ctrl+Z" disabled={!historyState.canUndo} onClick={undo}>Undo</button>
               <button aria-label="Redo (Ctrl+Shift+Z)" title="Redo · Ctrl+Shift+Z" disabled={!historyState.canRedo} onClick={redo}>Redo</button>
             </div>
             <div className="page-actions">
-              {!infinitePage && <label className="orientation-select"><span className="orientation-icon">▯</span><select value={orientation} onChange={(event) => setActiveOrientation(event.target.value as 'portrait' | 'landscape')} aria-label="Page orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>}
-              {!infinitePage && <div className="add-page-wrap"><button className="add-page" aria-haspopup="menu" aria-expanded={addPageMenuOpen} onClick={() => setAddPageMenuOpen((open) => !open)}><span>+</span> Add page</button>{addPageMenuOpen && <div className="add-page-menu" role="menu" aria-label="Choose new page orientation"><p>New page orientation</p><button role="menuitem" onClick={() => addPage('portrait')}>▯ Portrait</button><button role="menuitem" onClick={() => addPage('landscape')}>▭ Landscape</button></div>}</div>}
+              {!infinitePage && <label className="orientation-select" title={`Page orientation: ${orientation}`}><span className="orientation-icon"><Icon name={orientation} size={17} /></span><select value={orientation} onChange={(event) => setActiveOrientation(event.target.value as 'portrait' | 'landscape')} aria-label="Page orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>}
+              {!infinitePage && <div className="add-page-wrap"><button className="add-page" aria-label="Add page" title="Add page" aria-haspopup="menu" aria-expanded={addPageMenuOpen} onClick={() => setAddPageMenuOpen((open) => !open)}><span><Icon name="addPage" size={17} /></span><span className="add-page-label">Add page</span></button>{addPageMenuOpen && <div className="add-page-menu" role="menu" aria-label="Choose new page orientation"><p>New page orientation</p><button role="menuitem" onClick={() => addPage('portrait')}><Icon name="portrait" size={17} /> Portrait</button><button role="menuitem" onClick={() => addPage('landscape')}><Icon name="landscape" size={17} /> Landscape</button></div>}</div>}
             </div>
           </div>
           <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
