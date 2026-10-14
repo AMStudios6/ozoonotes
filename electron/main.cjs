@@ -1,5 +1,5 @@
 const path = require('node:path')
-const { app, BrowserWindow, dialog, session, shell } = require('electron')
+const { app, BrowserWindow, desktopCapturer, dialog, session, shell } = require('electron')
 
 let mainWindow
 const hostedAppUrl = 'https://amstudios6.github.io/ozoonotes/'
@@ -30,6 +30,39 @@ function configureDownloads() {
       buttonLabel: 'Save',
       filters,
     })
+  })
+}
+
+function configureScreenCapture() {
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    const trustedOrigin = request.securityOrigin === hostedAppOrigin || request.securityOrigin === 'http://127.0.0.1:5173'
+    if (!trustedOrigin || !request.videoRequested || !mainWindow || mainWindow.isDestroyed()) {
+      callback({})
+      return
+    }
+
+    void desktopCapturer.getSources({ types: ['screen', 'window'] }).then(async (sources) => {
+      if (sources.length === 0) {
+        callback({})
+        return
+      }
+      const buttons = [...sources.map((source) => source.name), 'Cancel']
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'Choose what to record',
+        message: 'Select a screen or window to record.',
+        detail: 'Only the source you choose will be captured.',
+        buttons,
+        defaultId: 0,
+        cancelId: sources.length,
+        noLink: true,
+      })
+      if (response < 0 || response >= sources.length) {
+        callback({})
+        return
+      }
+      callback({ video: sources[response] })
+    }).catch(() => callback({}))
   })
 }
 
@@ -95,10 +128,10 @@ if (!hasSingleInstance) {
   app.whenReady().then(() => {
     app.setAppUserModelId('com.amstudios.ozooonotes')
     configureDownloads()
+    configureScreenCapture()
     createWindow()
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
   })
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 }
-
