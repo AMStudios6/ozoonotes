@@ -1,8 +1,11 @@
 {
   "name": "whiteboard",
+  "description": "A calm, local-first whiteboard for students and teachers.",
+  "author": "AMStudios6",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "engines": {
     "node": ">=24"
   },
@@ -12,7 +15,10 @@
     "dev:api": "node --env-file-if-exists=.env server/server.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "desktop:build": "tsc -b && cross-env VITE_LOCAL_ONLY=true vite build --base=./",
+    "desktop:dist": "npm run desktop:build && electron-builder --win"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -23,9 +29,39 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.amstudios.ozooonotes",
+    "productName": "OzooNotes",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "OzooNotes-Portable-${version}.${ext}"
+    }
   }
 }
-
