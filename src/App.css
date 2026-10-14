@@ -561,3 +561,7 @@
  .file-tab {flex-basis:20%;height:calc(100% - 6px);min-width:84px;max-width:150px;padding:0 7px}
  .stroke-panel {max-height:calc(100dvh - 205px)}
 }
+.shape-rounding {margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.shape-rounding .settings-heading {display:flex;justify-content:space-between;gap:8px}
+.shape-rounding .settings-heading span {color:var(--accent);font-size:10px;font-weight:650}
+.shape-rounding input {width:100%;accent-color:var(--accent)}

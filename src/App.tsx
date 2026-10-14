@@ -25,7 +25,7 @@ type CloudBoard = { id: number; name: string; folderId: number | null; state: Bo
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
 type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
-type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle }
+type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; cornerRadius?: number; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
@@ -248,16 +248,37 @@ function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
   return abC * abD <= 0 && cdA * cdB <= 0
 }
 
-function shapeGeometry(kind: ShapeKind, first: Point, last: Point) {
+function shapeGeometry(kind: ShapeKind, first: Point, last: Point, cornerRadius = 0) {
   const left = Math.min(first.x, last.x)
   const right = Math.max(first.x, last.x)
   const top = Math.min(first.y, last.y)
   const bottom = Math.max(first.y, last.y)
   const centerX = (left + right) / 2
   const centerY = (top + bottom) / 2
-  if (kind === 'Rectangle') return { points: [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }], closed: true }
-  if (kind === 'Triangle') return { points: [{ x: centerX, y: top }, { x: right, y: bottom }, { x: left, y: bottom }], closed: true }
-  if (kind === 'Diamond') return { points: [{ x: centerX, y: top }, { x: right, y: centerY }, { x: centerX, y: bottom }, { x: left, y: centerY }], closed: true }
+  let polygon: Point[] | null = null
+  if (kind === 'Rectangle') polygon = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }]
+  if (kind === 'Triangle') polygon = [{ x: centerX, y: top }, { x: right, y: bottom }, { x: left, y: bottom }]
+  if (kind === 'Diamond') polygon = [{ x: centerX, y: top }, { x: right, y: centerY }, { x: centerX, y: bottom }, { x: left, y: centerY }]
+  if (polygon) {
+    const radius = Math.min(right - left, bottom - top) * Math.max(0, Math.min(30, cornerRadius)) / 100
+    if (!radius) return { points: polygon, closed: true }
+    const points: Point[] = []
+    polygon.forEach((vertex, index) => {
+      const previous = polygon![(index + polygon!.length - 1) % polygon!.length]
+      const next = polygon![(index + 1) % polygon!.length]
+      const inLength = Math.hypot(previous.x - vertex.x, previous.y - vertex.y)
+      const outLength = Math.hypot(next.x - vertex.x, next.y - vertex.y)
+      const distance = Math.min(radius, inLength / 2, outLength / 2)
+      const incoming = { x: vertex.x + (previous.x - vertex.x) * distance / inLength, y: vertex.y + (previous.y - vertex.y) * distance / inLength }
+      const outgoing = { x: vertex.x + (next.x - vertex.x) * distance / outLength, y: vertex.y + (next.y - vertex.y) * distance / outLength }
+      points.push(incoming)
+      for (let step = 1; step <= 6; step++) {
+        const t = step / 6, inverse = 1 - t
+        points.push({ x: inverse * inverse * incoming.x + 2 * inverse * t * vertex.x + t * t * outgoing.x, y: inverse * inverse * incoming.y + 2 * inverse * t * vertex.y + t * t * outgoing.y })
+      }
+    })
+    return { points, closed: true }
+  }
   if (kind === 'Arrow') {
     const angle = Math.atan2(last.y - first.y, last.x - first.x)
     const head = 0.025
@@ -300,7 +321,7 @@ function strokeTouchesEraser(stroke: Stroke, eraser: Stroke, canvasWidth: number
   const pathPoints = stroke.tool === 'Image' && strokePoints.length > 1
     ? [strokePoints[0], { x: strokePoints[1].x, y: strokePoints[0].y }, strokePoints[1], { x: strokePoints[0].x, y: strokePoints[1].y }, strokePoints[0]]
     : stroke.tool === 'Shape' && stroke.shapeKind && strokePoints.length > 1
-      ? shapeGeometry(stroke.shapeKind, stroke.points[0], stroke.points[stroke.points.length - 1]).points.map(toCanvas)
+      ? shapeGeometry(stroke.shapeKind, stroke.points[0], stroke.points[stroke.points.length - 1], stroke.cornerRadius).points.map(toCanvas)
       : strokePoints
   const strokeSegments = pathPoints.length > 1 ? pathPoints.slice(1).map((point, i) => [pathPoints[i], point] as const) : [[pathPoints[0], pathPoints[0]] as const]
   const eraserSegments = eraserPoints.length > 1 ? eraserPoints.slice(1).map((point, i) => [eraserPoints[i], point] as const) : [[eraserPoints[0], eraserPoints[0]] as const]
@@ -360,7 +381,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       context.textBaseline = 'top'
       context.fillText(drawing.text ?? '', first.x * canvas.width, first.y * canvas.height)
     } else if (drawing.tool === 'Shape') {
-      const geometry = shapeGeometry(drawing.shapeKind ?? 'Rectangle', first, last)
+      const geometry = shapeGeometry(drawing.shapeKind ?? 'Rectangle', first, last, drawing.cornerRadius)
       context.beginPath()
       context.moveTo(geometry.points[0].x * canvas.width, geometry.points[0].y * canvas.height)
       for (const point of geometry.points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height)
@@ -748,6 +769,7 @@ function App() {
   })
   const [rulerUnit, setRulerUnit] = useState<RulerUnit>('cm')
   const [shapeKind, setShapeKind] = useState<ShapeKind>('Rectangle')
+  const [shapeCornerRadius, setShapeCornerRadius] = useState(0)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [eraserHover, setEraserHover] = useState<Point | null>(null)
@@ -1406,15 +1428,15 @@ function App() {
       opacity,
       points: [point],
       ...(strokeTool !== 'Eraser' ? { layer: 'writing' as const, drawingStyle } : {}),
-      ...(strokeTool === 'Shape' ? { shapeKind } : {}),
+      ...(strokeTool === 'Shape' ? { shapeKind, cornerRadius: shapeCornerRadius } : {}),
     }
     activeStroke.current = stroke
-    if (strokeTool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, stroke], selectedIndices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
+    if (strokeTool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, stroke], selectedIndices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
       const candidates = strokes.map((item, index) => !hiddenLayers.includes(strokeLayer(item)) && strokeTouchesEraser(item, stroke, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
-      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, stroke.width, { x: 0, y: 0 }, undefined, hiddenLayers)
+      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, stroke.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     }
   }
   const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1444,7 +1466,7 @@ function App() {
       move.preview = move.originals.map((original) => ({ ...original, points: original.points.map((item) => ({ x: item.x + dx, y: item.y + dy })) }))
       const updated = [...strokes]
       move.indices.forEach((index, offset) => { updated[index] = move.preview[offset] })
-      renderDrawings(event.currentTarget, updated, move.indices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
+      renderDrawings(event.currentTarget, updated, move.indices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
       return
     }
     if (!activeStroke.current) {
@@ -1453,18 +1475,28 @@ function App() {
         const eraser = { tool: 'Eraser' as const, color: '#ff535d', width: 44, opacity: 100, points: [point] }
         const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
         setErasePreviewIndices(candidates)
-        renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, { x: 0, y: 0 }, undefined, hiddenLayers)
+        renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
       }
       return
     }
-    activeStroke.current.points.push(point)
-    if (activeStroke.current.tool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, activeStroke.current], selectedIndices, [], undefined, 0, { x: 0, y: 0 }, undefined, hiddenLayers)
+    if (activeStroke.current.tool === 'Line' && event.shiftKey) {
+      const start = activeStroke.current.points[0]
+      const dx = point.x - start.x, dy = point.y - start.y
+      const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4)
+      const length = Math.hypot(dx, dy)
+      activeStroke.current.points = [start, { x: start.x + Math.cos(angle) * length, y: start.y + Math.sin(angle) * length }]
+    } else if (activeStroke.current.tool === 'Line') {
+      activeStroke.current.points = [activeStroke.current.points[0], point]
+    } else {
+      activeStroke.current.points.push(point)
+    }
+    if (activeStroke.current.tool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, activeStroke.current], selectedIndices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
       const eraser = activeStroke.current
       const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
-      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, { x: 0, y: 0 }, undefined, hiddenLayers)
+      renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     }
   }
   const saveCurrentFile = () => {
@@ -1569,7 +1601,7 @@ function App() {
       const alpha = stroke.opacity / 100 * (stroke.tool === 'Brush' ? .72 : stroke.tool === 'Pencil' ? .62 : stroke.tool === 'Marker' ? .82 : stroke.tool === 'Highlighter' ? .24 : 1)
       if (stroke.tool === 'Image' && stroke.imageData && stroke.points.length > 1) return `<image href="${stroke.imageData}" x="${first.x * width}" y="${first.y * height}" width="${(last.x - first.x) * width}" height="${(last.y - first.y) * height}" preserveAspectRatio="none"/>`
       if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(8, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
-      const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last).points : stroke.points
+      const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last, stroke.cornerRadius).points : stroke.points
       const pointString = points.map((point) => `${point.x * width},${point.y * height}`).join(' ')
       const handwriting = stroke.drawingStyle === 'handwriting' && points.length > 2 && stroke.tool !== 'Shape'
       const pathData = handwriting ? `M ${points[0].x * width} ${points[0].y * height} ${points.slice(1, -1).map((point, index) => { const next = points[index + 2]; return `Q ${point.x * width} ${point.y * height} ${(point.x + next.x) * width / 2} ${(point.y + next.y) * height / 2}` }).join(' ')} L ${last.x * width} ${last.y * height}` : ''
@@ -1947,7 +1979,7 @@ function App() {
         commands.push(`${(stroke.width * pageWidth / logicalWidth).toFixed(2)} w`)
         if (stroke.tool === 'Shape') {
           const last = stroke.points[stroke.points.length - 1]
-          const geometry = shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last)
+          const geometry = shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last, stroke.cornerRadius)
           geometry.points.forEach((point, index) => commands.push(`${(point.x * pageWidth).toFixed(2)} ${(pageHeight - point.y * pageHeight).toFixed(2)} ${index === 0 ? 'm' : 'l'}`))
           if (geometry.closed) commands.push('h')
           commands.push('S')
@@ -2378,7 +2410,7 @@ function App() {
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}><Icon name="duplicate" size={16} /></button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}><Icon name="layer" size={16} /></button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}><Icon name="layer" size={16} /></button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}><Icon name="delete" size={16} /></button></div>
-            {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div></div>}
+            {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div>{shapeKind !== 'Ellipse' && shapeKind !== 'Arrow' && <div className="shape-rounding"><label className="settings-heading" htmlFor="shape-rounding">Corner rounding <span>{shapeCornerRadius === 0 ? 'Sharp' : `${shapeCornerRadius}%`}</span></label><input id="shape-rounding" type="range" min="0" max="30" step="1" value={shapeCornerRadius} onChange={(event) => { const radius = Number(event.target.value); setShapeCornerRadius(radius); changeSelection({ cornerRadius: radius }) }} /><div className="opacity-labels"><span>Sharp</span><span>Rounded</span></div></div>}</div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
           </aside>}
 
