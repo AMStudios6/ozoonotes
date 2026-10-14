@@ -32,14 +32,6 @@ Use Node.js 24 or newer.
 
 The API server is optional for local editing. To develop the server-backed features, run `npm run server` in another terminal. It stores account and board data in `data/doomnotes.sqlite`.
 
-## Windows desktop app
-
-OzooNotes can also run as a Windows desktop app. Its boards remain saved locally in the app's browser storage, and exports such as PDF open the Windows Save dialog.
-
-To run it in development, install dependencies and run `npm run desktop:dev`. To build the installer and portable executable on Windows, run `npm run desktop:dist`; the `.exe` files will be written to `release/`.
-
-You can also build it from GitHub: open **Actions → Build OzooNotes for Windows → Run workflow**, then download the `OzooNotes-Windows` artifact from the completed run. Tagged releases named `desktop-v*` run the same build automatically. The Windows executable is currently unsigned, so Windows may show a SmartScreen warning when it is first opened.
-
 ## Deploy to GitHub Pages
 
 The repository's GitHub Actions workflow builds the static app and publishes it to Pages. It sets the project-site base path and enables local-only mode automatically. In repository **Settings → Pages**, select **GitHub Actions** as the build and deployment source if it is not already selected.

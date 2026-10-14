@@ -317,9 +317,13 @@
 .drawing-tool-toggle small {right:1px;bottom:1px;color:var(--muted)}
 .tool-button svg {display:block}
 .audience-starters {padding:40px 0 48px;border-top:1px solid var(--line)}
-.audience-switch {display:inline-flex;gap:3px;margin-top:21px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--workspace)}
-.audience-switch button {min-height:34px;padding:0 14px;border:0;border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
-.audience-switch button.selected {background:var(--panel);color:var(--accent);box-shadow:0 1px 4px #0002}
+.audience-heading-row {display:flex;align-items:flex-end;justify-content:space-between;gap:22px}
+.audience-picker {display:grid;gap:7px;min-width:190px;color:var(--muted);font-size:10px;font-weight:650}
+.audience-picker-control {position:relative;display:flex;align-items:center;min-height:40px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);transition:border-color .15s,box-shadow .15s}
+.audience-picker-control:focus-within {border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.audience-picker-control select {width:100%;height:38px;appearance:none;padding:0 38px 0 11px;border:0;outline:0;border-radius:inherit;background:transparent;color:var(--ink);font:inherit;font-size:12px;cursor:pointer}
+.audience-picker-control option {background:var(--panel);color:var(--ink)}
+.audience-picker-control svg {position:absolute;right:11px;color:var(--accent);pointer-events:none}
 .starter-card-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
 .starter-card {min-height:95px;display:flex;align-items:center;gap:12px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--muted);text-align:left;cursor:pointer;transition:border-color .16s,transform .16s,background .16s}
 .starter-card:hover {transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 55%,var(--line));background:var(--accent-soft)}
@@ -361,6 +365,8 @@
   .art-note-one {top:73px}
   .landing-tools {padding:34px 0 40px}
   .audience-starters {padding:32px 0 37px}
+  .audience-heading-row {align-items:stretch;flex-direction:column;gap:16px}
+  .audience-picker {min-width:0}
   .starter-card-grid {grid-template-columns:1fr;gap:8px}
   .starter-card {min-height:78px}
   .landing-feature-grid {grid-template-columns:1fr;gap:9px;margin-top:18px}

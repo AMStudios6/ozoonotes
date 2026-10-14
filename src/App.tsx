@@ -1906,9 +1906,9 @@ function App() {
               </div>
             </section>
             <section className="audience-starters" aria-labelledby="audience-title">
-              <div className="landing-section-heading"><span>MADE FOR THE CLASSROOM</span><h2 id="audience-title">Start with what you need.</h2></div>
-              <div className="audience-switch" role="tablist" aria-label="Choose your workspace">
-                {(['student', 'teacher'] as AudienceRole[]).map((role) => <button key={role} type="button" role="tab" aria-selected={landingAudience === role} className={landingAudience === role ? 'selected' : ''} onClick={() => setLandingAudience(role)}>{role === 'student' ? 'For students' : 'For teachers'}</button>)}
+              <div className="audience-heading-row">
+                <div className="landing-section-heading"><span>MADE FOR THE CLASSROOM</span><h2 id="audience-title">Start with what you need.</h2></div>
+                <label className="audience-picker" htmlFor="landing-audience"><span>I’m using OzooNotes as a</span><span className="audience-picker-control"><select id="landing-audience" value={landingAudience} onChange={(event) => setLandingAudience(event.target.value as AudienceRole)}><option value="student">Student</option><option value="teacher">Teacher</option></select><Icon name="chevronDown" size={17} /></span></label>
               </div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
                 {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
