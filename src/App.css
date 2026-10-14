@@ -334,6 +334,10 @@
 .add-page {gap:7px}
 .add-page>span:first-child {display:inline-flex;align-items:center;color:var(--accent)}
 .add-page-menu button svg {flex:none;color:var(--accent)}
+.menu-trigger,.tab-close,.add-file {display:grid;place-items:center}
+.board-menu>button svg,.board-menu>a svg {flex:none}
+.quick-actions button,.history-controls button,.selection-actions button {display:inline-flex;align-items:center;justify-content:center}
+.landing-recent-list b {display:inline-flex;align-items:center;gap:2px}
 @media(max-width:850px) {
   .landing-page .landing-hero {grid-template-columns:1fr minmax(310px,.8fr);gap:16px}
   .landing-copy h1 {font-size:clamp(43px,7vw,62px)}
