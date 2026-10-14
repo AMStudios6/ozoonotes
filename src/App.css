@@ -483,6 +483,11 @@
  .workspace {padding:76px 10px 80px}
  .bottom-controls {left:12px;right:12px;bottom:12px;gap:6px}
  .page-actions {gap:6px}
+ .orientation-select {position:relative;justify-content:center;width:40px;min-width:40px;padding:0}
+ .orientation-select select {position:absolute;inset:0;width:100%;max-width:none;opacity:0;cursor:pointer}
+ .orientation-select select option {font-size:14px}
+ .add-page {width:40px;justify-content:center;padding:0}
+ .add-page-label {display:none}
  .zoom-slider {width:76px}
 }
 @media(max-width:650px) {
