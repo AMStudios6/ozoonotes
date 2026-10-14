@@ -2426,20 +2426,22 @@ function App() {
           </div>
 
           <div className="bottom-controls">
-            <div className="zoom-control">
-              <button aria-label="Zoom out" title="Zoom out" onClick={() => setZoom(Math.max(10, zoom - 10))}><Icon name="zoomOut" size={17} /></button>
-              <span className="zoom-value">{zoom}%</span><input className="zoom-slider" aria-label="Zoom level" type="range" min="10" max="500" step="10" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} />
-              <button aria-label="Zoom in" title="Zoom in" onClick={() => setZoom(Math.min(500, zoom + 10))}><Icon name="zoomIn" size={17} /></button>
-            </div>
             <div className="page-actions">
               {!infinitePage && <label className="orientation-select" title={`Page orientation: ${orientation}`}><span className="orientation-icon"><Icon name={orientation} size={17} /></span><select value={orientation} onChange={(event) => setActiveOrientation(event.target.value as 'portrait' | 'landscape')} aria-label="Page orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>}
               {!infinitePage && <div className="add-page-wrap"><button className="add-page" aria-label="Add page" title="Add page" aria-haspopup="menu" aria-expanded={addPageMenuOpen} onClick={() => setAddPageMenuOpen((open) => !open)}><span><Icon name="addPage" size={17} /></span><span className="add-page-label">Add page</span></button>{addPageMenuOpen && <div className="add-page-menu" role="menu" aria-label="Choose new page orientation"><p>New page orientation</p><button role="menuitem" onClick={() => addPage('portrait')}><Icon name="portrait" size={17} /> Portrait</button><button role="menuitem" onClick={() => addPage('landscape')}><Icon name="landscape" size={17} /> Landscape</button></div>}</div>}
             </div>
-            <div className={`page-navigation ${indexView ? 'index-navigation' : ''}`}>
+            <div className="bottom-right-controls">
+              <div className="zoom-control">
+                <button aria-label="Zoom out" title="Zoom out" onClick={() => setZoom(Math.max(10, zoom - 10))}><Icon name="zoomOut" size={17} /></button>
+                <span className="zoom-value">{zoom}%</span>
+                <button aria-label="Zoom in" title="Zoom in" onClick={() => setZoom(Math.min(500, zoom + 10))}><Icon name="zoomIn" size={17} /></button>
+              </div>
+              <div className={`page-navigation ${indexView ? 'index-navigation' : ''}`}>
               <button aria-label="Previous page" title="Previous page" disabled={indexView ? indexPage <= 1 : page <= 1 && indexPageCount === 0} onClick={() => { if (indexView) setIndexPage(Math.max(1, indexPage - 1)); else if (page === 1 && indexPageCount) { setIndexView(true); setIndexPage(indexPageCount) } else setPage(Math.max(1, page - 1)) }}><Icon name="previous" size={16} /></button>
               {indexView ? <><span>Index</span><input aria-label="Index page number" type="number" min={1} max={indexPageCount} value={indexPage} onChange={(event) => setIndexPage(Math.min(indexPageCount, Math.max(1, Number(event.target.value) || 1)))} /><span>of {indexPageCount}</span></> : <><span>Page</span><input aria-label="Current page number" type="number" min={1} max={boards[activeBoard].pages} value={page} onChange={(event) => setPage(Math.min(boards[activeBoard].pages, Math.max(1, Number(event.target.value) || 1)))} /><span>of {boards[activeBoard].pages}</span></>}
               <button aria-label="Next page" title="Next page" disabled={!indexView && page >= boards[activeBoard].pages} onClick={() => { if (indexView && indexPage < indexPageCount) setIndexPage(indexPage + 1); else if (indexView) { setIndexView(false); setPage(1) } else setPage(Math.min(boards[activeBoard].pages, page + 1)) }}><Icon name="next" size={16} /></button>
               {!indexView && <><button className="page-title-action" title={`Add title to page ${page}`} aria-label={`Add title to page ${page}`} onClick={openTitleDialog}>＋ Title</button>{indexPageCount > 0 && <button className="page-index-action" title="Open contents index" onClick={() => { setIndexView(true); setIndexPage(1) }}>Contents</button>}</>}
+              </div>
             </div>
           </div>
           <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>

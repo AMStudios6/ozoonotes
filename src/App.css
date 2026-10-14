@@ -565,3 +565,26 @@
 .shape-rounding .settings-heading {display:flex;justify-content:space-between;gap:8px}
 .shape-rounding .settings-heading span {color:var(--accent);font-size:10px;font-weight:650}
 .shape-rounding input {width:100%;accent-color:var(--accent)}
+
+/* Keep settings and footer controls clear of one another. */
+.window-top {align-items:center}
+.file-tabs {align-self:stretch}
+.more-features-wrap {align-self:center;height:auto}
+.more-features-trigger {height:38px;margin:0}
+.stroke-panel {width:200px;max-height:55vh;max-height:55dvh;overflow-y:auto;overscroll-behavior:contain}
+.bottom-controls {display:flex;align-items:flex-end;justify-content:space-between}
+.page-actions {order:1;margin-right:auto}
+.bottom-right-controls {order:2;display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
+.zoom-control {order:0;margin:0}
+.page-navigation {position:static;order:0}
+.add-page {width:42px;min-width:42px;justify-content:center;padding:0}
+.add-page-label {display:none!important}
+@media(max-width:650px) {
+ .stroke-panel {width:min(200px,calc(100vw - 16px));max-height:55vh;max-height:55dvh}
+ .bottom-controls {display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;align-items:end}
+ .page-actions {grid-column:1;grid-row:2;margin:0}
+ .bottom-right-controls {grid-column:2;grid-row:1 / span 2;justify-self:end;gap:5px}
+ .zoom-control {height:34px}
+ .zoom-control button {width:24px;height:26px}
+ .page-navigation {height:35px}
+}
