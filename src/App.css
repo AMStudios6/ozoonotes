@@ -203,6 +203,8 @@
 .dialog-close {position:absolute;right:16px;top:14px;width:30px;height:30px;border:0;border-radius:7px;background:var(--panel-raised);color:var(--muted);font-size:20px;cursor:pointer}
 .dialog-label {display:grid;gap:7px;margin:14px 0;color:var(--muted);font-size:12px;font-weight:600}
 .dialog-label input,.dialog-label select {height:38px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--workspace);color:var(--ink);font:inherit}
+.dialog-label input[aria-invalid="true"] {border-color:#e65353}
+.field-error {margin:-7px 0 12px;padding:8px 10px;border:1px solid color-mix(in srgb,#e65353 40%,var(--line));border-radius:8px;background:color-mix(in srgb,#e65353 9%,var(--panel));color:#ee8589;font-size:11px;line-height:1.4}
 .page-size-picker {margin:18px 0;padding:0;border:0}.page-size-picker legend {margin-bottom:9px;color:var(--muted);font-size:12px;font-weight:600}
 .page-size-options {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
 .page-size-option {min-height:38px;border:1px solid var(--line);border-radius:8px;background:var(--workspace);color:var(--ink);font-size:12px;cursor:pointer}
