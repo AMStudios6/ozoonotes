@@ -12,7 +12,8 @@ type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
 type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart' | 'Mood board'
-type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[] }
+type SectionTitle = { id: string; title: string; page: number }
+type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[] }
 type ScratchItem = { id: string; text: string; done: boolean }
 type CloudUser = { id: number; username: string }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
@@ -614,9 +615,9 @@ function readSavedWorkspace(): RestoredWorkspace {
     const loaded = savedWorkspace.names.filter((name): name is string => typeof name === 'string').map((name) => {
       const raw = localStorage.getItem(`doomnotes:${name}`)
       if (!raw) return null
-      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      const saved = JSON.parse(raw) as { name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
       if (typeof saved.name !== 'string' || typeof saved.pages !== 'number' || !Array.isArray(saved.pageStrokes)) return null
-      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation ?? 'portrait'), pageBackground: saved.pageBackground ?? 'auto', notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [] }, saved }
+      return { board: { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation ?? 'portrait', pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation ?? 'portrait'), pageBackground: saved.pageBackground ?? 'auto', notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [] }, saved }
     }).filter((item): item is NonNullable<typeof item> => item !== null)
 
     if (!loaded.length) return empty
@@ -669,6 +670,12 @@ function App() {
   const [draftTemplate, setDraftTemplate] = useState<PageTemplate>('Blank')
   const [infinitePage, setInfinitePage] = useState(initialWorkspace.infinitePage)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false)
+  const [sectionTitleDraft, setSectionTitleDraft] = useState('')
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'png' | 'svg'>('pdf')
+  const [exportPageSelection, setExportPageSelection] = useState('')
+  const [exportIncludeIndex, setExportIncludeIndex] = useState(true)
   const [graphOpen, setGraphOpen] = useState(false)
   const [graphMode, setGraphMode] = useState<'equation' | 'points'>('equation')
   const [graphEquation, setGraphEquation] = useState('y = x^2')
@@ -741,6 +748,8 @@ function App() {
   useEffect(() => { try { localStorage.setItem('ozoo:notebooks', JSON.stringify(notebooks)) } catch { /* Notebook organization remains optional if storage is full. */ } }, [notebooks])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
   const [page, setPage] = useState(initialWorkspace.page)
+  const [indexView, setIndexView] = useState(() => (initialWorkspace.boards[initialWorkspace.activeBoard]?.titles?.length ?? 0) > 1)
+  const [indexPage, setIndexPage] = useState(1)
   const [zoom, setZoom] = useState(100)
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialWorkspace.orientation)
   const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
@@ -1025,6 +1034,8 @@ function App() {
     setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground }])
     setActiveBoard(newIndex)
     setPage(1)
+    setIndexView(false)
+    setIndexPage(1)
     setPageSize(state.pageSize ?? 'A4')
     setInfinitePage(state.infinite ?? false)
     setOrientation(state.pageOrientations?.[0] ?? state.orientation)
@@ -1550,6 +1561,72 @@ function App() {
     window.setTimeout(() => setSaveNotice(''), 3000)
     setMenuOpen(false)
   }
+  const openTitleDialog = () => { setSectionTitleDraft(''); setTitleDialogOpen(true); setMenuOpen(false) }
+  const addSectionTitle = () => {
+    const title = sectionTitleDraft.trim()
+    if (!title) return
+    const titles = [...(boards[activeBoard].titles ?? []), { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, title, page }]
+    setBoards((current) => current.map((board, index) => index === activeBoard ? { ...board, titles } : board))
+    if (titles.length > 1) { setIndexView(true); setIndexPage(1) }
+    setTitleDialogOpen(false)
+  }
+  const removeSectionTitle = (id: string) => {
+    const remaining = (boards[activeBoard].titles ?? []).filter((item) => item.id !== id)
+    setBoards((current) => current.map((board, index) => index === activeBoard ? { ...board, titles: remaining } : board))
+    if (remaining.length < 2) setIndexView(false)
+    setIndexPage(Math.min(indexPage, Math.max(1, Math.ceil(remaining.length / 20))))
+  }
+  const indexPageCount = Math.ceil((boards[activeBoard]?.titles?.length ?? 0) / 20)
+  const openExportDialog = () => { setExportPageSelection(`1-${boards[activeBoard].pages}`); setExportIncludeIndex(true); setExportDialogOpen(true); setMenuOpen(false) }
+  const exportSelectedPages = async () => {
+    const text = exportPageSelection.trim()
+    const selected = new Set<number>()
+    try {
+      for (const part of text.split(',').map((value) => value.trim()).filter(Boolean)) {
+        const match = part.match(/^(\d+)\s*(?:-\s*(\d+))?$/)
+        if (!match) throw new Error()
+        const first = Number(match[1]), last = Number(match[2] ?? match[1])
+        if (first < 1 || last < first || last > boards[activeBoard].pages) throw new Error()
+        for (let number = first; number <= last; number++) selected.add(number)
+      }
+      if (!selected.size) throw new Error()
+    } catch {
+      setSaveNotice(`Enter page numbers from 1 to ${boards[activeBoard].pages}, like 1, 3-5`)
+      window.setTimeout(() => setSaveNotice(''), 3500)
+      return
+    }
+    const selectedNumbers = [...selected].sort((a, b) => a - b)
+    if (exportFormat === 'pdf') { await exportPdf(selectedNumbers, exportIncludeIndex); setExportDialogOpen(false); return }
+    const board = boards[activeBoard]
+    const size = board.pageSize ?? pageSize
+    const infiniteExport = size === 'Infinite' || board.infinite
+    const base: [number, number] = infiniteExport ? [210, 297] : pageDimensionsMm[size as Exclude<PageSize, 'Infinite'>]
+    const bg = infiniteExport ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(board.pageBackground ?? pageBackground, dark, colorTheme)
+    const indexStrokes = (sheet: number): Stroke[] => {
+      const rows = (board.titles ?? []).slice(sheet * 20, sheet * 20 + 20)
+      const textStroke = (value: string, x: number, y: number, width: number, color = dark ? '#f3f4f6' : '#20252b'): Stroke => ({ tool: 'Text', color, width, opacity: 100, points: [{ x, y }], text: value })
+      return [textStroke('CONTENTS', .09, .09, 7, colorTheme === 'forest' ? '#39a96b' : '#8052bc'), textStroke(board.name, .09, .125, 3), ...rows.flatMap((item, row) => { const y = .19 + row * .037; return [textStroke(item.title, .10, y, 3.2), textStroke(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
+    }
+    const pages: { strokes: Stroke[]; label: string; pageIndex: number | null }[] = [
+      ...(exportIncludeIndex && (board.titles?.length ?? 0) > 1 ? Array.from({ length: indexPageCount }, (_, i) => ({ strokes: indexStrokes(i), label: `Index ${i + 1}`, pageIndex: null })) : []),
+      ...selectedNumbers.map((number) => ({ strokes: strokesByPage[`${activeBoard}:${number}`] ?? [], label: `Page ${number}`, pageIndex: number - 1 })),
+    ]
+    const safeName = board.name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
+    for (const [index, item] of pages.entries()) {
+      const [widthMm, heightMm] = item.pageIndex === null ? base : infiniteExport ? [canvasWidth / 3.78, canvasHeight / 3.78] : (board.pageOrientations?.[item.pageIndex] ?? board.orientation ?? orientation) === 'landscape' ? [base[1], base[0]] : [base[0], base[1]]
+      const width = infiniteExport && item.pageIndex !== null ? canvasWidth : Math.round(widthMm * 3.78), height = infiniteExport && item.pageIndex !== null ? canvasHeight : Math.round(heightMm * 3.78)
+      const suffix = pages.length === 1 ? '' : ` - ${item.label}`
+      const camera = infiniteExport && item.pageIndex !== null ? infiniteCameraByPage[`${activeBoard}:${item.pageIndex + 1}`] ?? { x: 0, y: 0 } : { x: 0, y: 0 }
+      if (exportFormat === 'svg') downloadNamedBlob(new Blob([svgForPage(item.strokes, width, height, bg, camera)], { type: 'image/svg+xml;charset=utf-8' }), `${safeName}${suffix}.svg`)
+      else {
+        const canvas = await renderPageCanvas(item.strokes, width, height, bg, camera)
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+        if (blob) downloadNamedBlob(blob, `${safeName}${suffix}.png`)
+      }
+      if (index < pages.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 180))
+    }
+    setExportDialogOpen(false)
+  }
   const exportObsidianNote = () => {
     const safeName = boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
     const background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme)
@@ -1570,11 +1647,13 @@ function App() {
     const raw = localStorage.getItem(`doomnotes:${name}`)
     if (!raw) return
     try {
-      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; notebook?: string; tags?: string[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
+      const saved = JSON.parse(raw) as { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; gridEnabled?: boolean; showScale?: boolean; pageStrokes: Stroke[][] }
       const boardIndex = boards.length
-      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation), pageBackground: saved.pageBackground, notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [] }])
+      setBoards((current) => [...current, { name: saved.name, pages: saved.pages, pageSize: saved.pageSize ?? 'A4', infinite: saved.infinite ?? false, orientation: saved.orientation, pageOrientations: Array.from({ length: saved.pages }, (_, index) => saved.pageOrientations?.[index] ?? saved.orientation), pageBackground: saved.pageBackground, notebook: saved.notebook ?? 'Inbox', tags: saved.tags ?? [], titles: saved.titles ?? [] }])
       setActiveBoard(boardIndex)
       setPage(1)
+      setIndexView((saved.titles?.length ?? 0) > 1)
+      setIndexPage(1)
       setOrientation(saved.pageOrientations?.[0] ?? saved.orientation)
       setPageBackground(saved.pageBackground)
       setPageSize(saved.pageSize ?? 'A4')
@@ -1596,7 +1675,7 @@ function App() {
         window.setTimeout(() => setSaveNotice(''), 2400)
         return
       }
-      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; pageStrokes?: Stroke[][] }
+      const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; titles?: SectionTitle[]; pageStrokes?: Stroke[][] }
       if (documentData.format !== 'doomnotes' || documentData.version !== 1 || typeof documentData.name !== 'string' || !Number.isInteger(documentData.pages) || (documentData.pages ?? 0) < 1 || !Array.isArray(documentData.pageStrokes) || documentData.pageStrokes.length !== documentData.pages) throw new Error('That file is not a valid OzooNotes document.')
       if (documentData.pageSize !== undefined && !['Infinite', 'A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'].includes(documentData.pageSize)) throw new Error('That OzooNotes file uses an unsupported page size.')
       const boardIndex = boards.length
@@ -1605,9 +1684,11 @@ function App() {
       const importedOrientation = documentData.orientation ?? 'portrait'
       const importedOrientations = Array.from({ length: documentData.pages! }, (_, index) => documentData.pageOrientations?.[index] ?? importedOrientation)
       const importedBackground = documentData.pageBackground ?? 'auto'
-      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageOrientations: importedOrientations, pageBackground: importedBackground }])
+      setBoards((current) => [...current, { name: documentData.name!, pages: documentData.pages!, pageSize: importedSize, infinite: importedInfinite, orientation: importedOrientation, pageOrientations: importedOrientations, pageBackground: importedBackground, titles: documentData.titles ?? [] }])
       setActiveBoard(boardIndex)
       setPage(1)
+      setIndexView((documentData.titles?.length ?? 0) > 1)
+      setIndexPage(1)
       setPageSize(importedSize)
       setInfinitePage(importedInfinite)
       setOrientation(importedOrientations[0])
@@ -1674,14 +1755,26 @@ function App() {
     }
   }
 
-  const exportPdf = async () => {
+  const exportPdf = async (selectedPageNumbers = Array.from({ length: boards[activeBoard].pages }, (_, index) => index + 1), includeIndex = true) => {
     if (infinitePage) return
     const activePdfBoard = boards[activeBoard]
     const exportSize = activePdfBoard.pageSize ?? pageSize
     const basePageMm = pageDimensionsMm[exportSize as Exclude<PageSize, 'Infinite'>]
     const pageOrientationAt = (pageIndex: number) => activePdfBoard.pageOrientations?.[pageIndex] ?? activePdfBoard.orientation ?? orientation
-    const pageDimensionsAt = (pageIndex: number): [number, number] => pageOrientationAt(pageIndex) === 'landscape' ? [basePageMm[1], basePageMm[0]] : [basePageMm[0], basePageMm[1]]
-    const boardPages = Array.from({ length: activePdfBoard.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? [])
+    const pageDimensionsAt = (pageIndex: number | null): [number, number] => pageIndex === null || pageOrientationAt(pageIndex) === 'portrait' ? [basePageMm[0], basePageMm[1]] : [basePageMm[1], basePageMm[0]]
+    const makeIndexPageStrokes = (sheet: number): Stroke[] => {
+      const titles = activePdfBoard.titles ?? []
+      const firstIndex = sheet * 20
+      const rows = titles.slice(firstIndex, firstIndex + 20)
+      const text = (value: string, x: number, y: number, size: number, color = dark ? '#f3f4f6' : '#20252b'): Stroke => ({ tool: 'Text', color, width: size, opacity: 100, points: [{ x, y }], text: value })
+      return [text('CONTENTS', .09, .09, 7, colorTheme === 'forest' ? '#39a96b' : '#8052bc'), text(activePdfBoard.name, .09, .125, 3), ...rows.flatMap((item, index) => { const y = .19 + index * .037; return [text(item.title, .10, y, 3.2), text(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
+    }
+    const indexCount = includeIndex && (activePdfBoard.titles?.length ?? 0) > 1 ? Math.ceil((activePdfBoard.titles?.length ?? 0) / 20) : 0
+    const exportPages: { pageStrokes: Stroke[]; pageIndex: number | null }[] = [
+      ...Array.from({ length: indexCount }, (_, sheet) => ({ pageStrokes: makeIndexPageStrokes(sheet), pageIndex: null })),
+      ...[...new Set(selectedPageNumbers)].filter((number) => Number.isInteger(number) && number >= 1 && number <= activePdfBoard.pages).map((number) => ({ pageStrokes: strokesByPage[`${activeBoard}:${number}`] ?? [], pageIndex: number - 1 })),
+    ]
+    const boardPages = exportPages.map(({ pageStrokes }) => pageStrokes)
     if (boardPages.some((pageStrokes) => pageStrokes.some((stroke) => stroke.tool === 'Image'))) {
       const encoder = new TextEncoder()
       const images = [...new Set(boardPages.flatMap((pageStrokes) => pageStrokes.flatMap((stroke) => stroke.tool === 'Image' && stroke.imageData ? [stroke.imageData] : [])))]
@@ -1693,7 +1786,7 @@ function App() {
       })))
       const rasterPages = boardPages.map((pageStrokes, pageIndex) => {
         const scale = 2
-        const [pageWidthMm, pageHeightMm] = pageDimensionsAt(pageIndex)
+        const [pageWidthMm, pageHeightMm] = pageDimensionsAt(exportPages[pageIndex].pageIndex)
         const pagePixelWidth = Math.round(pageWidthMm * 3.78)
         const pagePixelHeight = Math.round(pageHeightMm * 3.78)
         const canvas = window.document.createElement('canvas')
@@ -1708,7 +1801,7 @@ function App() {
         renderDrawings(drawingCanvas, pageStrokes.map((stroke) => ({ ...stroke, width: stroke.width * scale })))
         context.fillStyle = resolvePageBackground(pageBackground, dark, colorTheme)
         context.fillRect(0, 0, canvas.width, canvas.height)
-        if (gridEnabled) {
+        if (gridEnabled && exportPages[pageIndex].pageIndex !== null) {
           context.strokeStyle = gridLineColor(dark, colorTheme)
           context.lineWidth = 1
           for (let x = 40; x < canvas.width; x += 40) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke() }
@@ -1770,8 +1863,7 @@ function App() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       return
     }
-    const pageStreams = Array.from({ length: activePdfBoard.pages }, (_, pageIndex) => {
-      const pageStrokes = strokesByPage[`${activeBoard}:${pageIndex + 1}`] ?? []
+    const pageStreams = exportPages.map(({ pageStrokes, pageIndex }) => {
       const [pageWidthMm, pageHeightMm] = pageDimensionsAt(pageIndex)
       const pageWidth = pageWidthMm * 72 / 25.4
       const pageHeight = pageHeightMm * 72 / 25.4
@@ -1781,7 +1873,7 @@ function App() {
       const bg = resolvePageBackground(pageBackground, dark, colorTheme).replace('#', '')
       const bgRgb = [0, 2, 4].map((offset) => parseInt(bg.slice(offset, offset + 2), 16) / 255)
       commands.push(`${bgRgb.map((value) => value.toFixed(4)).join(' ')} rg`, `0 0 ${pageWidth} ${pageHeight} re f`)
-      if (gridEnabled && !infinitePage) {
+      if (gridEnabled && !infinitePage && pageIndex !== null) {
         commands.push((dark ? '0.74 0.54 0.94' : '0.51 0.27 0.76') + ' RG', '0.35 w')
         for (let x = 20; x < pageWidth; x += 20) commands.push(`${x} 0 m ${x} ${pageHeight} l S`)
         for (let y = 20; y < pageHeight; y += 20) commands.push(`0 ${y} m ${pageWidth} ${y} l S`)
@@ -1919,6 +2011,7 @@ function App() {
     setBoards((current) => [...current, { name, pages: 1, pageSize: draftSize, infinite: isInfinite, orientation: draftOrientation, pageOrientations: [draftOrientation], pageBackground: draftBackground, notebook: 'Inbox', tags: [] }])
     setActiveBoard(boards.length)
     setPage(1)
+    setIndexView(false)
     setPageSize(draftSize)
     setInfinitePage(isInfinite)
     setOrientation(draftOrientation)
@@ -1933,6 +2026,8 @@ function App() {
     if (!board) return
     setActiveBoard(index)
     setPage(1)
+    setIndexView((board.titles?.length ?? 0) > 1)
+    setIndexPage(1)
     setPageSize(board.pageSize ?? 'A4')
     setInfinitePage(board.infinite ?? false)
     setOrientation(board.pageOrientations?.[0] ?? board.orientation ?? 'portrait')
@@ -1958,6 +2053,8 @@ function App() {
       const nextBoard = remaining[nextIndex]
       setActiveBoard(nextIndex)
       setPage(1)
+      setIndexView((nextBoard.titles?.length ?? 0) > 1)
+      setIndexPage(1)
       setPageSize(nextBoard.pageSize ?? 'A4')
       setInfinitePage(nextBoard.infinite ?? false)
       setOrientation(nextBoard.pageOrientations?.[0] ?? nextBoard.orientation ?? 'portrait')
@@ -1979,6 +2076,8 @@ function App() {
   }
 
   const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} aria-invalid={Boolean(draftNameError)} aria-describedby={draftNameError ? "draft-name-error" : undefined} onChange={(event) => { setDraftName(event.target.value); setDraftNameError("") }} placeholder={`File ${nextFileNumber}`} /></label>{draftNameError && <p className="field-error" id="draft-name-error" role="alert">{draftNameError}</p>}<fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option><option>Mood board</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const titleDialog = titleDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTitleDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="section-title-heading"><button className="dialog-close" aria-label="Close section titles" onClick={() => setTitleDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">PAGE {page} SECTION</p><h2 id="section-title-heading">Add a section title</h2><p className="infinite-note">Titles appear in a separate contents page before your notes. They never take up or renumber a document page.</p><form onSubmit={(event) => { event.preventDefault(); addSectionTitle() }}><label className="dialog-label">Title for page {page}<input autoFocus maxLength={100} value={sectionTitleDraft} onChange={(event) => setSectionTitleDraft(event.target.value)} placeholder="e.g. Research links" /></label><button className="dialog-create full-button" disabled={!sectionTitleDraft.trim()}>Add title</button></form>{(boards[activeBoard].titles?.length ?? 0) > 0 && <><h3 className="small-heading">Titles in this board</h3><ul className="section-title-list">{boards[activeBoard].titles?.map((item) => <li key={item.id}><span>{item.title}<small>Page {item.page}</small></span><button type="button" aria-label={`Remove ${item.title}`} onClick={() => removeSectionTitle(item.id)}>Remove</button></li>)}</ul></>}</section></div>
+  const exportDialog = exportDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title"><button className="dialog-close" aria-label="Close export options" onClick={() => setExportDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">CUSTOM EXPORT</p><h2 id="export-dialog-title">Choose pages to export</h2><label className="dialog-label">Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'pdf' | 'png' | 'svg')}><option value="pdf">PDF document</option><option value="png">PNG images</option><option value="svg">SVG images</option></select></label><label className="dialog-label">Page numbers<input value={exportPageSelection} onChange={(event) => setExportPageSelection(event.target.value)} placeholder="1, 3-5" /><small>Use commas and ranges, for example: 1, 3-5</small></label>{(boards[activeBoard].titles?.length ?? 0) > 1 && <label className="encryption-choice"><input type="checkbox" checked={exportIncludeIndex} onChange={(event) => setExportIncludeIndex(event.target.checked)} /><span><strong>Include contents index</strong><small>Add the title index before the selected note pages.</small></span></label>}{exportFormat !== 'pdf' && <p className="infinite-note">Each selected page downloads as its own {exportFormat.toUpperCase()} file.</p>}{infinitePage && exportFormat === 'pdf' && <p className="field-error">PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setExportDialogOpen(false)}>Cancel</button><button className="dialog-create" disabled={infinitePage && exportFormat === 'pdf'} onClick={() => void exportSelectedPages()}>Export</button></footer></section></div>
 
   const quickStartDialog = quickStartOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickStartOpen(false) }}><section className="new-file-dialog compact-dialog quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title"><button className="dialog-close" aria-label="Close Quick Start guide" onClick={() => setQuickStartOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES BASICS</p><h2 id="quick-start-title">Quick Start Guide</h2><ol className="quick-start-steps"><li><span>1</span><div><strong>Start with a board</strong><p>Choose <b>Start a new board</b>, or open an OzooNotes file you already have.</p></div></li><li><span>2</span><div><strong>Draw and create</strong><p>Pick a pen from the drawing tools. Use the shape, text, image, or graph tools to add more to your page.</p></div></li><li><span>3</span><div><strong>Select and move objects</strong><p>Choose Select. Drag over empty space to select several objects, or Shift-click to add or remove an object. Drag a selected object to move the group. Ctrl+A selects everything on the current page.</p></div></li><li><span>4</span><div><strong>Move around and add pages</strong><p>Use the Hand tool to pan across an infinite board. For regular boards, add a page and choose portrait or landscape; each page keeps its own orientation.</p></div></li><li><span>5</span><div><strong>Keep a copy of your work</strong><p>Your boards save in this browser on this device. Choose <b>Save OzooNotes file</b> to download a portable copy. You can also export pages as PNG or SVG, or regular boards as PDF.</p></div></li></ol><footer className="dialog-actions"><button className="dialog-create" onClick={() => setQuickStartOpen(false)}>Got it</button></footer></section></div>
 
@@ -2112,7 +2211,7 @@ function App() {
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}><Icon name="close" size={13} /></button>
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
-            <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><ThemeIcon source={downloadPng} size={17} /> Download PDF</button>
+            <button className="export-pdf" onClick={openExportDialog} title={infinitePage ? 'Choose PNG or SVG for infinite boards' : 'Choose pages and export format'}><ThemeIcon source={downloadPng} size={17} /> Export…</button>
             <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync"><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
           </nav>
@@ -2129,7 +2228,8 @@ function App() {
               {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
               <div className="menu-divider" />
               <button onClick={() => { setLibraryName(''); setLibraryOpen(true); setMenuOpen(false) }}><Icon name="layer" size={17} /> <span>Libraries</span></button>
-              <button onClick={exportPdf} disabled={infinitePage}><ThemeIcon source={downloadPng} size={18} /> <span>{infinitePage ? 'PDF unavailable for infinite board' : 'Download PDF'}</span></button>
+              <button onClick={openExportDialog}><ThemeIcon source={downloadPng} size={18} /> <span>Export pages…</span></button>
+              <button onClick={openTitleDialog}><Icon name="notes" size={17} /> <span>Add section title to page {page}</span></button>
               <button onClick={() => { void exportDrawing('png') }}><Icon name="image" size={17} /> <span>Export this page as PNG</span></button>
               <button onClick={() => { void exportDrawing('svg') }}><Icon name="shape" size={17} /> <span>Export this page as SVG</span></button>
               <button onClick={() => { void copyPageForNotion() }}><Icon name="notes" size={17} /> <span>Copy page for Notion</span></button>
@@ -2167,11 +2267,11 @@ function App() {
           </div>
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
-          <div className="page-navigation">
-            <button aria-label="Previous page" title="Previous page" disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))}><Icon name="previous" size={16} /></button>
-            <span>Page</span><input aria-label="Current page number" type="number" min={1} max={boards[activeBoard].pages} value={page} onChange={(event) => setPage(Math.min(boards[activeBoard].pages, Math.max(1, Number(event.target.value) || 1)))} />
-            <span>of {boards[activeBoard].pages}</span>
-            <button aria-label="Next page" title="Next page" disabled={page >= boards[activeBoard].pages} onClick={() => setPage(Math.min(boards[activeBoard].pages, page + 1))}><Icon name="next" size={16} /></button>
+          <div className={`page-navigation ${indexView ? 'index-navigation' : ''}`}>
+            <button aria-label={indexView ? 'Previous index page' : 'Previous page'} title={indexView ? 'Previous index page' : 'Previous page'} disabled={indexView ? indexPage <= 1 : page <= 1 && indexPageCount === 0} onClick={() => { if (indexView) setIndexPage(Math.max(1, indexPage - 1)); else if (page === 1 && indexPageCount) { setIndexView(true); setIndexPage(indexPageCount) } else setPage(Math.max(1, page - 1)) }}><Icon name="previous" size={16} /></button>
+            {indexView ? <><span>Index</span><input aria-label="Index page number" type="number" min={1} max={indexPageCount} value={indexPage} onChange={(event) => setIndexPage(Math.min(indexPageCount, Math.max(1, Number(event.target.value) || 1)))} /><span>of {indexPageCount}</span></> : <><span>Page</span><input aria-label="Current page number" type="number" min={1} max={boards[activeBoard].pages} value={page} onChange={(event) => setPage(Math.min(boards[activeBoard].pages, Math.max(1, Number(event.target.value) || 1)))} /><span>of {boards[activeBoard].pages}</span></>}
+            <button aria-label={indexView ? (indexPage === indexPageCount ? 'Go to first note page' : 'Next index page') : 'Next page'} title={indexView ? 'Next' : 'Next page'} disabled={!indexView && page >= boards[activeBoard].pages} onClick={() => { if (indexView && indexPage < indexPageCount) setIndexPage(indexPage + 1); else if (indexView) { setIndexView(false); setPage(1) } else setPage(Math.min(boards[activeBoard].pages, page + 1)) }}><Icon name="next" size={16} /></button>
+            {!indexView && <><button className="page-title-action" title={`Add title to page ${page}`} aria-label={`Add title to page ${page}`} onClick={openTitleDialog}>＋ Title</button>{indexPageCount > 0 && <button className="page-index-action" title="Open contents index" onClick={() => { setIndexView(true); setIndexPage(1) }}>Contents</button>}</>}
           </div>
 
           {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
@@ -2188,6 +2288,7 @@ function App() {
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
               <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
+              {indexView && indexPageCount > 0 && <section className="title-index-page" aria-label={`Contents index page ${indexPage} of ${indexPageCount}`}><div className="title-index-kicker">CONTENTS · {boards[activeBoard].name}</div><h1>Page index</h1><p>Choose a title to jump to that page.</p><ol>{(boards[activeBoard].titles ?? []).slice((indexPage - 1) * 20, indexPage * 20).map((item) => <li key={item.id}><button type="button" onClick={() => { setPage(item.page); setIndexView(false) }}><span>{item.title}</span><i /><b>Page {item.page}</b></button></li>)}</ol><small>Contents page {indexPage} of {indexPageCount} · your notes start on page 1</small></section>}
             </div>
           </div>
 
@@ -2218,6 +2319,8 @@ function App() {
       {libraryDialog}
       {!localOnly && cloudSaveDialog}
       {graphDialog}
+      {titleDialog}
+      {exportDialog}
     </main>
   )
 }
