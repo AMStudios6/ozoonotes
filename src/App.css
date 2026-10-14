@@ -453,13 +453,13 @@
 .board-area {height:calc(100dvh - 80px);padding:0 18px 12px}
 .board-menu-wrap {top:64px;left:20px}
 .quick-actions {top:64px;left:66px;height:42px}
-.toolbar {top:64px;left:176px;right:20px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:3px;padding:5px 7px;border-radius:12px;overflow-x:auto;scrollbar-width:none}
+.toolbar {top:64px;left:176px;right:auto;width:max-content;max-width:calc(100% - 196px);display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:3px;padding:5px 7px;border-radius:12px;overflow-x:auto;scrollbar-width:none}
 .toolbar::-webkit-scrollbar {display:none}
 .tool-button {width:38px;height:36px;flex:none}
 .image-import {border-right:1px solid var(--line);border-radius:8px}
 .drawing-tool-menu {top:calc(100% + 8px);left:0}
 .stroke-panel {top:112px;left:20px}
-.workspace {padding:78px 28px 72px}
+.workspace {padding:172px 28px 72px}
 .bottom-controls {position:fixed;left:26px;right:26px;bottom:26px;display:flex;align-items:center;gap:10px;padding:0;pointer-events:none}
 .bottom-controls>* {pointer-events:auto}
 .page-actions {order:1;display:flex;flex-direction:row;align-items:center;gap:9px;margin:0 auto 0 0}
@@ -478,9 +478,9 @@
  .board-area {height:calc(100dvh - 70px);padding:0 10px 10px}
  .board-menu-wrap {top:62px;left:12px}
  .quick-actions {top:62px;left:56px}
- .toolbar {top:62px;left:162px;right:12px;justify-content:flex-start}
+ .toolbar {top:62px;left:162px;right:12px;width:auto;max-width:none;justify-content:flex-start}
  .tool-button {width:35px}
- .workspace {padding:76px 10px 80px}
+ .workspace {padding:150px 10px 80px}
  .bottom-controls {left:12px;right:12px;bottom:12px;gap:6px}
  .page-actions {gap:6px}
  .orientation-select {position:relative;justify-content:center;width:40px;min-width:40px;padding:0}
