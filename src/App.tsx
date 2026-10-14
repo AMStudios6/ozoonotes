@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import './App.css'
+import notesPng from './assets/notes.png'
+import downloadPng from './assets/download.png'
+import folderPng from './assets/folder.png'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -547,6 +550,10 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     chevronDown: <><path d="m6 9 6 6 6-6"/></>,
   }
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>
+}
+
+function ThemeIcon({ source, size = 18, className = '' }: { source: string; size?: number; className?: string }) {
+  return <img className={`themed-png-icon ${className}`} src={source} width={size} height={size} alt="" aria-hidden="true" draggable={false} />
 }
 
 type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
@@ -1967,7 +1974,7 @@ function App() {
                 <p className="hero-description">Sketch ideas, add notes, shape your thoughts, and plot a graph—all in one calm workspace.</p>
                 <div className="landing-cta-row">
                   <button className="hero-new-file" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Start a new board <Icon name="next" size={17} /></button>
-                  <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><Icon name="pdf" size={16} /> Open a file</button>
+                  <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={17} /> Open a file</button>
                   <a className="landing-github-link" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">See how it works on GitHub ↗</a>
                   <button type="button" className="landing-help-link" onClick={() => setQuickStartOpen(true)}>Read the Quick Start guide</button>
                 </div>
@@ -1992,7 +1999,7 @@ function App() {
             <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
               <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : 'TEACHER STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
-                {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon"><Icon name={starter.icon} size={21} /></span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
+                {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon">{starter.icon === 'notes' ? <ThemeIcon source={notesPng} size={21} /> : <Icon name={starter.icon} size={21} />}</span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
               </div>
             </section>
             <section className="landing-tools" id="landing-tools">
@@ -2000,13 +2007,13 @@ function App() {
               <div className="landing-feature-grid">
                 <article className="landing-feature"><span className="feature-icon feature-draw"><Icon name="pen" /></span><h3>Draw and arrange</h3><p>Use the brush, pen, shapes, text, lines, and eraser. Move and organize what you create.</p></article>
                 <article className="landing-feature"><span className="feature-icon feature-graph"><Icon name="graph" /></span><h3>Put ideas on a graph</h3><p>Plot equations or enter points, then add the graph to your board.</p></article>
-                <article className="landing-feature"><span className="feature-icon feature-pages"><Icon name="pdf" /></span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-pages"><ThemeIcon source={downloadPng} size={23} /></span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
               </div>
             </section>
             <section className="landing-files" id="landing-files">
               <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={() => addBoard()}>＋ New board</button></div>
               <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
-              {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon"><Icon name="notes" size={18} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon"><Icon name="notes" size={18} /></span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><Icon name="notes" size={15} /> Open file</button></div>}
+              {recentFiles.length ? <div className="landing-recent-list">{recentFiles.map((name) => <button key={name} onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <div className="landing-empty-files"><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><div><strong>Your recent files will show up here.</strong><p>Create a board to get started, or open an OzooNotes file you already have.</p></div><button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={16} /> Open file</button></div>}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
             <footer className="landing-footer"><div className="landing-brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span>Don’t Doomscroll, just OzooNotes</span></footer>
@@ -2030,7 +2037,7 @@ function App() {
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}><Icon name="close" size={13} /></button>
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
-            <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><Icon name="pdf" size={16} /> Download PDF</button>
+            <button className="export-pdf" onClick={exportPdf} disabled={infinitePage} title={infinitePage ? 'Infinite boards cannot be exported as PDF' : 'Download PDF'}><ThemeIcon source={downloadPng} size={17} /> Download PDF</button>
             <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             {!localOnly && <button className="account-button header-account" onClick={() => setAccountOpen(true)} title="Account and cloud sync"><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
           </nav>
@@ -2041,20 +2048,20 @@ function App() {
             <button className="menu-trigger" aria-label="Open drawing menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /></button>
             {menuOpen && <div className="board-menu">
               <p className="menu-title">Page options</p>
-              <button onClick={() => { setQuickStartOpen(true); setMenuOpen(false) }}><Icon name="notes" size={17} /> <span>Quick Start Guide</span></button>
+              <button onClick={() => { setQuickStartOpen(true); setMenuOpen(false) }}><ThemeIcon source={notesPng} size={18} /> <span>Quick Start Guide</span></button>
               <label className="menu-option"><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /> Unlock grid on page</label>
               <label className="menu-option"><input type="checkbox" disabled={infinitePage} checked={showScale && !infinitePage} onChange={(event) => setShowScale(event.target.checked)} /> Scale on page</label>
               {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
               <div className="menu-divider" />
               <button onClick={() => { setLibraryName(''); setLibraryOpen(true); setMenuOpen(false) }}><Icon name="layer" size={17} /> <span>Libraries</span></button>
-              <button onClick={exportPdf} disabled={infinitePage}><Icon name="pdf" size={17} /> <span>{infinitePage ? 'PDF unavailable for infinite board' : 'Download PDF'}</span></button>
+              <button onClick={exportPdf} disabled={infinitePage}><ThemeIcon source={downloadPng} size={18} /> <span>{infinitePage ? 'PDF unavailable for infinite board' : 'Download PDF'}</span></button>
               <button onClick={() => { void exportDrawing('png') }}><Icon name="image" size={17} /> <span>Export this page as PNG</span></button>
               <button onClick={() => { void exportDrawing('svg') }}><Icon name="shape" size={17} /> <span>Export this page as SVG</span></button>
               <button onClick={() => { void copyPageForNotion() }}><Icon name="notes" size={17} /> <span>Copy page for Notion</span></button>
               <button onClick={exportObsidianNote}><Icon name="notes" size={17} /> <span>Export for Obsidian</span></button>
               <button onClick={saveCurrentFile}><Icon name="duplicate" size={17} /> <span>Save</span></button>
-              <button onClick={saveBoardToFile}><Icon name="pdf" size={17} /> <span>Save OzooNotes file</span></button>
-              <button onClick={() => documentInputRef.current?.click()}><Icon name="notes" size={17} /> <span>Open OzooNotes file</span></button>
+              <button onClick={saveBoardToFile}><ThemeIcon source={downloadPng} size={18} /> <span>Save OzooNotes file</span></button>
+              <button onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={18} /> <span>Open OzooNotes file</span></button>
               <a className="board-menu-github" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer"><Icon name="share" size={17} /> <span>See how it works on GitHub</span></a>
               {!localOnly && <>
               <button onClick={openCloudSaveDialog}><Icon name="cloud" size={17} /> <span>Save to server</span></button>

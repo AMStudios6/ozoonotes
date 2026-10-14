@@ -67,6 +67,9 @@
 .app[data-theme="doom"] .landing-feature,.app[data-theme="doom"] .starter-card,.app[data-theme="doom"] .landing-quick-setup {border-color:#506450;border-radius:7px;box-shadow:inset 0 0 0 1px #17251a,0 5px 20px #0003}
 .app[data-theme="doom"] .starter-icon {border:1px solid #758875;border-radius:7px}
 .app[data-theme="doom"] .landing-copy h1 span {text-shadow:0 0 22px #5be67836}
+.themed-png-icon {display:block;flex:none;object-fit:contain}
+.app:not(.light) .themed-png-icon {filter:invert(1)}
+.landing-open-file .themed-png-icon,.landing-feature .themed-png-icon {flex:none}
 .board-area {position:relative; display:flex; flex-direction:column; height:calc(100vh - 54px); min-height:0; overflow:hidden; padding:22px 24px 0; background:var(--workspace)}
 .toolbar {position:absolute; z-index:4; top:65px; left:22px; display:flex; flex-direction:column; gap:5px; padding:8px 6px; border:1px solid var(--line); border-radius:17px; background:var(--panel); box-shadow:0 8px 22px #0003}
 .tool-button {width:42px;height:40px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--muted);cursor:pointer;transition:.15s}
