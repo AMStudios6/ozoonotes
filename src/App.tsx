@@ -2287,13 +2287,18 @@ function App() {
             <section className="landing-hero">
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
-                <h1>Don’t Doomscroll.<br /><span>Make something.</span></h1>
-                <p className="hero-description">Sketch ideas, add notes, shape your thoughts, and plot a graph—all in one calm workspace.</p>
+                <h1>Think through ideas.<br /><span>See the whole picture.</span></h1>
+                <p className="hero-description">Bring handwriting, code examples, diagrams, graphs, and plans onto one flexible page. Start with a student or teacher template, then make it your own.</p>
                 <div className="landing-cta-row">
                   <button className="hero-new-file" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Start a new board <Icon name="next" size={17} /></button>
                   <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={17} /> Open a file</button>
                   <a className="landing-github-link" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">See how it works on GitHub ↗</a>
                   <button type="button" className="landing-help-link" onClick={() => setQuickStartOpen(true)}>Read the Quick Start guide</button>
+                </div>
+                <div className="landing-value-points" aria-label="Why use OzooNotes">
+                  <div className="landing-value-point"><strong>Think visually</strong><span>Mix writing, sketches, and examples.</span></div>
+                  <div className="landing-value-point"><strong>Start with a template</strong><span>Get straight to notes, lessons, or code.</span></div>
+                  <div className="landing-value-point"><strong>Saved on your device</strong><span>Export a copy when you need one.</span></div>
                 </div>
                 <div className="landing-quick-setup" aria-label="Board setup options">
                   <label htmlFor="landing-audience"><span>Make this for</span><select id="landing-audience" value={landingAudience} onChange={(event) => { const role = event.target.value as AudienceRole; setLandingAudience(role); setLandingTemplate(role === 'student' ? 'Cornell notes' : 'Lesson plan') }}><option value="student">Student</option><option value="teacher">Teacher</option></select></label>
