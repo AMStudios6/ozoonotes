@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import './App.css'
+import StudentSpace from './StudentSpace'
 import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
 import folderPng from './assets/folder.png'
@@ -2168,6 +2169,7 @@ function App() {
                 {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon">{starter.icon === 'notes' ? <ThemeIcon source={notesPng} size={21} /> : <Icon name={starter.icon} size={21} />}</span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
               </div>
             </section>
+            {landingAudience === 'student' && <StudentSpace />}
             <section className="landing-tools" id="landing-tools">
               <div className="landing-section-heading"><span>MAKE IT YOURS</span><h2>Simple tools. Room to explore.</h2></div>
               <div className="landing-feature-grid">
