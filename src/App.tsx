@@ -553,7 +553,8 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 }
 
 function ThemeIcon({ source, size = 18, className = '' }: { source: string; size?: number; className?: string }) {
-  return <img className={`themed-png-icon ${className}`} src={source} width={size} height={size} alt="" aria-hidden="true" draggable={false} />
+  const mask = `url("${source}")`
+  return <span className={`themed-png-icon ${className}`} style={{ width: size, height: size, maskImage: mask, WebkitMaskImage: mask }} aria-hidden="true" />
 }
 
 type SavedWorkspace = { names: string[]; activeBoard: number; page: number }
