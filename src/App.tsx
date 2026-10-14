@@ -373,6 +373,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     context.setLineDash(drawing.drawingStyle === 'dashed' ? [drawing.width * 2.5, drawing.width * 1.8] : drawing.drawingStyle === 'dotted' ? [drawing.width * .15, drawing.width * 1.8] : [])
     if (drawing.drawingStyle === 'calligraphy') context.lineWidth *= 1.7
     context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Pencil' ? 0.62 : drawing.tool === 'Marker' ? 0.82 : drawing.tool === 'Highlighter' ? 0.24 : 1)
+    if (erasePreview.includes(drawingIndex)) context.globalAlpha *= 0.3
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
       const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset, undefined, hiddenLayers))
       if (image.complete && image.naturalWidth) context.drawImage(image, first.x * canvas.width, first.y * canvas.height, (last.x - first.x) * canvas.width, (last.y - first.y) * canvas.height)
@@ -404,12 +405,12 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       }
       context.stroke()
     }
-    if (selected.includes(drawingIndex) || erasePreview.includes(drawingIndex)) {
+    if (selected.includes(drawingIndex) && !erasePreview.includes(drawingIndex)) {
       context.save()
       context.globalAlpha = 1
-      context.strokeStyle = erasePreview.includes(drawingIndex) ? '#ff535d' : '#a977eb'
-      context.fillStyle = erasePreview.includes(drawingIndex) ? 'rgba(255, 83, 93, .09)' : 'transparent'
-      context.lineWidth = erasePreview.includes(drawingIndex) ? 3 : 2
+      context.strokeStyle = '#a977eb'
+      context.fillStyle = 'transparent'
+      context.lineWidth = 2
       context.setLineDash([7, 4])
       const xs = drawing.points.map((point) => point.x * canvas.width)
       const ys = drawing.points.map((point) => point.y * canvas.height)
@@ -420,7 +421,6 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       const boxY = Math.min(...ys) - padding
       const boxWidth = Math.max(...xs) - Math.min(...xs) + textWidth + padding * 2
       const boxHeight = Math.max(...ys) - Math.min(...ys) + textHeight + padding * 2
-      if (erasePreview.includes(drawingIndex)) context.fillRect(boxX, boxY, boxWidth, boxHeight)
       context.strokeRect(boxX, boxY, boxWidth, boxHeight)
       context.restore()
     }
@@ -1382,6 +1382,7 @@ function App() {
     const bounds = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - bounds.left) / bounds.width + (infinitePage ? cameraOffset.x : 0), y: (event.clientY - bounds.top) / bounds.height + (infinitePage ? cameraOffset.y : 0) }
   }
+  const eraserCanTarget = (stroke: Stroke, index: number) => !hiddenLayers.includes(strokeLayer(stroke)) && (!selectedIndices.length || selectedIndices.includes(index))
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     setDrawingToolsOpen(false)
     const point = pointFromEvent(event)
@@ -1433,7 +1434,7 @@ function App() {
     activeStroke.current = stroke
     if (strokeTool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, stroke], selectedIndices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
-      const candidates = strokes.map((item, index) => !hiddenLayers.includes(strokeLayer(item)) && strokeTouchesEraser(item, stroke, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+      const candidates = strokes.map((item, index) => eraserCanTarget(item, index) && strokeTouchesEraser(item, stroke, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
       renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, stroke.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
@@ -1473,7 +1474,7 @@ function App() {
       if (activeTool === 'Eraser') {
         setEraserHover(point)
         const eraser = { tool: 'Eraser' as const, color: '#ff535d', width: 44, opacity: 100, points: [point] }
-        const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+        const candidates = strokes.map((stroke, index) => eraserCanTarget(stroke, index) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
         setErasePreviewIndices(candidates)
         renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
       }
@@ -1493,7 +1494,7 @@ function App() {
     if (activeStroke.current.tool !== 'Eraser') renderDrawings(event.currentTarget, [...strokes, activeStroke.current], selectedIndices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     else {
       const eraser = activeStroke.current
-      const candidates = strokes.map((stroke, index) => !hiddenLayers.includes(strokeLayer(stroke)) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
+      const candidates = strokes.map((stroke, index) => eraserCanTarget(stroke, index) && strokeTouchesEraser(stroke, eraser, event.currentTarget.width, event.currentTarget.height) ? index : -1).filter((index) => index >= 0)
       setEraserHover(point)
       setErasePreviewIndices(candidates)
       renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
@@ -1819,7 +1820,8 @@ function App() {
       const savedStroke = { ...completedStroke, points: [...completedStroke.points] }
       if (savedStroke.tool === 'Eraser') {
         const canvas = canvasRef.current
-        if (canvas) editCurrentPage((current) => current.filter((stroke) => !strokeTouchesEraser(stroke, savedStroke, canvas.width, canvas.height)))
+        if (canvas) editCurrentPage((current) => current.filter((stroke, index) => !eraserCanTarget(stroke, index) || !strokeTouchesEraser(stroke, savedStroke, canvas.width, canvas.height)))
+        setSelectedIndices([])
       } else {
         editCurrentPage((current) => [...current, savedStroke])
       }
