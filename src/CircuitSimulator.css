@@ -66,3 +66,6 @@
 .circuit-workspace[data-theme="purple"] .circuit-run,.circuit-workspace[data-theme="red-black"] .circuit-run,.circuit-workspace[data-theme="doom"] .circuit-run{background:var(--c-accent);border-color:var(--c-accent)}
 .circuit-workspace .simulator-theme-picker select{max-width:132px}
 @media(max-width:680px){.circuit-workspace .simulator-theme-picker select{max-width:92px;padding:0 4px;font-size:9px}}
+
+.circuit-canvas .wire-preview-handle{fill:#f7fff8;stroke:#258d4b;stroke-width:2;pointer-events:none;vector-effect:non-scaling-stroke}
+.circuit-workspace[data-theme="purple"] .wire-preview-handle,.circuit-workspace[data-theme="red-black"] .wire-preview-handle,.circuit-workspace[data-theme="doom"] .wire-preview-handle,.circuit-workspace[data-theme="white-purple"] .wire-preview-handle,.circuit-workspace[data-theme="red-white"] .wire-preview-handle{stroke:var(--c-accent)}
