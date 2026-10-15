@@ -84,7 +84,7 @@ async function removeProject(id: string) {
   })
 }
 
-const safeTags = new Set(['P', 'DIV', 'BR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A'])
+const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
 function sanitizeHtml(value: string) {
   const parsed = new DOMParser().parseFromString(value, 'text/html')
   const cleanNode = (node: Node): Node | null => {
@@ -112,6 +112,20 @@ function sanitizeHtml(value: string) {
       if (/^\d+(?:\.\d+)?$/.test(lineHeight)) clean.style.lineHeight = lineHeight
       if (['left', 'right', 'center', 'justify'].includes(textAlign)) clean.style.textAlign = textAlign
       if (/^\d+(?:\.\d+)?(?:px|em|rem|%)$/.test(marginLeft)) clean.style.marginLeft = marginLeft
+      for (const property of ['padding', 'margin', 'width', 'height', 'border', 'border-radius', 'display', 'gap', 'align-items']) {
+        const value = style.getPropertyValue(property)
+        if (!value || /url\s*\(/i.test(value)) continue
+        if (property === 'border' && /^(?:[1-4]px )?(?:solid|dashed|dotted) #[a-f0-9]{3,8}$/i.test(value)) clean.style.setProperty(property, value)
+        else if (['display', 'align-items'].includes(property) && ['flex', 'block', 'inline-block', 'center', 'stretch'].includes(value)) clean.style.setProperty(property, value)
+        else if (/^[\d.]+(?:px|em|rem|%)?(?: [\d.]+(?:px|em|rem|%)?){0,3}$/.test(value)) clean.style.setProperty(property, value)
+      }
+    }
+    if (node.tagName === 'IMG') {
+      const src = node.getAttribute('src') ?? ''
+      if (/^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(src) || /^https?:\/\//i.test(src)) {
+        clean.setAttribute('src', src)
+        clean.setAttribute('alt', (node.getAttribute('alt') ?? '').slice(0, 240))
+      } else return null
     }
     if (node.tagName === 'A') {
       const href = node.getAttribute('href') ?? ''
@@ -135,6 +149,8 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedSelection = useRef<Range | null>(null)
   const [showMarks, setShowMarks] = useState(false)
+  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert'>('home')
+  const imageInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (editorRef.current) editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
     savedSelection.current = null
@@ -164,6 +180,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const runFormat = (command: string, value?: string, event?: MouseEvent<HTMLButtonElement>) => {
     event?.preventDefault()
     restoreSelection()
+    if (command.startsWith('justify')) document.execCommand('styleWithCSS', false, 'true')
     document.execCommand(command, false, value)
     rememberSelection()
     queueSave()
@@ -220,6 +237,89 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       window.alert('Clipboard access is blocked. Use Ctrl+V or ⌘V in the document instead.')
     }
   }
+  const insertHtml = (html: string) => {
+    restoreSelection()
+    document.execCommand('insertHTML', false, html)
+    rememberSelection()
+    queueSave()
+  }
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+  const insertTable = () => {
+    const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
+    const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
+    if (!rows || !columns) return
+    const markup = `<table><tbody>${Array.from({ length: rows }, (_, row) => `<tr>${Array.from({ length: columns }, (_, col) => row === 0 ? `<th>Column ${col + 1}</th>` : '<td>&nbsp;</td>').join('')}</tr>`).join('')}</tbody></table><p><br></p>`
+    insertHtml(markup)
+  }
+  const insertShape = () => {
+    const label = window.prompt('Text for your shape or callout', 'Add a note')
+    if (label === null) return
+    const shape = window.prompt('Shape: rectangle, rounded, or circle', 'rounded')?.toLowerCase() ?? 'rounded'
+    const radius = shape.includes('circle') ? '50px' : shape.includes('round') ? '16px' : '3px'
+    insertHtml(`<div style="border: 2px solid #8057d8; border-radius: ${radius}; padding: 14px; margin: 10px 0; background-color: #f7f2ff; display: inline-block">${escapeHtml(label || ' ')}<br></div><p><br></p>`)
+  }
+  const insertSmartArt = () => {
+    const steps = window.prompt('Enter process steps separated by commas', 'Plan, Build, Review')
+    if (!steps) return
+    insertHtml(`<ol>${steps.split(',').map((step) => `<li>${escapeHtml(step.trim())}</li>`).join('')}</ol><p><br></p>`)
+  }
+  const insertChart = () => {
+    const values = window.prompt('Enter chart values as Label: number, Label: number', 'Idea: 4, Design: 7, Build: 5')
+    if (!values) return
+    const rows = values.split(',').map((item) => {
+      const [label, raw = '0'] = item.split(':')
+      const value = Number(raw.trim())
+      return { label: (label ?? '').trim(), value: Number.isFinite(value) ? value : 0 }
+    }).filter((item) => item.label).slice(0, 12)
+    const max = Math.max(1, ...rows.map((row) => row.value))
+    const chart = `<div style="border: 1px solid #c9c0d7; border-radius: 8px; padding: 12px; margin: 10px 0">${rows.map((row) => `<p style="margin: 5px 0">${escapeHtml(row.label)} <span style="display: inline-block; width: ${Math.max(2, Math.round(row.value / max * 70))}%; background-color: #8057d8; color: #ffffff; padding: 3px 6px">${row.value}</span></p>`).join('')}</div><p><br></p>`
+    insertHtml(chart)
+  }
+  const insertSmartDate = () => insertHtml(`<span>${new Date().toLocaleString()}</span>`)
+  const insertVideoLink = () => {
+    const url = window.prompt('Paste a video URL')
+    if (!url) return
+    const safeUrl = /^(https?:\/\/)/i.test(url) ? url : `https://${url}`
+    insertHtml(`<p><a href="${escapeHtml(safeUrl)}" target="_blank">▶ Watch video</a></p>`)
+  }
+  const insertHeaderFooter = (kind: 'Header' | 'Footer') => {
+    const text = window.prompt(`${kind} text`, kind === 'Header' ? project.title : 'Project notes')
+    if (text === null) return
+    insertHtml(`<div style="border: 1px solid #c9c0d7; padding: 8px; margin: 8px 0; color: #66527f">${escapeHtml(kind.toUpperCase())}: ${escapeHtml(text)}</div>`)
+  }
+  const addImageFile = (file?: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/') || file.size > 6 * 1024 * 1024) {
+      window.alert('Choose an image smaller than 6 MB.')
+      if (imageInput.current) imageInput.current.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return
+      insertHtml(`<p><img src="${reader.result}" alt="${escapeHtml(file.name)}" /></p><p><br></p>`)
+      if (imageInput.current) imageInput.current.value = ''
+    }
+    reader.readAsDataURL(file)
+  }
+  const insertOnlineImage = () => {
+    const url = window.prompt('Paste an image URL')
+    if (!url) return
+    const safeUrl = /^(https?:\/\/)/i.test(url) ? url : `https://${url}`
+    if (!/^https?:\/\//i.test(safeUrl)) return
+    insertHtml(`<p><img src="${escapeHtml(safeUrl)}" alt="Online image" /></p>`)
+  }
+  const insertImageFromClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read()
+      const item = items.find((clipboardItem) => clipboardItem.types.some((type) => type.startsWith('image/')))
+      const type = item?.types.find((itemType) => itemType.startsWith('image/'))
+      if (!item || !type) throw new Error('No image')
+      addImageFile(new File([await item.getType(type)], 'Screenshot.png', { type }))
+    } catch {
+      window.alert('No screenshot image is available from the clipboard.')
+    }
+  }
   const addInlineLink = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     const link = window.prompt('Paste a web address or email link')
@@ -235,7 +335,13 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     'aria-label': 'Document formatting',
   }
   return <div className="project-editor-wrap">
-    <div className="project-format-toolbar" role="toolbar" aria-label="Document formatting">
+    <div className="project-ribbon-tabs" role="tablist" aria-label="Project document tools">
+      <button type="button" role="tab" aria-selected={ribbonTab === 'home'} className={ribbonTab === 'home' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('home')}>Home</button>
+      <button type="button" role="tab" aria-selected={ribbonTab === 'insert'} className={ribbonTab === 'insert' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('insert')}>Insert</button>
+    </div>
+    <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(event) => addImageFile(event.target.files?.[0])} />
+    <div className="project-format-toolbar" role="toolbar" aria-label={ribbonTab === 'home' ? 'Text formatting' : 'Insert project content'}>
+      {ribbonTab === 'home' ? <>
       <div className="project-ribbon-group project-clipboard-group" aria-label="Clipboard">
         <button type="button" title="Paste text from clipboard" aria-label="Paste" onMouseDown={(event) => void pasteText(event)}><span className="project-ribbon-symbol">▣</span><small>Paste</small></button>
         <div className="project-ribbon-stack"><button type="button" title="Cut" aria-label="Cut" onMouseDown={run('cut')}>✂ <small>Cut</small></button><button type="button" title="Copy" aria-label="Copy" onMouseDown={run('copy')}>▢ <small>Copy</small></button></div>
@@ -281,6 +387,36 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         <button type="button" title="Quote" aria-label="Quote" onMouseDown={run('formatBlock', 'blockquote')}>❝</button>
         <button type="button" title="Add link to selected text" aria-label="Add link to selected text" onMouseDown={addInlineLink}>↗</button>
       </div>
+      </> : <>
+        <div className="project-ribbon-group project-insert-group" aria-label="Pages and tables">
+          <button type="button" title="Insert cover page" onMouseDown={(event) => { event.preventDefault(); insertHtml(`<h1>${escapeHtml(project.title)}</h1><p>${escapeHtml(project.description)}</p><hr><p><br></p>`) }}>▤<small>Cover Page</small></button>
+          <button type="button" title="Insert a blank page break" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>▯<small>Blank Page</small></button>
+          <button type="button" title="Insert a page break" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>↵<small>Page Break</small></button>
+          <button type="button" title="Insert a table" onMouseDown={(event) => { event.preventDefault(); insertTable() }}>▦<small>Table</small></button>
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group" aria-label="Illustrations">
+          <button type="button" title="Insert a picture from your device" onMouseDown={(event) => { event.preventDefault(); imageInput.current?.click() }}>▧<small>Pictures</small></button>
+          <button type="button" title="Insert an online picture" onMouseDown={(event) => { event.preventDefault(); insertOnlineImage() }}>🌐<small>Online Picture</small></button>
+          <button type="button" title="Insert a screenshot from clipboard" onMouseDown={(event) => { event.preventDefault(); void insertImageFromClipboard() }}>▣<small>Screenshot</small></button>
+          <button type="button" title="Insert a shape or callout" onMouseDown={(event) => { event.preventDefault(); insertShape() }}>◇<small>Shapes</small></button>
+          <button type="button" title="Insert a process list" onMouseDown={(event) => { event.preventDefault(); insertSmartArt() }}>⟶<small>SmartArt</small></button>
+          <button type="button" title="Insert a simple bar chart" onMouseDown={(event) => { event.preventDefault(); insertChart() }}>▥<small>Chart</small></button>
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group" aria-label="Links and text">
+          <button type="button" title="Insert a video link" onMouseDown={(event) => { event.preventDefault(); insertVideoLink() }}>▶<small>Online Video</small></button>
+          <button type="button" title="Link selected text" onMouseDown={addInlineLink}>↗<small>Hyperlink</small></button>
+          <button type="button" title="Add a comment" onMouseDown={(event) => { event.preventDefault(); const note = window.prompt('Write a comment or review note'); if (note) insertHtml(`<blockquote><strong>Comment:</strong> ${escapeHtml(note)}</blockquote>`) }}>▤<small>Comment</small></button>
+          <button type="button" title="Insert a text box" onMouseDown={(event) => { event.preventDefault(); insertShape() }}>▱<small>Text Box</small></button>
+          <button type="button" title="Insert project title styling" onMouseDown={(event) => { event.preventDefault(); const text = window.prompt('Text for decorative title', project.title); if (text) insertHtml(`<h2 style="color: #8057d8; font-family: Georgia; text-align: center">${escapeHtml(text)}</h2>`) }}>A<small>WordArt</small></button>
+          <button type="button" title="Insert date and time" onMouseDown={(event) => { event.preventDefault(); insertSmartDate() }}>◷<small>Date &amp; Time</small></button>
+          <button type="button" title="Insert a project header" onMouseDown={(event) => { event.preventDefault(); insertHeaderFooter('Header') }}>↥<small>Header</small></button>
+          <button type="button" title="Insert a project footer" onMouseDown={(event) => { event.preventDefault(); insertHeaderFooter('Footer') }}>↧<small>Footer</small></button>
+          <button type="button" title="Insert a page number label" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p style="text-align: right">Page 1</p>') }}>#<small>Page Number</small></button>
+          <button type="button" title="Insert a signature line" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p>Signature: ______________________________</p>') }}>✎<small>Signature</small></button>
+        </div>
+      </>}
     </div>
     <div
       ref={editorRef}
@@ -344,6 +480,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
   const [linkName, setLinkName] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
   const [search, setSearch] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
   const imageInput = useRef<HTMLInputElement>(null)
   const videoInput = useRef<HTMLInputElement>(null)
   const noteInput = useRef<HTMLInputElement>(null)
@@ -453,6 +590,35 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
   }
 
   const onFileInput = (kind: 'image' | 'video' | 'ozoonotes') => (event: ChangeEvent<HTMLInputElement>) => { void addFiles(event, kind) }
+  const exportHtml = (project: ProjectDocument) => {
+    const safeTitle = project.title.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+    const safeDescription = project.description.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+    const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+    const attachedItems = project.assets.length ? `<section><h2>Project materials</h2><ul>${project.assets.map((asset) => `<li>${asset.kind === 'link' && asset.url ? `<a href="${escape(asset.url)}">${escape(asset.name)}</a>` : escape(asset.name)} — ${escape(asset.kind)}</li>`).join('')}</ul></section>` : ''
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>body{font:11pt Arial,sans-serif;max-width:800px;margin:50px auto;line-height:1.6;color:#222}h1{margin-bottom:4px}table{border-collapse:collapse}td,th{border:1px solid #999;padding:6px}img{max-width:100%;height:auto}blockquote{border-left:3px solid #777;padding-left:12px;color:#555}@media print{body{margin:18mm auto}}</style></head><body><h1>${safeTitle}</h1><p>${safeDescription}</p><hr>${sanitizeHtml(project.bodyHtml)}${attachedItems}</body></html>`
+  }
+  const downloadWord = () => {
+    if (!activeProject) return
+    const filename = (activeProject.title || 'OzooNotes project').replace(/[\\/:*?"<>|]+/g, '-')
+    const blob = new Blob([exportHtml(activeProject)], { type: 'application/msword;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.doc`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+    setExportOpen(false)
+  }
+  const printPdf = () => {
+    if (!activeProject) return
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) { setStorageError('Allow pop-ups to prepare the PDF export.'); return }
+    printWindow.document.open()
+    printWindow.document.write(exportHtml(activeProject))
+    printWindow.document.close()
+    window.setTimeout(() => { printWindow.focus(); printWindow.print() }, 350)
+    setExportOpen(false)
+  }
   const saveLabel = saveState === 'loading' ? 'Loading projects…' : saveState === 'saving' ? 'Saving on this device…' : saveState === 'error' ? 'Save issue' : 'Saved on this device'
 
   return <main className="project-studio" data-theme={theme}>
@@ -477,7 +643,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
         {activeProject ? <>
           <div className="project-document-head">
             <div className="project-title-fields"><span className="project-eyebrow">PROJECT DOCUMENT</span><input className="project-title-input" aria-label="Project title" value={activeProject.title} onChange={(event) => updateProject(activeProject.id, { title: event.target.value })} placeholder="Give this project a title" /><input className="project-description-input" aria-label="Project summary" value={activeProject.description} onChange={(event) => updateProject(activeProject.id, { description: event.target.value })} placeholder="Add a short summary or goal…" /></div>
-            <button type="button" className="project-delete-button" onClick={() => void deleteProject(activeProject)} title="Delete this project">Delete project</button>
+            <div className="project-document-actions"><button type="button" className="project-export-button" onClick={() => setExportOpen(true)} aria-haspopup="dialog">⇧ Export</button><button type="button" className="project-delete-button" onClick={() => void deleteProject(activeProject)} title="Delete this project">Delete project</button></div>
           </div>
           <RichTextEditor key={activeProject.id} project={activeProject} onChange={(bodyHtml) => updateProject(activeProject.id, { bodyHtml })} />
           <section className="project-attachments">
@@ -497,6 +663,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
         </> : <div className="project-welcome"><div className="project-welcome-mark">✦</div><span className="project-eyebrow">A SPACE FOR YOUR WORK</span><h1>Make room for the whole project.</h1><p>Write the story behind your work, collect media and links, and attach the OzooNotes board that goes with it.</p><button type="button" className="project-primary" onClick={createProject}>＋ Start a project</button><div className="project-welcome-chips"><span>✍️ Notes</span><span>🖼️ Images</span><span>🎬 Videos</span><span>🔗 Links</span><span>📄 OzooNotes boards</span></div></div>}
       </section>
     </div>
+    {exportOpen && activeProject && <div className="project-export-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportOpen(false) }}><section className="project-export-dialog" role="dialog" aria-modal="true" aria-labelledby="project-export-title"><button type="button" className="project-export-close" aria-label="Close export options" onClick={() => setExportOpen(false)}>×</button><span className="project-eyebrow">MAKE A COPY</span><h2 id="project-export-title">Export this project</h2><p>Your project stays saved and editable in OzooNotes. Choose a format only when you want to create a download.</p><button type="button" className="project-export-choice" onClick={printPdf}><span>PDF</span><strong>Print or save as PDF</strong><small>Opens your browser’s print dialog.</small></button><button type="button" className="project-export-choice" onClick={downloadWord}><span>DOC</span><strong>Download Word file</strong><small>Creates a Word-compatible .doc copy.</small></button></section></div>}
     {storageError && <div className="project-toast" role="status"><span>{storageError}</span><button type="button" aria-label="Dismiss" onClick={() => setStorageError('')}>×</button></div>}
   </main>
 }

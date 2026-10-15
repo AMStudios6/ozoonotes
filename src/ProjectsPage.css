@@ -202,3 +202,43 @@
 @media(prefers-reduced-motion:reduce) {
   .project-save-state.saving i,.project-save-state.loading i {animation:none}
 }
+
+/* Word-like Home and Insert ribbons and explicit project export options */
+.project-ribbon-tabs {display:flex;align-items:center;gap:4px;padding:8px 12px 0;border-bottom:1px solid var(--p-line);background:var(--p-panel)}
+.project-ribbon-tabs button {position:relative;min-width:62px;padding:8px 13px;border:0;border-radius:7px 7px 0 0;background:transparent;color:var(--p-muted);font:600 11px inherit;cursor:pointer}
+.project-ribbon-tabs button:hover {color:var(--p-ink);background:var(--p-surface)}
+.project-ribbon-tabs button.active {background:var(--p-surface);color:var(--p-accent)}
+.project-ribbon-tabs button.active::after {position:absolute;right:8px;bottom:-1px;left:8px;height:2px;background:var(--p-accent);content:""}
+.project-format-toolbar {border-radius:0;background:var(--p-surface)}
+.project-ribbon-group.project-insert-group button {height:50px;min-width:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 6px;font-size:16px}
+.project-ribbon-group.project-insert-group button small {max-width:68px;color:var(--p-muted);font-size:8px;line-height:1.05;white-space:normal;text-align:center}
+.project-rich-editor table {width:100%;margin:14px 0;border-collapse:collapse}
+.project-rich-editor th,.project-rich-editor td {min-width:70px;padding:8px;border:1px solid var(--p-line);text-align:left}
+.project-rich-editor th {background:var(--p-surface);font-weight:700}
+.project-rich-editor hr {height:1px;margin:20px 0;border:0;border-top:1px dashed var(--p-line)}
+.project-rich-editor img {max-width:min(100%,720px);border-radius:7px}
+.project-rich-editor > div[style] {max-width:100%}
+.project-document-actions {display:flex;align-items:center;gap:8px}
+.project-export-button {min-height:34px;padding:0 11px;border:1px solid var(--p-line);border-radius:8px;background:var(--p-surface);color:var(--p-ink);font-size:10px;font-weight:700;cursor:pointer}
+.project-export-button:hover {border-color:var(--p-accent);color:var(--p-accent)}
+.project-export-overlay {position:fixed;inset:0;z-index:110;display:grid;place-items:center;padding:18px;background:#090b0dcc;backdrop-filter:blur(5px)}
+.project-export-dialog {position:relative;width:min(430px,100%);padding:26px;border:1px solid var(--p-line);border-radius:17px;background:var(--p-panel);box-shadow:0 22px 70px #0005}
+.project-export-dialog h2 {margin:7px 0;font-size:21px;letter-spacing:-.04em}
+.project-export-dialog > p {margin:0 0 18px;color:var(--p-muted);font-size:11px;line-height:1.6}
+.project-export-close {position:absolute;top:13px;right:13px;width:30px;height:30px;border:1px solid var(--p-line);border-radius:8px;background:var(--p-surface);color:var(--p-ink);font-size:19px;cursor:pointer}
+.project-export-choice {width:100%;display:grid;grid-template-columns:52px 1fr;gap:2px 12px;align-items:center;margin-top:9px;padding:12px;border:1px solid var(--p-line);border-radius:10px;background:var(--p-surface);color:var(--p-ink);text-align:left;cursor:pointer}
+.project-export-choice:hover {border-color:var(--p-accent);background:var(--p-soft)}
+.project-export-choice > span {grid-row:span 2;display:grid;place-items:center;width:48px;height:42px;border-radius:8px;background:var(--p-soft);color:var(--p-accent);font-size:11px;font-weight:850}
+.project-export-choice strong {font-size:11px}
+.project-export-choice small {color:var(--p-muted);font-size:9px}
+@media (max-width:700px) {
+ .project-document-head {align-items:flex-start}
+ .project-document-actions {flex:none;flex-direction:column;align-items:stretch}
+ .project-export-button,.project-delete-button {white-space:nowrap}
+ .project-ribbon-tabs {position:sticky;left:0}
+ .project-format-toolbar {max-width:calc(100vw - 34px)}
+}
+.project-rich-editor hr {break-after:page;page-break-after:always}
+@media print {
+ .project-rich-editor hr {break-after:page;page-break-after:always;border:0}
+}
