@@ -714,3 +714,6 @@
 .landing-footer-github { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-left: auto; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); transition: color .16s ease, border-color .16s ease, background .16s ease; }
 .landing-footer-github svg { display: block; width: 19px; height: 19px; }
 .landing-footer-github:hover, .landing-footer-github:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); outline: none; }
+
+/* Keep the charcoal wordmark legible across the dark color themes. */
+.app.dark .brand-mark { box-sizing: border-box; padding: 4px 7px; border-radius: 9px; background: #fff; }

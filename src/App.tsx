@@ -1035,7 +1035,7 @@ function App() {
     window.addEventListener('ozoo:color-theme-change', syncSimulatorTheme)
     return () => window.removeEventListener('ozoo:color-theme-change', syncSimulatorTheme)
   }, [])
-  const brandLogo = `${import.meta.env.BASE_URL}${dark ? 'ozoo-logo-white-notes.png' : 'ozoo-logo-black-notes.png'}`
+  const brandLogo = `${import.meta.env.BASE_URL}ozoo-logo.png`
   const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>(initialWorkspace.strokesByPage)
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})

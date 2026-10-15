@@ -8,6 +8,8 @@
     <a href="https://amstudios6.github.io/ozoonotes/"><strong>🌐 Open OzooNotes</strong></a>
     &nbsp; · &nbsp;
     <a href="https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml"><strong>💻 Get the Windows app</strong></a>
+    &nbsp; · &nbsp;
+    <a href="https://github.com/AMStudios6/ozoonotes/blob/main/public/ozoo-social-profile.png"><strong>🟣 Download channel profile icon</strong></a>
   </p>
 </div>
 

@@ -242,3 +242,5 @@
 @media print {
  .project-rich-editor hr {break-after:page;page-break-after:always;border:0}
 }
+
+.project-brand-logo { width: 148px; height: 55px; flex:none; object-fit:contain; padding:4px 6px; border-radius:9px; background:#fff; }
