@@ -9,7 +9,7 @@
     &nbsp; · &nbsp;
     <a href="https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml"><strong>💻 Get the Windows app</strong></a>
     &nbsp; · &nbsp;
-    <a href="https://github.com/AMStudios6/ozoonotes/blob/main/public/ozoo-social-profile.png"><strong>🟣 Download channel profile icon</strong></a>
+    <a href="https://www.instagram.com/ozoonotes/"><strong>📸 Follow OzooNotes on Instagram</strong></a>
   </p>
 </div>
 
