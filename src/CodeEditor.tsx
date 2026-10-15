@@ -92,7 +92,7 @@ export default function CodeEditor({ language, value, onChange, label }: {
         editor.setSelectionRange(start + 1, start + 1)
         return
       }
-      if (pairs[event.key]) {
+      if (start === end && pairs[event.key]) {
         event.preventDefault()
         insertion = event.key + pairs[event.key]
         cursor = start + 1
