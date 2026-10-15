@@ -9,6 +9,7 @@ import CppSimulator from './CppSimulator'
 import CodeSimulator from './CodeSimulator'
 import CircuitSimulator from './CircuitSimulator'
 import CalculusSimulator from './CalculusSimulator'
+import ProjectStudio from './ProjectsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
@@ -859,6 +860,7 @@ function App() {
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
   const [simulatorMenuOpen, setSimulatorMenuOpen] = useState(false)
+  const [projectsPageOpen, setProjectsPageOpen] = useState(false)
   const [graphSimulatorOpen, setGraphSimulatorOpen] = useState(false)
   const [circuitSimulatorOpen, setCircuitSimulatorOpen] = useState(false)
   const [calculusSimulatorOpen, setCalculusSimulatorOpen] = useState(false)
@@ -2636,6 +2638,7 @@ function App() {
   if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
   if (codeSimulatorMode === 'cpp') return <CppSimulator onBack={() => setCodeSimulatorMode(null)} />
   if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
+  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onBack={() => setProjectsPageOpen(false)} />
 
   if (boards.length === 0) {
     return (
@@ -2646,6 +2649,7 @@ function App() {
             <nav className="landing-nav" aria-label="Main navigation">
               <a href="#audience-starters">Board starters</a>
               <a href="#landing-tools">Tools</a>
+              <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
