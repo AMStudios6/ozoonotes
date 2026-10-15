@@ -197,7 +197,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedPart(part.id); setSelectedWire(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterFirstPin(null)
   }
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (event.target !== event.currentTarget) return
+    if (event.button !== 0 || event.target !== event.currentTarget) return
     if (wireStart) {
       const point = screenPoint(event)
       setWirePoints((current) => [...current, point])
@@ -214,7 +214,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedWire(null)
   }
   const handlePartPointerDown = (event: ReactPointerEvent<SVGGElement>, part: Part) => {
-    if (placement) return
+    if (event.button !== 0 || placement) return
     if (dmmActive) {
       setSelectedPart(part.id); setSelectedWire(null)
       try {
@@ -299,13 +299,16 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           {circuit.wires.map((wire) => {
             const a = pinLookup[wire.from], b = pinLookup[wire.to]
             if (!a || !b) return null
-            const middle = (a.x + b.x) / 2
+            const middle = wire.points?.[Math.floor((wire.points.length - 1) / 2)] ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+            const path = wirePath(a, b, wire.points)
             return <g key={wire.id} className={'circuit-wire ' + (selectedWire === wire.id ? 'selected' : '')} onClick={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null) }}>
-              <path d={'M' + a.x + ' ' + a.y + ' L' + middle + ' ' + a.y + ' L' + middle + ' ' + b.y + ' L' + b.x + ' ' + b.y} />
-              <path className="wire-hit" d={'M' + a.x + ' ' + a.y + ' L' + middle + ' ' + a.y + ' L' + middle + ' ' + b.y + ' L' + b.x + ' ' + b.y} />
-              {simulation && <text x={middle} y={(a.y + b.y) / 2 - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
+              <path d={path} />
+              <path className="wire-hit" d={path} />
+              {selectedWire === wire.id && (wire.points ?? []).map((point, index) => <circle key={index} className="wire-handle" cx={point.x} cy={point.y} r="6" onPointerDown={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null); setDragPoint({ wireId: wire.id, index }); svgRef.current?.setPointerCapture(event.pointerId) }} />)}
+              {simulation && <text x={middle.x} y={middle.y - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
             </g>
           })}
+          {wireStart && wireCursor && pinLookup[wireStart] && <path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />}
           {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id} onPointerDown={handlePartPointerDown} onPin={handlePin} voltageMap={simulation?.nodeVoltages} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · 5 V example loaded · Double click a switch to toggle it in the inspector</span>}</div>
@@ -319,7 +322,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             {selected.kind === 'switch' ? <button className={'switch-toggle ' + (selected.on ? 'on' : '')} onClick={() => updateSelected({ on: !selected.on })}>{selected.on ? 'Closed' : 'Open'}</button> : <span className="circuit-number"><input type="number" min={selected.kind === 'resistor' ? 0.001 : undefined} step={selected.kind === 'resistor' ? 100 : 0.1} value={selected.value} onChange={(event) => updateSelected({ value: Number(event.target.value) })} /><b>{selected.kind === 'source' ? 'V' : 'Ω'}</b></span>}
           </label>}
           <label className="circuit-field"><span>Reference name</span><input value={selected.label} onChange={(event) => updateSelected({ label: event.target.value })} /></label>
-          <div className="circuit-rotation"><span>Orientation</span><button type="button" title="Rotate counterclockwise 90°" aria-label="Rotate counterclockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 270) % 360 })}>↶</button><output>{selected.rotation ?? 0}°</output><button type="button" title="Rotate clockwise 90°" aria-label="Rotate clockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 90) % 360 })}>↻</button></div>
+          <div className="circuit-rotation"><span>Rotate</span><button type="button" title="Rotate counterclockwise 90°" aria-label="Rotate counterclockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 270) % 360 })}>↶</button><output>{selected.rotation ?? 0}°</output><button type="button" title="Rotate clockwise 90°" aria-label="Rotate clockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 90) % 360 })}>↻</button></div>
+          <div className="circuit-rotation"><span>Mirror</span><button type="button" className={selected.mirrorX ? 'pressed' : ''} title="Mirror left to right" aria-label="Mirror horizontally" onClick={() => updateSelected({ mirrorX: !selected.mirrorX })}>↔</button><button type="button" className={selected.mirrorY ? 'pressed' : ''} title="Mirror top to bottom" aria-label="Mirror vertically" onClick={() => updateSelected({ mirrorY: !selected.mirrorY })}>↕</button></div>
           <button className="circuit-danger" onClick={() => { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selected.id), wires: value.wires.filter((wire) => !wire.from.startsWith(selected.id + ':') && !wire.to.startsWith(selected.id + ':')) })); setSelectedPart(null); setSimulation(null) }}>Delete component</button>
         </> : selectedWire ? <><p className="circuit-empty">Wire selected</p><button className="circuit-danger" onClick={() => { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null); setSimulation(null) }}>Delete wire</button></> : <p className="circuit-empty">Select a part or wire to inspect it. Components, values, and circuit files stay in this browser.</p>}
         <div className="circuit-library-note"><strong>Supported in this simulator</strong><p>DC voltage sources, resistors, switches, and ground. This solver handles resistive DC circuits; it does not model AC, capacitors, inductors, diodes, or transistor behavior yet.</p></div>
