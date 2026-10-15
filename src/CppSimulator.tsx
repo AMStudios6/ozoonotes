@@ -74,15 +74,27 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
     setStatus('Starting compiler…')
     const workerUrl = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'text/javascript' }))
     const worker = new Worker(workerUrl)
-    const deadline = window.setTimeout(() => {
+    let deadline = window.setTimeout(() => {
       worker.terminate()
       URL.revokeObjectURL(workerUrl)
-      setOutput('Run stopped after 10 seconds. Check for an infinite loop and try again.')
-      setStatus('Stopped · time limit')
+      setOutput('The C++ compiler took too long to load. Check your connection and try again.')
+      setStatus('Compiler timeout')
       setRunning(false)
-    }, 10_000)
+    }, 180_000)
     worker.onmessage = (event: MessageEvent) => {
-      if (event.data.type === 'status') setStatus(event.data.value)
+      if (event.data.type === 'status') {
+        setStatus(event.data.value)
+        if (event.data.value === 'Running program…') {
+          window.clearTimeout(deadline)
+          deadline = window.setTimeout(() => {
+            worker.terminate()
+            URL.revokeObjectURL(workerUrl)
+            setOutput('Run stopped after 10 seconds. Check for an infinite loop and try again.')
+            setStatus('Stopped · time limit')
+            setRunning(false)
+          }, 10_000)
+        }
+      }
       if (event.data.type === 'result') {
         window.clearTimeout(deadline)
         worker.terminate()
