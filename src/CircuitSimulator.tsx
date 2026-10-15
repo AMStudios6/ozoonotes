@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import './CircuitSimulator.css'
 
 type Kind = 'source' | 'resistor' | 'switch' | 'ground'
-type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean }
+type MeterMode = 'voltage' | 'current' | 'resistance'
+type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; rotation?: number }
 type Wire = { id: string; from: string; to: string }
 type Pin = { id: string; x: number; y: number; label: string }
 type Reading = { id: string; label: string; voltage: number; current: number; power: number }
@@ -13,11 +14,16 @@ const W = 1120
 const H = 700
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
 const pinId = (part: Part, side: string) => part.id + ':' + side
+const rotatePoint = (part: Part, x: number, y: number) => {
+  const angle = ((part.rotation ?? 0) * Math.PI) / 180
+  return { x: part.x + x * Math.cos(angle) - y * Math.sin(angle), y: part.y + x * Math.sin(angle) + y * Math.cos(angle) }
+}
 const pinsFor = (part: Part): Pin[] => {
-  if (part.kind === 'ground') return [{ id: pinId(part, 'g'), x: part.x, y: part.y - 23, label: 'GND' }]
+  if (part.kind === 'ground') { const point = rotatePoint(part, 0, -23); return [{ id: pinId(part, 'g'), ...point, label: 'GND' }] }
+  const a = rotatePoint(part, -48, 0), b = rotatePoint(part, 48, 0)
   return [
-    { id: pinId(part, 'a'), x: part.x - 48, y: part.y, label: part.kind === 'source' ? '+' : '1' },
-    { id: pinId(part, 'b'), x: part.x + 48, y: part.y, label: part.kind === 'source' ? '−' : '2' },
+    { id: pinId(part, 'a'), ...a, label: part.kind === 'source' ? '+' : '1' },
+    { id: pinId(part, 'b'), ...b, label: part.kind === 'source' ? '−' : '2' },
   ]
 }
 function exampleCircuit(): Circuit {
@@ -123,7 +129,7 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
 }) {
   const pins = symbolPinsText(part)
   const voltageLabel = (pin: Pin) => voltageMap ? fmt(voltageMap[pin.id] ?? 0, 'V') : pin.label
-  return <g transform={'translate(' + part.x + ' ' + part.y + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
+  return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
     {part.kind === 'resistor' && <>
       <line x1="-48" y1="0" x2="-31" y2="0" /><path d="M-31 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L29 0" /><line x1="29" y1="0" x2="48" y2="0" />
     </>}
@@ -149,6 +155,10 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
   const [placement, setPlacement] = useState<Kind | null>(null)
   const [wireStart, setWireStart] = useState<string | null>(null)
+  const [dmmActive, setDmmActive] = useState(false)
+  const [meterMode, setMeterMode] = useState<MeterMode>('voltage')
+  const [meterFirstPin, setMeterFirstPin] = useState<string | null>(null)
+  const [meterReading, setMeterReading] = useState('Select a measurement mode, then probe the circuit.')
   const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
@@ -177,7 +187,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     const label = kind === 'ground' ? 'GND' : labels[kind] + (circuit.parts.filter((part) => part.kind === kind).length + 1)
     const part: Part = { id: makeId(), kind, x: Math.max(64, Math.min(W - 64, x)), y: Math.max(90, Math.min(H - 62, y)), value, label, on: true }
     setCircuit((current) => ({ ...current, parts: [...current.parts, part] }))
-    setSelectedPart(part.id); setSelectedWire(null); setSimulation(null); setPlacement(null)
+    setSelectedPart(part.id); setSelectedWire(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterFirstPin(null)
   }
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.target !== event.currentTarget) return
@@ -191,12 +201,34 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }
   const handlePartPointerDown = (event: ReactPointerEvent<SVGGElement>, part: Part) => {
     if (placement) return
+    if (dmmActive) {
+      setSelectedPart(part.id); setSelectedWire(null)
+      try {
+        const result = solveCircuit(circuit.parts, circuit.wires).readings.find((reading) => reading.id === part.id)
+        if (meterMode === 'current') setMeterReading(result ? part.label + ' current: ' + fmt(result.current, 'A') : 'This component has no current reading.')
+        else if (part.kind === 'resistor') setMeterReading(part.label + ' resistance: ' + fmt(part.value, 'Ω'))
+        else if (part.kind === 'switch') setMeterReading(part.label + ' resistance: ' + (part.on ? '≈ 20 mΩ (closed)' : 'OL (open)'))
+        else setMeterReading('Resistance mode: select a resistor or switch.')
+      } catch (reason) { setMeterReading(reason instanceof Error ? reason.message : 'Run a valid circuit before measuring.') }
+      return
+    }
     const point = screenPoint(event)
     setSelectedPart(part.id); setSelectedWire(null)
     setDrag({ id: part.id, dx: point.x - part.x, dy: point.y - part.y })
     svgRef.current?.setPointerCapture(event.pointerId)
   }
   const handlePin = (pin: Pin) => {
+    if (dmmActive && meterMode === 'voltage') {
+      if (!meterFirstPin) { setMeterFirstPin(pin.id); setMeterReading('Probe A set. Select a second pin for Probe B.'); setError(''); return }
+      if (meterFirstPin === pin.id) { setMeterReading('Choose a different pin for Probe B.'); return }
+      try {
+        const result = solveCircuit(circuit.parts, circuit.wires)
+        const volts = (result.nodeVoltages[pin.id] ?? 0) - (result.nodeVoltages[meterFirstPin] ?? 0)
+        setMeterReading('Voltage B − A: ' + fmt(volts, 'V'))
+        setSimulation(result); setError('')
+      } catch (reason) { setMeterReading(reason instanceof Error ? reason.message : 'Run a valid circuit before measuring.'); setError('') }
+      setMeterFirstPin(null); return
+    }
     setSelectedPart(null); setSelectedWire(null)
     if (!wireStart) { setWireStart(pin.id); setError('Choose another pin to finish the wire.'); return }
     if (wireStart !== pin.id) setCircuit((current) => ({ ...current, wires: [...current.wires, { id: makeId(), from: wireStart, to: pin.id }] }))
@@ -233,6 +265,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           <span className={'palette-symbol symbol-' + kind}>{kind === 'source' ? '＋' : kind === 'resistor' ? '▱' : kind === 'switch' ? '⌁' : '⏚'}</span><span>{partNames[kind]}</span><small>{kind === 'source' ? 'DC voltage' : kind === 'resistor' ? 'Resistance' : kind === 'switch' ? 'Open / close' : 'Reference node'}</small>
         </button>)}
         <div className="circuit-section-title">TOOLS</div>
+        <button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setWireStart(null); setMeterFirstPin(null); setMeterReading('Voltage: select two pins · Current / resistance: select a component.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Digital multimeter</span><small>Measure voltage, current, resistance</small></button>
+        {dmmActive && <div className="circuit-meter-panel"><strong>Meter mode</strong><select aria-label="Multimeter mode" value={meterMode} onChange={(event) => { setMeterMode(event.target.value as MeterMode); setMeterFirstPin(null); setMeterReading('Choose where to probe the circuit.') }}><option value="voltage">Voltage (two pins)</option><option value="current">Current (component)</option><option value="resistance">Resistance (component)</option></select><output>{meterReading}</output></div>}
         <button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Click any two pins to connect them with a wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span><small>Click pin → click pin</small></button>
         <button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New circuit</span><small>Clear this canvas</small></button>
         <div className="circuit-help"><strong>Quick start</strong><p>Select a component, then click the canvas. To wire it, click one terminal dot and then another.</p><p>Try the loaded 5 V source and 1 kΩ resistor. Click <b>Simulate</b> to read voltage and current.</p></div>
