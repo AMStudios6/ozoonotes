@@ -2707,6 +2707,7 @@ function App() {
                 <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
               </div>
             </section>
+            <div className="landing-doodle-strip" aria-hidden="true"><img src={import.meta.env.BASE_URL + 'ozoo-doodle-band.png'} alt="" loading="lazy" decoding="async" /></div>
             <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
               <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : 'TEACHER STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>

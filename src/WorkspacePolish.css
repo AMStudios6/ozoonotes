@@ -682,3 +682,36 @@
     margin-left: auto;
   }
 }
+
+/* Original study-and-creative doodle band on the landing page */
+.landing-doodle-strip {
+  position: relative;
+  width: 100vw;
+  height: clamp(138px, 17vw, 218px);
+  margin: 0 calc(50% - 50vw) 12px;
+  overflow: hidden;
+  border-block: 1px solid color-mix(in srgb, var(--accent) 13%, transparent);
+  background: #fff;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.landing-doodle-strip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 50%;
+}
+@media (max-width: 680px) {
+  .landing-doodle-strip {
+    height: 138px;
+    margin-bottom: 4px;
+  }
+  .landing-doodle-strip img {
+    object-position: center 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-doodle-strip {
+    scroll-behavior: auto;
+  }
+}
