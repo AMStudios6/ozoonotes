@@ -7,6 +7,7 @@ import StudentSpace from './StudentSpace'
 import CppSimulator from './CppSimulator'
 import CodeSimulator from './CodeSimulator'
 import CircuitSimulator from './CircuitSimulator'
+import { installAppContextMenu } from './contextMenu'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -838,6 +839,7 @@ function GraphSimulator({ onBack }: { onBack: () => void }) {
 }
 
 function App() {
+  useEffect(() => installAppContextMenu(), [])
   const localOnly = import.meta.env.VITE_LOCAL_ONLY === 'true'
   const [initialWorkspace] = useState(readSavedWorkspace)
   const [boards, setBoards] = useState<Board[]>(initialWorkspace.boards)
