@@ -86,7 +86,7 @@ export default function CodeEditor({ language, value, onChange, label }: {
       if (selected.length > 0 && pairs[event.key]) {
         event.preventDefault()
         insertion = event.key + selected + pairs[event.key]
-        cursor = start + insertion.length
+        cursor = start + 1 + selected.length
       } else if (start === end && [')', ']', '}', '"', "'", '\x60'].includes(event.key) && after.startsWith(event.key)) {
         event.preventDefault()
         editor.setSelectionRange(start + 1, start + 1)
