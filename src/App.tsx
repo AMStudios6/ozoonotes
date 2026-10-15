@@ -4,6 +4,7 @@ import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
 import folderPng from './assets/folder.png'
 import StudentSpace from './StudentSpace'
+import CppSimulator from './CppSimulator'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -851,6 +852,7 @@ function App() {
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
   const [simulatorMenuOpen, setSimulatorMenuOpen] = useState(false)
   const [graphSimulatorOpen, setGraphSimulatorOpen] = useState(false)
+  const [cppSimulatorOpen, setCppSimulatorOpen] = useState(false)
   const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
@@ -2281,6 +2283,11 @@ function App() {
     setGraphSimulatorOpen(true)
   }
 
+  const launchCppSimulator = () => {
+    setSimulatorMenuOpen(false)
+    setCppSimulatorOpen(true)
+  }
+
   const addGraphToBoard = () => {
     try {
       const ranges = { xMin: Number(graphRange.xMin), xMax: Number(graphRange.xMax), yMin: Number(graphRange.yMin), yMax: Number(graphRange.yMax) }
@@ -2494,6 +2501,7 @@ function App() {
   }
 
   if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
+  if (cppSimulatorOpen) return <CppSimulator onBack={() => setCppSimulatorOpen(false)} />
 
   if (boards.length === 0) {
     return (
@@ -2506,7 +2514,7 @@ function App() {
               <a href="#landing-tools">Tools</a>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
-                {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button></div>}
+                {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCppSimulator}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button></div>}
               </div>
               <a href="#landing-files">Your files</a>
               <a href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">GitHub</a>
