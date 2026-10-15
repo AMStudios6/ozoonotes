@@ -37,17 +37,38 @@ function configureScreenCapture() {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     const trustedOrigin = request.securityOrigin === hostedAppOrigin || request.securityOrigin === 'http://127.0.0.1:5173'
     if (!trustedOrigin || !request.videoRequested || !mainWindow || mainWindow.isDestroyed()) {
+      console.warn('Rejected screen capture request', {
+        securityOrigin: request.securityOrigin,
+        videoRequested: request.videoRequested,
+        windowAvailable: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      })
       callback({})
       return
     }
 
+    const captureWindow = mainWindow
+    const rejectCapture = (message, error) => {
+      console.error(message, error)
+      callback({})
+      if (captureWindow.isDestroyed()) return
+      const detail = error instanceof Error ? error.message : String(error ?? '')
+      void dialog.showMessageBox(captureWindow, {
+        type: 'error',
+        title: 'Screen recording could not start',
+        message,
+        detail: detail || 'Close other screen-sharing apps and try again.',
+        buttons: ['OK'],
+        noLink: true,
+      }).catch((dialogError) => console.error('Could not show screen capture error dialog', dialogError))
+    }
+
     void desktopCapturer.getSources({ types: ['screen', 'window'] }).then(async (sources) => {
       if (sources.length === 0) {
-        callback({})
+        rejectCapture('No screen or window sources are available to record.')
         return
       }
       const buttons = [...sources.map((source) => source.name), 'Cancel']
-      const { response } = await dialog.showMessageBox(mainWindow, {
+      const { response } = await dialog.showMessageBox(captureWindow, {
         type: 'question',
         title: 'Choose what to record',
         message: 'Select a screen or window to record.',
@@ -62,10 +83,9 @@ function configureScreenCapture() {
         return
       }
       callback({ video: sources[response] })
-    }).catch(() => callback({}))
+    }).catch((error) => rejectCapture('OzooNotes could not open the screen source picker.', error))
   })
 }
-
 function createWindow() {
   const developmentUrl = 'http://127.0.0.1:5173'
   mainWindow = new BrowserWindow({
