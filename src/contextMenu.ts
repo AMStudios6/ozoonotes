@@ -5,7 +5,7 @@ const styleId = 'ozoo-custom-context-menu-style'
 
 function isEditable(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof HTMLElement)) return null
-  return target.closest<HTMLElement>('input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"], [role="textbox"]')
+  return target.closest<HTMLElement>('input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')
 }
 
 function visibleButton(selector: string): HTMLButtonElement | null {
@@ -15,9 +15,9 @@ function visibleButton(selector: string): HTMLButtonElement | null {
 
 function findButton(pattern: RegExp): HTMLButtonElement | null {
   return [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-    !button.disabled && button.getClientRects().length && pattern.test([
+    !button.disabled && button.getClientRects().length && [
       button.getAttribute('aria-label'), button.title, button.innerText,
-    ].filter(Boolean).join(' ')),
+    ].some((label) => !!label && pattern.test(label.trim())),
   ) ?? null
 }
 
