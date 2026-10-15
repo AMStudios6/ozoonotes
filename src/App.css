@@ -265,6 +265,13 @@
 .landing-nav {display:flex;align-items:center;justify-content:center;gap:5px;flex:1}
 .landing-nav a {padding:9px 12px;border:1px solid transparent;border-radius:999px;color:var(--muted);font-size:12px;font-weight:650;text-decoration:none;transition:color .15s,background .15s,border-color .15s}
 .landing-nav a:hover,.landing-nav a:focus-visible {border-color:var(--line);background:var(--accent-soft);color:var(--accent);outline:none}
+.landing-simulator-wrap {position:relative;flex:none}
+.landing-simulator-trigger {display:flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.landing-simulator-trigger:hover,.landing-simulator-trigger:focus-visible,.landing-simulator-trigger[aria-expanded="true"] {border-color:var(--line);background:var(--accent-soft);color:var(--accent);outline:none}
+.landing-simulator-menu {position:absolute;z-index:25;top:calc(100% + 8px);left:0;width:218px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 14px 36px #0003}
+.landing-simulator-option {width:100%;display:flex;align-items:center;gap:10px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--accent);text-align:left;cursor:pointer}
+.landing-simulator-option:hover,.landing-simulator-option:focus-visible {background:var(--accent-soft);outline:none}
+.landing-simulator-option>span {display:grid;gap:3px}.landing-simulator-option strong {color:var(--ink);font-size:12px}.landing-simulator-option small {color:var(--muted);font-size:10px}
 .landing-top-actions {gap:10px}
 .landing-page {width:min(1120px,calc(100% - 48px));margin:0 auto;scroll-margin-top:84px}
 .landing-page .landing-hero {min-height:565px;grid-template-columns:minmax(0,1fr) minmax(390px,.95fr);gap:45px;overflow:visible;padding:48px 0 68px;background:radial-gradient(ellipse at 83% 44%,color-mix(in srgb,var(--accent-soft) 72%,transparent),transparent 43%)}
@@ -403,6 +410,8 @@
   .landing-nav {order:3;flex-basis:100%;justify-content:flex-start;gap:5px;margin:0 -2px;padding:0 0 8px;overflow-x:auto;scrollbar-width:none}
   .landing-nav::-webkit-scrollbar {display:none}
   .landing-nav a {flex:none;padding:7px 10px;border-color:var(--line);background:var(--workspace);font-size:11px;white-space:nowrap}
+  .landing-simulator-trigger {padding:7px 10px;border-color:var(--line);background:var(--workspace);font-size:11px;white-space:nowrap}
+  .landing-simulator-menu {position:fixed;top:100px;left:14px}
   .landing-top-actions {margin-left:auto}
   .landing-page {width:calc(100% - 32px)}
   .landing-page .landing-hero {grid-template-columns:1fr;gap:8px;min-height:0;padding:52px 0 48px}
