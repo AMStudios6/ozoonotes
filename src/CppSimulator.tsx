@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './CppSimulator.css'
 import CodeEditor from './CodeEditor'
+import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
 const STARTER = [
   '#include <iostream>',
@@ -67,6 +68,7 @@ function loadLibraries(): { path: string; content: string }[] {
 }
 
 export default function CppSimulator({ onBack }: { onBack: () => void }) {
+  const [colorTheme, setColorTheme] = useSimulatorTheme()
   const [code, setCode] = useState(loadCode)
   const [stdin, setStdin] = useState(loadInput)
   const [output, setOutput] = useState('Run your C++ program to see the output here.')
@@ -182,11 +184,11 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
     setStatus('Ready')
   }
 
-  return <main className="cpp-workspace">
+  return <main className="cpp-workspace" data-theme={colorTheme}>
     <header className="cpp-topbar">
       <button className="cpp-back" onClick={onBack} aria-label="Back to OzooNotes">← <span>Simulator</span></button>
       <div className="cpp-brand"><span className="cpp-brand-mark">&lt;/&gt;</span><span><strong>Code Studio</strong><small>C++ playground</small></span></div>
-      <div className="cpp-top-actions"><span className="cpp-language">C++20</span><button className="cpp-reset" onClick={resetCode}>Reset code</button><button className="cpp-run" onClick={runCode} disabled={running}><span>{running ? '◌' : '▶'}</span>{running ? 'Running…' : 'Run code'}</button></div>
+      <div className="cpp-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><span className="cpp-language">C++20</span><button className="cpp-reset" onClick={resetCode}>Reset code</button><button className="cpp-run" onClick={runCode} disabled={running}><span>{running ? '◌' : '▶'}</span>{running ? 'Running…' : 'Run code'}</button></div>
     </header>
     <section className="cpp-heading"><div><p>SIMULATOR / C++</p><h1>Write. Run. Understand.</h1><span>Your code is compiled and run in this browser. Drafts save automatically on this device.</span></div><span className="cpp-local-badge"><i /> Local execution</span></section>
     <section className="cpp-panels">
