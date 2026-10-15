@@ -1032,8 +1032,6 @@ function App() {
   const activePan = useRef<{ startClient: Point; startCamera: Point; startOffset: Point } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const brushToolRef = useRef<HTMLButtonElement>(null)
-  const toolHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const toolHoldTriggered = useRef(false)
   const lastDrawingTool = useRef<Tool>('Brush')
   const settingsToggleRef = useRef<HTMLButtonElement>(null)
   const settingsPanelRef = useRef<HTMLElement>(null)
@@ -1053,25 +1051,15 @@ function App() {
   useEffect(() => {
     if (drawingToolGroup.includes(activeTool)) lastDrawingTool.current = activeTool
   }, [activeTool])
-  useEffect(() => () => { if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current) }, [])
-  const startDrawingToolHold = () => {
-    toolHoldTriggered.current = false
-    if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current)
-    toolHoldTimer.current = setTimeout(() => {
-      toolHoldTriggered.current = true
-      setDrawingToolsOpen(true)
-    }, 1000)
-  }
-  const cancelDrawingToolHold = () => {
-    if (toolHoldTimer.current) clearTimeout(toolHoldTimer.current)
-    toolHoldTimer.current = null
-  }
   const selectLastDrawingTool = () => {
-    cancelDrawingToolHold()
-    if (toolHoldTriggered.current) { toolHoldTriggered.current = false; return }
     setActiveTool(lastDrawingTool.current)
     setShowSettingsPanel(true)
     setDrawingToolsOpen(false)
+  }
+  const toggleDrawingToolMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDrawingToolsOpen((open) => !open)
   }
 
   const refreshHistoryState = (key: string) => {
@@ -2820,7 +2808,7 @@ function App() {
             <button type="button" className="tool-button image-import" title="Import image" aria-label="Import image" onClick={() => imageInputRef.current?.click()}><span><Icon name="image" /></span></button>
             <button type="button" className="tool-button graph-tool" title="Add graph" aria-label="Add graph" onClick={() => { setGraphError(''); setGraphOpen(true) }}><span><Icon name="graph" /></span></button>
             <div className="drawing-tool-group">
-              <button type="button" ref={brushToolRef} className={'tool-button drawing-tool-toggle ' + (drawingToolGroup.includes(activeTool) ? 'active' : '')} title="Tap to use the last drawing tool; hold for tool options" aria-label="Select the last drawing tool; hold for drawing tools" aria-expanded={drawingToolsOpen} aria-controls="drawing-tool-menu" onPointerDown={startDrawingToolHold} onPointerUp={cancelDrawingToolHold} onPointerLeave={cancelDrawingToolHold} onPointerCancel={cancelDrawingToolHold} onContextMenu={(event) => event.preventDefault()} onClick={selectLastDrawingTool}><span><Icon name={toolIcons[drawingToolGroup.includes(activeTool) ? activeTool : 'Brush']} /></span><small><Icon name="chevronDown" size={11} /></small></button>
+              <button type="button" ref={brushToolRef} className={'tool-button drawing-tool-toggle ' + (drawingToolGroup.includes(activeTool) ? 'active' : '')} title="Click to use the last drawing tool; double-click for tool options" aria-label="Select the last drawing tool; double-click for drawing tools" aria-expanded={drawingToolsOpen} aria-controls="drawing-tool-menu" onContextMenu={(event) => event.preventDefault()} onClick={selectLastDrawingTool} onDoubleClick={toggleDrawingToolMenu}><span><Icon name={toolIcons[drawingToolGroup.includes(activeTool) ? activeTool : 'Brush']} /></span><small><Icon name="chevronDown" size={11} /></small></button>
               {drawingToolsOpen && <div id="drawing-tool-menu" className="drawing-tool-menu" role="group" aria-label="Drawing tools">{drawingToolGroup.map((tool) => <button key={tool} type="button" className={'drawing-tool-option ' + (activeTool === tool ? 'active' : '')} aria-pressed={activeTool === tool} onClick={() => { setActiveTool(tool); lastDrawingTool.current = tool; setDrawingToolsOpen(false); if (inkTools.includes(tool)) setShowSettingsPanel(true) }}><span><Icon name={toolIcons[tool]} size={18} /></span><span>{tool}</span></button>)}</div>}
             </div>
             {(['Hand', 'Select', 'Shape', 'Text', 'Line'] as Tool[]).map((tool) => <button key={tool} type="button" title={tool} aria-label={tool} className={'tool-button ' + (activeTool === tool ? 'active' : '')} onClick={() => { setDrawingToolsOpen(false); setActiveTool(tool) }}><span><Icon name={toolIcons[tool]} /></span></button>)}
