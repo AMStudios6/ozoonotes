@@ -219,6 +219,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     if (event.button !== 0 || placement) return
     if (dmmActive) {
       setSelectedPart(part.id); setSelectedWire(null)
+      if (meterMode === 'voltage') { setMeterReading('Voltage mode: select two terminal pins.'); return }
       try {
         const result = solveCircuit(circuit.parts, circuit.wires).readings.find((reading) => reading.id === part.id)
         if (meterMode === 'current') setMeterReading(result ? part.label + ' current: ' + fmt(result.current, 'A') : 'This component has no current reading.')
@@ -234,6 +235,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     svgRef.current?.setPointerCapture(event.pointerId)
   }
   const handlePin = (pin: Pin) => {
+    if (dmmActive && meterMode !== 'voltage') { setMeterReading('Click a component body to measure ' + (meterMode === 'current' ? 'current.' : 'resistance.')); return }
     if (dmmActive && meterMode === 'voltage') {
       if (!meterFirstPin) { setMeterFirstPin(pin.id); setMeterReading('Probe A set. Select a second pin for Probe B.'); setError(''); return }
       if (meterFirstPin === pin.id) { setMeterReading('Choose a different pin for Probe B.'); return }
