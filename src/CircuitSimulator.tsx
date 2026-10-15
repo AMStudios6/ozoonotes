@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import './CircuitSimulator.css'
+import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
 type Kind = 'source' | 'resistor' | 'switch' | 'ground'
 type MeterMode = 'voltage' | 'current' | 'resistance'
@@ -155,6 +156,7 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
 }
 export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [circuit, setCircuit] = useState<Circuit>(loadCircuit)
+  const [colorTheme, setColorTheme] = useSimulatorTheme()
   const [selectedPart, setSelectedPart] = useState<string | null>(null)
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
   const [placement, setPlacement] = useState<Kind | null>(null)
@@ -265,11 +267,11 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' })
     const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'ozoo-circuit.svg'; link.click(); URL.revokeObjectURL(url)
   }
-  return <main className="circuit-workspace">
+  return <main className="circuit-workspace" data-theme={colorTheme}>
     <header className="circuit-topbar">
       <button className="circuit-back" onClick={onBack}>← <span>Simulator</span></button>
       <div className="circuit-brand"><span className="circuit-brand-icon">Ω</span><div><strong>Circuit Studio</strong><small>Electronics simulator</small></div></div>
-      <div className="circuit-top-actions"><button onClick={() => { setCircuit(exampleCircuit()); setSimulation(null); setError('') }}>Load example</button><button aria-label="Delete selected" title="Delete selected component or wire" disabled={!selectedPart && !selectedWire} onClick={() => { if (selectedWire) { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null) } else if (selectedPart) { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selectedPart), wires: value.wires.filter((wire) => !wire.from.startsWith(selectedPart + ':') && !wire.to.startsWith(selectedPart + ':')) })); setSelectedPart(null) } setSimulation(null) }}>Delete</button><button onClick={downloadSvg}>Export SVG</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
+      <div className="circuit-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><button onClick={() => { setCircuit(exampleCircuit()); setSimulation(null); setError('') }}>Load example</button><button aria-label="Delete selected" title="Delete selected component or wire" disabled={!selectedPart && !selectedWire} onClick={() => { if (selectedWire) { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null) } else if (selectedPart) { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selectedPart), wires: value.wires.filter((wire) => !wire.from.startsWith(selectedPart + ':') && !wire.to.startsWith(selectedPart + ':')) })); setSelectedPart(null) } setSimulation(null) }}>Delete</button><button onClick={downloadSvg}>Export SVG</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
     </header>
     <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Place components, wire the pins, and solve a basic DC operating point.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
     <section className="circuit-layout">
