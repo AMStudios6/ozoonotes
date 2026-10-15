@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent, type CSSProperties } from 'react'
 import './App.css'
 import './WorkspacePolish.css'
 import notesPng from './assets/notes.png'
@@ -1056,7 +1056,7 @@ function App() {
     setShowSettingsPanel(true)
     setDrawingToolsOpen(false)
   }
-  const toggleDrawingToolMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const toggleDrawingToolMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
     setDrawingToolsOpen((open) => !open)
