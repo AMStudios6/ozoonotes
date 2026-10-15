@@ -180,9 +180,14 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedPart(part.id); setSelectedWire(null); setSimulation(null); setPlacement(null)
   }
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (event.target !== event.currentTarget || !placement) return
-    const point = screenPoint(event)
-    addPartAt(placement, point.x, point.y)
+    if (event.target !== event.currentTarget) return
+    if (placement) {
+      const point = screenPoint(event)
+      addPartAt(placement, point.x, point.y)
+      return
+    }
+    setSelectedPart(null)
+    setSelectedWire(null)
   }
   const handlePartPointerDown = (event: ReactPointerEvent<SVGGElement>, part: Part) => {
     if (placement) return
@@ -238,7 +243,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           if (!drag) return
           const point = screenPoint(event)
           setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === drag.id ? { ...part, x: Math.max(55, Math.min(W - 55, point.x - drag.dx)), y: Math.max(70, Math.min(H - 45, point.y - drag.dy)) } : part) }))
-        }} onPointerUp={(event) => { if (drag) { setDrag(null); setSimulation(null); try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {} } }} onClick={(event) => { if (event.target === event.currentTarget) { setSelectedPart(null); setSelectedWire(null) } }}>
+        }} onPointerUp={(event) => { if (drag) { setDrag(null); setSimulation(null); try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {} } }}>
           <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern></defs>
           <rect width={W} height={H} fill="url(#circuit-grid)" />
           {circuit.wires.map((wire) => {
