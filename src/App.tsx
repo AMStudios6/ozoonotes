@@ -2269,9 +2269,6 @@ function App() {
     link.cli  const launchGraphSimulator = () => {
     setSimulatorMenuOpen(false)
     setGraphSimulatorOpen(true)
-  }  setShowScale(false)
-    setGraphError('')
-    setGraphOpen(true)
   }
 
   const addGraphToBoard = () => {
