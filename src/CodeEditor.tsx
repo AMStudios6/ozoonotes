@@ -122,3 +122,4 @@ export default function CodeEditor({ language, value, onChange, label }: {
       }}
     />
   </div>
+}
