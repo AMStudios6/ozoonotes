@@ -249,25 +249,19 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
       const base = file.path.split('/').pop() || file.path
       return text.split(file.path).join(file.content).split(base).join(file.content)
     }, value)
-    const safeTagContent = (value: string, tag: string) => value.replace(new RegExp('</' + tag, 'gi'), '<\\\\/' + tag)
+    const safeTagContent = (value: string, tag: string) => value.replaceAll('</' + tag, '<' + String.fromCharCode(92) + '/' + tag)
     const importedStyles = textFiles.filter((file) => file.path.toLowerCase().endsWith('.css') && file.content !== css).map((file) => '<style>' + safeTagContent(replaceAsset(file.content), 'style') + '</style>').join('')
-    const importedScripts = textFiles.filter((file) => (file.path.toLowerCase().endsWith('.js') || file.path.toLowerCase().endsWith('.mjs')) && file.content !== javascript).map((file) => '<script>' + safeTagContent(replaceAsset(file.content), 'script') + '<\\/script>').join('')
+    const importedScripts = textFiles.filter((file) => (file.path.toLowerCase().endsWith('.js') || file.path.toLowerCase().endsWith('.mjs')) && file.content !== javascript).map((file) => '<script>' + safeTagContent(replaceAsset(file.content), 'script') + '<' + String.fromCharCode(92) + '/script>').join('')
     let documentText = replaceAsset(html)
-    documentText = documentText.replace(/<script\\b([^>]*?)src=(['"])([^'"]+)\\2([^>]*)>\\s*<\\/script>/gi, (match, _before, _quote, src) => {
-      const requested = String(src).replace(/^\\.\\//, '')
-      const local = textFiles.find((file) => file.path === requested || file.path.split('/').pop() === requested.split('/').pop())
-      return local ? '<script>' + safeTagContent(replaceAsset(local.content), 'script') + '<\\/script>' : match
-    })
-    documentText = documentText.replace(/<link\\b([^>]*?)href=(['"])([^'"]+\\.css)(?:\\?[^'"]*)?\\2([^>]*)>/gi, (match, _before, _quote, href) => {
-      const requested = String(href).replace(/^\\.\\//, '')
-      const local = textFiles.find((file) => /\\.css$/i.test(file.path) && (file.path === requested || file.path.split('/').pop() === requested.split('/').pop()))
-      return local ? '<style>' + safeTagContent(replaceAsset(local.content), 'style') + '</style>' : match
-    })
     const style = '<style>' + importedStyles + safeTagContent(replaceAsset(css), 'style') + '</style>'
-    const script = '<script>' + importedScripts + safeTagContent(replaceAsset(javascript), 'script') + '<\\/script>'
-    if (/<head[^>]*>/i.test(documentText)) documentText = documentText.replace(/<head([^>]*)>/i, '<head$1>' + style)
+    const lowerDocument = documentText.toLowerCase()
+    const headStart = lowerDocument.indexOf('<head')
+    const headEnd = headStart >= 0 ? documentText.indexOf('>', headStart) : -1
+    if (headEnd >= 0) documentText = documentText.slice(0, headEnd + 1) + style + documentText.slice(headEnd + 1)
     else documentText = style + documentText
-    if (/<\\/body>/i.test(documentText)) documentText = documentText.replace(/<\\/body>/i, script + '</body>')
+    const script = '<script>' + importedScripts + safeTagContent(replaceAsset(javascript), 'script') + '<' + String.fromCharCode(92) + '/script>'
+    const bodyEnd = documentText.toLowerCase().lastIndexOf('</body>')
+    if (bodyEnd >= 0) documentText = documentText.slice(0, bodyEnd) + script + documentText.slice(bodyEnd)
     else documentText += script
     return documentText
   }, [html, css, javascript, files, previewKey])
