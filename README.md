@@ -55,6 +55,19 @@ Students can save their study field, education level, and degree name in their b
 - Use **Active** and **Favorites**, plus the PARA views for **Projects**, **Areas**, **Resources**, and **Archives**.
 - Jot quick thoughts in a scratchpad, then move useful ideas into a notebook.
 
+## 📁 Give every project its own workspace
+
+Open **Projects** from the home-page header to create a dedicated space for each project. Keep research, drafts, plans, and progress together in an editable project document.
+
+- **Format your writing:** Use font and size controls, text color and highlighting, headings, lists, alignment, indentation, and line spacing.
+- **Build out the page:** Insert tables, pictures, clipboard screenshots, shapes and callouts, process lists, simple charts, comments, text boxes, dates, headers, footers, and more.
+- **Collect project materials:** Attach images, videos, web links, and OzooNotes board files to the project.
+- **Keep projects on this device:** Project content and uploaded files save in the browser profile you are using.
+
+Export is optional. When you choose **Export**, select **Print or save as PDF** to open the browser’s print dialog, or choose a Word-compatible **.doc** download. OzooNotes does not create an export until you choose a format.
+
+Projects and simulator workspaces stay in their own pages. Their URL keeps the current workspace on refresh, so you can reload and return to the page you were using.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/AMStudios6/ozoonotes/main/public/ozoo-favicon.png" alt="OzooNotes mascot" width="76" />
   <br />
