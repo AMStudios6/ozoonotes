@@ -716,6 +716,7 @@ function App() {
   const [activeBoard, setActiveBoard] = useState(initialWorkspace.activeBoard)
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
+  const [simulatorMenuOpen, setSimulatorMenuOpen] = useState(false)
   const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
@@ -2141,6 +2142,29 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const launchGraphSimulator = () => {
+    setSimulatorMenuOpen(false)
+    const takenNames = new Set([...boards.map((board) => board.name), ...recentFiles].map(normalizeBoardName))
+    let name = 'Graph Simulator'
+    let suffix = 2
+    while (takenNames.has(normalizeBoardName(name))) name = `Graph Simulator ${suffix++}`
+    const boardIndex = boards.length
+    setStrokesByPage((current) => ({ ...current, [`${boardIndex}:1`]: [] }))
+    setBoards((current) => [...current, { name, pages: 1, pageSize: 'A4', orientation: 'portrait', pageOrientations: ['portrait'], pageBackground: 'auto', notebook: 'Inbox', tags: [] }])
+    setActiveBoard(boardIndex)
+    setPage(1)
+    setIndexView(false)
+    setIndexPage(1)
+    setPageSize('A4')
+    setInfinitePage(false)
+    setOrientation('portrait')
+    setPageBackground('auto')
+    setGridEnabled(false)
+    setShowScale(false)
+    setGraphError('')
+    setGraphOpen(true)
+  }
+
   const addGraphToBoard = () => {
     try {
       const ranges = { xMin: Number(graphRange.xMin), xMax: Number(graphRange.xMax), yMin: Number(graphRange.yMin), yMax: Number(graphRange.yMax) }
@@ -2362,6 +2386,10 @@ function App() {
             <nav className="landing-nav" aria-label="Main navigation">
               <a href="#audience-starters">Board starters</a>
               <a href="#landing-tools">Tools</a>
+              <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
+                <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
+                {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button></div>}
+              </div>
               <a href="#landing-files">Your files</a>
               <a href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">GitHub</a>
             </nav>
