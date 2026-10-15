@@ -860,11 +860,14 @@ function App() {
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
   const [simulatorMenuOpen, setSimulatorMenuOpen] = useState(false)
-  const [projectsPageOpen, setProjectsPageOpen] = useState(false)
-  const [graphSimulatorOpen, setGraphSimulatorOpen] = useState(false)
-  const [circuitSimulatorOpen, setCircuitSimulatorOpen] = useState(false)
-  const [calculusSimulatorOpen, setCalculusSimulatorOpen] = useState(false)
-  const [codeSimulatorMode, setCodeSimulatorMode] = useState<'cpp' | 'python' | 'java' | 'web' | null>(null)
+  const [projectsPageOpen, setProjectsPageOpen] = useState(() => new URLSearchParams(window.location.search).get('workspace') === 'projects')
+  const [graphSimulatorOpen, setGraphSimulatorOpen] = useState(() => new URLSearchParams(window.location.search).get('simulator') === 'graph')
+  const [circuitSimulatorOpen, setCircuitSimulatorOpen] = useState(() => new URLSearchParams(window.location.search).get('simulator') === 'electronics')
+  const [calculusSimulatorOpen, setCalculusSimulatorOpen] = useState(() => new URLSearchParams(window.location.search).get('simulator') === 'calculus')
+  const [codeSimulatorMode, setCodeSimulatorMode] = useState<'cpp' | 'python' | 'java' | 'web' | null>(() => {
+    const mode = new URLSearchParams(window.location.search).get('simulator')
+    return mode === 'cpp' || mode === 'python' || mode === 'java' || mode === 'web' ? mode : null
+  })
   const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
@@ -1015,6 +1018,17 @@ function App() {
     return colorThemes.some((theme) => theme.id === saved) ? saved! : 'forest'
   })
   const dark = colorThemes.find((theme) => theme.id === colorTheme)?.dark ?? true
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('workspace')
+    url.searchParams.delete('simulator')
+    if (projectsPageOpen) url.searchParams.set('workspace', 'projects')
+    else if (graphSimulatorOpen) url.searchParams.set('simulator', 'graph')
+    else if (circuitSimulatorOpen) url.searchParams.set('simulator', 'electronics')
+    else if (calculusSimulatorOpen) url.searchParams.set('simulator', 'calculus')
+    else if (codeSimulatorMode) url.searchParams.set('simulator', codeSimulatorMode)
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [projectsPageOpen, graphSimulatorOpen, circuitSimulatorOpen, calculusSimulatorOpen, codeSimulatorMode])
   useEffect(() => { localStorage.setItem('ozoo:color-theme', colorTheme) }, [colorTheme])
   useEffect(() => {
     const syncSimulatorTheme = (event: Event) => { const next = (event as CustomEvent<ColorTheme>).detail; if (colorThemes.some((theme) => theme.id === next)) setColorTheme(next) }
