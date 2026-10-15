@@ -86,15 +86,18 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
     const next = new Map(libraries.map((file) => [file.path, file]))
     let skipped = 0
     let mainSourceTaken = false
-    const selectedFiles = Array.from(files).sort((a, b) => Number(/(^|\\/)main\\.(?:cpp|cc|cxx)$/i.test(b.name)) - Number(/(^|\\/)main\\.(?:cpp|cc|cxx)$/i.test(a.name)))
+    const sourceExtensions = ['.cpp', '.cc', '.cxx']
+    const allowedExtensions = [...sourceExtensions, '.h', '.hh', '.hpp', '.hxx', '.inc', '.tpp', '.ipp']
+    const selectedFiles = Array.from(files).sort((a, b) => Number(b.name.toLowerCase().startsWith('main.')) - Number(a.name.toLowerCase().startsWith('main.')))
     for (const file of selectedFiles) {
-      if (!/\\.(?:h|hh|hpp|hxx|inc|tpp|ipp|cpp|cc|cxx)$/i.test(file.name)) { skipped++; continue }
+      const lowerName = file.name.toLowerCase()
+      if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) { skipped++; continue }
       const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
       const path = relative.replace(/\\\\/g, '/').split('/').filter((part) => part && part !== '.' && part !== '..').join('/')
       if (!path) { skipped++; continue }
       if (file.size > 2_000_000) { skipped++; continue }
       const content = await file.text()
-      if (/\\.(?:cpp|cc|cxx)$/i.test(file.name) && !mainSourceTaken) { setCode(content); mainSourceTaken = true; next.delete(path); continue }
+      if (sourceExtensions.some((extension) => lowerName.endsWith(extension)) && !mainSourceTaken) { setCode(content); mainSourceTaken = true; next.delete(path); continue }
       next.set(path, { path, content })
     }
     const totalBytes = Array.from(next.values()).reduce((sum, file) => sum + new Blob([file.content]).size, 0)
