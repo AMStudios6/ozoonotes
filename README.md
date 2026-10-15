@@ -2,29 +2,37 @@
 
 ![OzooNotes logo](public/ozoo-logo.png)
 
-**A little space for big ideas.** OzooNotes is a visual notes workspace where writing, sketches, code, diagrams, and plans can live together on the same page.
+**A little space for big ideas.** OzooNotes brings handwriting, typed notes, sketches, images, code, diagrams, and plans together on a flexible digital page.
 
-[Open OzooNotes on the web](https://AMStudios6.github.io/ozoonotes/) · [Get the latest Windows app](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml)
+[Open OzooNotes](https://amstudios6.github.io/ozoonotes/) · [Download for Windows](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml)
 
 ![OzooNotes website preview](public/ozoonotes-landing.png)
 
-## Download the Windows app
+## A workspace for learning and teaching
 
-[Download the current Windows build](https://github.com/AMStudios6/ozoonotes/actions/runs/38615326450). On the build page, choose **OzooNotes-Windows** under **Artifacts** to download the installer and portable app.
+Some ideas make more sense when the explanation, example, and sketch are together. Use a notebook for class notes, a project plan, a mood board, a lesson, or whatever you need to remember.
 
-For future updates, use the [latest Windows build page](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml) and open its newest successful run. The desktop app loads the live website when it opens, so changes published to OzooNotes appear in the app on its next launch. The desktop app needs an internet connection.
+- **Write and sketch naturally:** Use brush and pen tools, shapes, text, images, layers, and multiple pages on A-series, Letter, Legal, Tabloid, or infinite boards.
+- **Start with a useful layout:** Student and teacher starters include coding notes, Cornell notes, study guides, concept maps, lesson plans, worksheets, planners, and more.
+- **Keep notes findable:** Organize boards in notebooks, add tags, and filter with quick views such as Active and Favorites or PARA categories.
+- **Make it yours:** Choose a color theme and page orientation, then export selected pages or whole boards as PDF, PNG, or SVG.
+- **Keep a local copy:** Boards save in the browser on your device. Download an OzooNotes file when you want a portable backup or to move work elsewhere.
 
-## Why OzooNotes?
+## Built-in simulators
 
-Some ideas are easier to understand when the explanation and example are visible together. OzooNotes gives you a flexible, paper-like space for learning, teaching, planning, and capturing ideas without having to force everything into plain text.
+Open the **Simulator** menu from the main page to use focused workspaces alongside your notes:
 
-- **Learn visually:** put handwriting, typed notes, code examples, shapes, images, graphs, and diagrams side by side.
-- **Get started quickly:** choose a student or teacher workspace and use a starter such as Cornell notes, coding notes, a lesson plan, worksheet, concept map, or mood board.
-- **Keep ideas organized:** group boards into notebooks and add tags to make notes, projects, links, and plans easier to find.
-- **Shape pages your way:** use multiple pages, common paper sizes, portrait or landscape orientation, and a choice of themes.
-- **Take your work with you:** export pages as PDF, PNG, or SVG, or save a portable OzooNotes file.
+- **Graphing:** Plot formulas on a zoomable coordinate plane and keep multiple formulas together.
+- **Coding:** Write and run C++, Python, and Java, or work with HTML, CSS, and JavaScript in a combined web preview.
+- **Electronics:** Arrange components, route wires, simulate supported DC circuits, and measure with a digital multimeter.
+- **Calculus:** Enter differentiation or integration problems and view worked results.
 
-## Saving your work
+## Helpful while you work
 
-OzooNotes saves boards in the browser storage on the device you are using. Browser data is not a backup, so download an OzooNotes file to keep a copy or move your work to another device. The Windows app keeps its saved boards in its own app storage.
+The note’s right-click menu and three-line menu both open the keyboard-shortcuts guide. Undo, redo, selection, copy, cut, paste, and delete shortcuts are listed there, alongside the toolbar and navigation controls.
 
+## Windows app
+
+The Windows app opens OzooNotes in its own application window and follows the live website updates. Find the newest successful Windows build on the [Windows build page](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml), then download the **OzooNotes-Windows** artifact from that run.
+
+Your boards are stored in the browser or app profile on the device you use. Browser storage is not a backup, so download an OzooNotes file to keep a separate copy.
