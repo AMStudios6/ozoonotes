@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './CppSimulator.css'
+import CodeEditor from './CodeEditor'
 
 const STARTER = [
   '#include <iostream>',
@@ -201,7 +202,7 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
         {libraries.length > 0 && <div className="cpp-library-list" aria-label="Imported C++ project files">{libraries.map((file) => <span key={file.path} title={file.path}>{file.path}<button type="button" aria-label={'Remove ' + file.path} onClick={() => removeLibrary(file.path)}>×</button></span>)}</div>}
         <div className="cpp-editor">
           <div className="cpp-gutter" aria-hidden="true">{code.split('\n').map((_, i) => <span key={i}>{i + 1}</span>)}</div>
-          <textarea value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="C++ source code editor" />
+          <CodeEditor language="cpp" value={code} onChange={setCode} label="C++ source code editor" />
         </div>
         <footer className="cpp-editor-foot"><span>Ctrl + Enter to run</span><span>{code.length} characters</span></footer>
       </article>
