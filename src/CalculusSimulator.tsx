@@ -221,11 +221,9 @@ function format(value: Expr, parentPrecedence = 0): string {
   const precedence = value.op === '+' || value.op === '-' ? 1 : value.op === '*' || value.op === '/' ? 2 : 3
   let text: string
   if (value.op === '*') {
-    const leftNegative = value.left.type === 'unary'
-    const rightNegative = value.right.type === 'unary'
-    if (leftNegative && rightNegative) text = format(value.left.value, precedence) + ' * ' + format(value.right.value, precedence)
-    else if (leftNegative) text = '-' + format(value.left.value, precedence) + ' * ' + format(value.right, precedence)
-    else if (rightNegative) text = '-' + format(value.left, precedence) + ' * ' + format(value.right.value, precedence)
+    if (value.left.type === 'unary' && value.right.type === 'unary') text = format(value.left.value, precedence) + ' * ' + format(value.right.value, precedence)
+    else if (value.left.type === 'unary') text = '-' + format(value.left.value, precedence) + ' * ' + format(value.right, precedence)
+    else if (value.right.type === 'unary') text = '-' + format(value.left, precedence) + ' * ' + format(value.right.value, precedence)
     else text = format(value.left, precedence) + ' * ' + format(value.right, precedence)
   } else {
     const operator = value.op === '^' ? '^' : ' ' + value.op + ' '
