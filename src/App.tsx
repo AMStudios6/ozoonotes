@@ -2535,7 +2535,7 @@ function App() {
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
         <section className="landing-window">
           <header className="landing-topbar">
-            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /><img className="landing-mascot" src={`${import.meta.env.BASE_URL}mascot-logo.svg`} alt="" /></a>
+            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
             <nav className="landing-nav" aria-label="Main navigation">
               <a href="#audience-starters">Board starters</a>
               <a href="#landing-tools">Tools</a>
