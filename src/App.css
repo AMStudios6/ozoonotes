@@ -709,3 +709,8 @@
 .graph-workspace[data-theme="forest"] .graph-formula-input:focus,.graph-workspace[data-theme="purple"] .graph-formula-input:focus,.graph-workspace[data-theme="red-black"] .graph-formula-input:focus,.graph-workspace[data-theme="doom"] .graph-formula-input:focus,.graph-workspace[data-theme="white-purple"] .graph-formula-input:focus,.graph-workspace[data-theme="red-white"] .graph-formula-input:focus{border-color:var(--graph-accent);box-shadow:0 0 0 1px var(--graph-accent)}
 .graph-workspace[data-theme="forest"] .simulator-theme-picker select,.graph-workspace[data-theme="purple"] .simulator-theme-picker select,.graph-workspace[data-theme="red-black"] .simulator-theme-picker select,.graph-workspace[data-theme="doom"] .simulator-theme-picker select,.graph-workspace[data-theme="white-purple"] .simulator-theme-picker select,.graph-workspace[data-theme="red-white"] .simulator-theme-picker select{max-width:135px}
 @media(max-width:700px){.graph-workspace .simulator-theme-picker select{max-width:100px;height:30px;padding:0 4px;font-size:9px}}
+
+/* Footer GitHub icon link */
+.landing-footer-github { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-left: auto; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); transition: color .16s ease, border-color .16s ease, background .16s ease; }
+.landing-footer-github svg { display: block; width: 19px; height: 19px; }
+.landing-footer-github:hover, .landing-footer-github:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); outline: none; }
