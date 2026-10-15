@@ -115,7 +115,7 @@ const EXEC_WORKER = [
 
 export default function CodeSimulator({ initialLanguage = 'python', onBack }: { initialLanguage?: CodeMode; onBack: () => void }) {
   const [colorTheme, setColorTheme] = useSimulatorTheme()
-  const [language, setLanguage = useState<CodeMode>(initialLanguage)
+  const [language, setLanguage] = useState<CodeMode>(initialLanguage)
   const [python, setPython] = useState(() => readCode('ozoo:python-code', PY_START))
   const [java, setJava] = useState(() => readCode('ozoo:java-code', JAVA_START))
   const [html, setHtml] = useState(() => readCode('ozoo:web-html', HTML_START))
