@@ -101,7 +101,28 @@
 .project-delete-button {margin-top:16px;padding:7px 9px;border:1px solid var(--p-line);border-radius:7px;background:var(--p-panel);color:var(--p-muted);font-size:10px;cursor:pointer}
 .project-delete-button:hover {border-color:#e65353;color:#e65353}
 .project-editor-wrap {max-width:1000px;margin:0 auto;border:1px solid var(--p-line);border-radius:13px;background:var(--p-panel);box-shadow:0 10px 32px #0b160d08}
-.project-format-toolbar {min-height:43px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--p-line);border-radius:13px 13px 0 0;background:var(--p-surface)}
+.project-format-toolbar {min-height:62px;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:6px 10px;border-bottom:1px solid var(--p-line);border-radius:13px 13px 0 0;background:var(--p-surface);scrollbar-width:thin;scrollbar-color:var(--p-line) transparent}
+.project-ribbon-group {display:flex;flex:none;align-items:center;gap:3px}
+.project-ribbon-group button {position:relative}
+.project-ribbon-group button small {display:block;margin-top:1px;color:var(--p-muted);font-size:8px;font-weight:500}
+.project-ribbon-stack {display:flex;flex-direction:column;gap:2px}
+.project-ribbon-stack button {height:22px;display:flex;align-items:center;gap:6px;text-align:left}
+.project-ribbon-symbol {font-size:21px;color:var(--p-accent)}
+.project-font-group {min-width:max-content}
+.project-font-select,.project-size-select,.project-line-spacing {height:29px;padding:0 6px;border:1px solid var(--p-line);border-radius:5px;background:var(--p-panel);color:var(--p-ink);font:inherit;font-size:10px}
+.project-font-select {width:132px}
+.project-size-select {width:58px}
+.project-line-spacing {width:57px}
+.project-color-control {position:relative;width:29px;height:28px;display:grid;place-items:center;border:1px solid transparent;border-radius:6px;color:var(--p-ink);font-size:14px;font-weight:800;cursor:pointer}
+.project-color-control:hover {border-color:var(--p-line);background:var(--p-panel)}
+.project-color-control input {position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.project-highlight-control {color:#d7a800}
+.project-clear-mark {color:#df6161;font-size:16px}
+.project-show-marks :is(p,div,li,h1,h2,h3,blockquote)::after {content:" ¶";color:var(--p-accent);opacity:.72;font-size:.75em}
+@media (max-width:720px) {
+  .project-format-toolbar {border-radius:10px 10px 0 0}
+  .project-editor-wrap {min-width:0}
+}
 .project-format-toolbar button {min-width:29px;height:28px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--p-ink);font-size:10px;cursor:pointer}
 .project-format-toolbar button:hover {border-color:var(--p-line);background:var(--p-panel);color:var(--p-accent)}
 .project-format-divider {width:1px;height:21px;margin:0 4px;background:var(--p-line)}

@@ -84,7 +84,7 @@ async function removeProject(id: string) {
   })
 }
 
-const safeTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A'])
+const safeTags = new Set(['P', 'DIV', 'BR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A'])
 function sanitizeHtml(value: string) {
   const parsed = new DOMParser().parseFromString(value, 'text/html')
   const cleanNode = (node: Node): Node | null => {
@@ -96,6 +96,23 @@ function sanitizeHtml(value: string) {
       return fragment
     }
     const clean = document.createElement(node.tagName.toLowerCase())
+    if (['SPAN', 'P', 'DIV'].includes(node.tagName)) {
+      const style = node.style
+      const color = style.color
+      const background = style.backgroundColor
+      const fontSize = style.fontSize
+      const fontFamily = style.fontFamily
+      const lineHeight = style.lineHeight
+      const textAlign = style.textAlign
+      const marginLeft = style.marginLeft
+      if (color && CSS.supports('color', color)) clean.style.color = color
+      if (background && CSS.supports('background-color', background)) clean.style.backgroundColor = background
+      if (/^\d+(?:\.\d+)?(?:pt|px|em|rem|%)$/.test(fontSize)) clean.style.fontSize = fontSize
+      if (/^[a-zA-Z0-9 ,'"-]{1,80}$/.test(fontFamily)) clean.style.fontFamily = fontFamily
+      if (/^\d+(?:\.\d+)?$/.test(lineHeight)) clean.style.lineHeight = lineHeight
+      if (['left', 'right', 'center', 'justify'].includes(textAlign)) clean.style.textAlign = textAlign
+      if (/^\d+(?:\.\d+)?(?:px|em|rem|%)$/.test(marginLeft)) clean.style.marginLeft = marginLeft
+    }
     if (node.tagName === 'A') {
       const href = node.getAttribute('href') ?? ''
       try {
@@ -116,8 +133,11 @@ function sanitizeHtml(value: string) {
 function RichTextEditor({ project, onChange }: { project: ProjectDocument; onChange: (bodyHtml: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null)
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedSelection = useRef<Range | null>(null)
+  const [showMarks, setShowMarks] = useState(false)
   useEffect(() => {
     if (editorRef.current) editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
+    savedSelection.current = null
     return () => { if (pendingSave.current) clearTimeout(pendingSave.current) }
   }, [project.id])
   const queueSave = () => {
@@ -127,41 +147,153 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       pendingSave.current = null
     }, 450)
   }
+  const rememberSelection = () => {
+    const selection = window.getSelection()
+    if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+      savedSelection.current = selection.getRangeAt(0).cloneRange()
+    }
+  }
+  const restoreSelection = () => {
+    editorRef.current?.focus()
+    const selection = window.getSelection()
+    if (selection && savedSelection.current) {
+      selection.removeAllRanges()
+      selection.addRange(savedSelection.current)
+    }
+  }
   const runFormat = (command: string, value?: string, event?: MouseEvent<HTMLButtonElement>) => {
     event?.preventDefault()
-    editorRef.current?.focus()
+    restoreSelection()
     document.execCommand(command, false, value)
+    rememberSelection()
     queueSave()
+  }
+  const applyInlineStyle = (property: string, value: string) => {
+    restoreSelection()
+    const selection = window.getSelection()
+    if (!selection?.rangeCount || selection.isCollapsed || !editorRef.current?.contains(selection.anchorNode)) return
+    const range = selection.getRangeAt(0)
+    const span = document.createElement('span')
+    span.style.setProperty(property, value)
+    span.append(range.extractContents())
+    range.insertNode(span)
+    selection.removeAllRanges()
+    const nextRange = document.createRange()
+    nextRange.selectNodeContents(span)
+    selection.addRange(nextRange)
+    savedSelection.current = nextRange.cloneRange()
+    queueSave()
+  }
+  const resizeSelection = (change: number) => {
+    restoreSelection()
+    const selection = window.getSelection()
+    if (!selection?.rangeCount || selection.isCollapsed || !editorRef.current?.contains(selection.anchorNode)) return
+    const parent = selection.anchorNode instanceof HTMLElement ? selection.anchorNode : selection.anchorNode?.parentElement
+    const pixels = Number.parseFloat(parent ? window.getComputedStyle(parent).fontSize : '') || 14
+    const points = Math.min(72, Math.max(8, Math.round(pixels * 0.75 + change)))
+    applyInlineStyle('font-size', `${points}pt`)
+  }
+  const changeCase = (mode: string) => {
+    restoreSelection()
+    const selection = window.getSelection()
+    if (!selection?.rangeCount || selection.isCollapsed) return
+    const range = selection.getRangeAt(0)
+    const replacement = mode === 'upper' ? selection.toString().toLocaleUpperCase() : selection.toString().toLocaleLowerCase()
+    range.deleteContents()
+    const text = document.createTextNode(replacement)
+    range.insertNode(text)
+    selection.removeAllRanges()
+    const nextRange = document.createRange()
+    nextRange.selectNode(text)
+    selection.addRange(nextRange)
+    savedSelection.current = nextRange.cloneRange()
+    queueSave()
+  }
+  const pasteText = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    restoreSelection()
+    try {
+      const text = await navigator.clipboard.readText()
+      document.execCommand('insertText', false, text)
+      queueSave()
+    } catch {
+      window.alert('Clipboard access is blocked. Use Ctrl+V or ⌘V in the document instead.')
+    }
   }
   const addInlineLink = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     const link = window.prompt('Paste a web address or email link')
-    if (!link) { editorRef.current?.focus(); return }
+    if (!link) { restoreSelection(); return }
     const normalized = /^(https?:|mailto:)/i.test(link) ? link : `https://${link}`
     runFormat('createLink', normalized)
   }
+  const run = (command: string, value?: string) => (event: MouseEvent<HTMLButtonElement>) => runFormat(command, value, event)
+  const chooseStyle = (property: string) => (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => applyInlineStyle(property, event.target.value)
+  const selectProps = {
+    onMouseDown: rememberSelection,
+    onKeyDown: rememberSelection,
+    'aria-label': 'Document formatting',
+  }
   return <div className="project-editor-wrap">
     <div className="project-format-toolbar" role="toolbar" aria-label="Document formatting">
-      <button type="button" title="Bold" aria-label="Bold" onMouseDown={(event) => runFormat('bold', undefined, event)}><b>B</b></button>
-      <button type="button" title="Italic" aria-label="Italic" onMouseDown={(event) => runFormat('italic', undefined, event)}><i>I</i></button>
-      <button type="button" title="Underline" aria-label="Underline" onMouseDown={(event) => runFormat('underline', undefined, event)}><u>U</u></button>
+      <div className="project-ribbon-group project-clipboard-group" aria-label="Clipboard">
+        <button type="button" title="Paste text from clipboard" aria-label="Paste" onMouseDown={(event) => void pasteText(event)}><span className="project-ribbon-symbol">▣</span><small>Paste</small></button>
+        <div className="project-ribbon-stack"><button type="button" title="Cut" aria-label="Cut" onMouseDown={run('cut')}>✂ <small>Cut</small></button><button type="button" title="Copy" aria-label="Copy" onMouseDown={run('copy')}>▢ <small>Copy</small></button></div>
+      </div>
       <span className="project-format-divider" />
-      <button type="button" title="Bulleted list" aria-label="Bulleted list" onMouseDown={(event) => runFormat('insertUnorderedList', undefined, event)}>• List</button>
-      <button type="button" title="Numbered list" aria-label="Numbered list" onMouseDown={(event) => runFormat('insertOrderedList', undefined, event)}>1. List</button>
-      <button type="button" title="Heading" aria-label="Heading" onMouseDown={(event) => runFormat('formatBlock', 'h2', event)}>H₂</button>
-      <button type="button" title="Quote" aria-label="Quote" onMouseDown={(event) => runFormat('formatBlock', 'blockquote', event)}>❝</button>
-      <button type="button" title="Add link to selected text" aria-label="Add link to selected text" onMouseDown={addInlineLink}>↗ Link</button>
+      <div className="project-ribbon-group project-font-group" aria-label="Font">
+        <select {...selectProps} className="project-font-select" defaultValue="Arial" title="Font family" onChange={chooseStyle('font-family')}>
+          <option value="Arial">Arial</option><option value="Calibri">Calibri</option><option value="Georgia">Georgia</option><option value="Times New Roman">Times New Roman</option><option value="Verdana">Verdana</option><option value="Courier New">Courier New</option>
+        </select>
+        <select {...selectProps} className="project-size-select" defaultValue="11" title="Font size" onChange={chooseStyle('font-size')}>
+          {['8','9','10','11','12','14','16','18','20','24','28','32','36','48','72'].map((size) => <option key={size} value={`${size}pt`}>{size}</option>)}
+        </select>
+        <button type="button" title="Increase font size" aria-label="Increase font size" onMouseDown={(event) => { event.preventDefault(); resizeSelection(2) }}>A<sup>+</sup></button>
+        <button type="button" title="Decrease font size" aria-label="Decrease font size" onMouseDown={(event) => { event.preventDefault(); resizeSelection(-2) }}>A<sup>−</sup></button>
+        <button type="button" title="Uppercase selected text" aria-label="Uppercase selected text" onMouseDown={(event) => { event.preventDefault(); changeCase('upper') }}>Aa</button>
+        <button type="button" title="Clear formatting" aria-label="Clear formatting" onMouseDown={run('removeFormat')}>A<span className="project-clear-mark">×</span></button>
+        <span className="project-format-divider" />
+        <button type="button" title="Bold" aria-label="Bold" onMouseDown={run('bold')}><b>B</b></button>
+        <button type="button" title="Italic" aria-label="Italic" onMouseDown={run('italic')}><i>I</i></button>
+        <button type="button" title="Underline" aria-label="Underline" onMouseDown={run('underline')}><u>U</u></button>
+        <button type="button" title="Strikethrough" aria-label="Strikethrough" onMouseDown={run('strikeThrough')}>ab̶</button>
+        <button type="button" title="Subscript" aria-label="Subscript" onMouseDown={run('subscript')}>x₂</button>
+        <button type="button" title="Superscript" aria-label="Superscript" onMouseDown={run('superscript')}>x²</button>
+        <label className="project-color-control" title="Text color"><span>A</span><input aria-label="Text color" type="color" defaultValue="#202820" onMouseDown={rememberSelection} onChange={chooseStyle('color')} /></label>
+        <label className="project-color-control project-highlight-control" title="Text highlight"><span>▰</span><input aria-label="Text highlight color" type="color" defaultValue="#fff176" onMouseDown={rememberSelection} onChange={chooseStyle('background-color')} /></label>
+      </div>
+      <span className="project-format-divider" />
+      <div className="project-ribbon-group project-paragraph-group" aria-label="Paragraph">
+        <button type="button" title="Bulleted list" aria-label="Bulleted list" onMouseDown={run('insertUnorderedList')}>• List</button>
+        <button type="button" title="Numbered list" aria-label="Numbered list" onMouseDown={run('insertOrderedList')}>1. List</button>
+        <button type="button" title="Decrease indent" aria-label="Decrease indent" onMouseDown={run('outdent')}>⇤</button>
+        <button type="button" title="Increase indent" aria-label="Increase indent" onMouseDown={run('indent')}>⇥</button>
+        <span className="project-format-divider" />
+        <button type="button" title="Align left" aria-label="Align left" onMouseDown={run('justifyLeft')}>☰</button>
+        <button type="button" title="Center" aria-label="Center" onMouseDown={run('justifyCenter')}>≡</button>
+        <button type="button" title="Align right" aria-label="Align right" onMouseDown={run('justifyRight')}>☷</button>
+        <button type="button" title="Justify" aria-label="Justify" onMouseDown={run('justifyFull')}>▤</button>
+        <select {...selectProps} className="project-line-spacing" defaultValue="1.5" title="Line spacing" onChange={(event) => applyInlineStyle('line-height', event.target.value)}>
+          <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option>
+        </select>
+        <button type="button" title="Toggle paragraph marks" aria-label="Toggle paragraph marks" aria-pressed={showMarks} onMouseDown={(event) => event.preventDefault()} onClick={() => setShowMarks((visible) => !visible)}>¶</button>
+        <button type="button" title="Heading" aria-label="Heading" onMouseDown={run('formatBlock', 'h2')}>H₂</button>
+        <button type="button" title="Quote" aria-label="Quote" onMouseDown={run('formatBlock', 'blockquote')}>❝</button>
+        <button type="button" title="Add link to selected text" aria-label="Add link to selected text" onMouseDown={addInlineLink}>↗</button>
+      </div>
     </div>
     <div
       ref={editorRef}
-      className="project-rich-editor"
+      className={`project-rich-editor ${showMarks ? 'project-show-marks' : ''}`}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
       aria-label={`Write in ${project.title}`}
       aria-multiline="true"
       data-placeholder="Start writing your project notes… Add headings, explanations, plans, and reflections."
-      onInput={queueSave}
+      onInput={() => { rememberSelection(); queueSave() }}
+      onKeyUp={rememberSelection}
+      onMouseUp={rememberSelection}
       onBlur={() => {
         if (pendingSave.current) clearTimeout(pendingSave.current)
         if (editorRef.current) onChange(sanitizeHtml(editorRef.current.innerHTML))
