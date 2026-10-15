@@ -151,7 +151,8 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
     for (const file of Array.from(selected)) {
       const path = safePath(file)
       if (!path || file.size > 12_000_000) { skipped++; continue }
-      const textFile = /\\.(?:html?|css|m?js|json|xml|txt|py|pyi|java|jar|whl|csv|ts|md|svg|h|hh|hpp|hxx|cpp|cc|cxx|inc|tpp|ipp)$/i.test(path)
+      const textExtensions = ['.html', '.htm', '.css', '.js', '.mjs', '.json', '.xml', '.txt', '.py', '.pyi', '.java', '.jar', '.whl', '.csv', '.ts', '.md', '.svg', '.h', '.hh', '.hpp', '.hxx', '.cpp', '.cc', '.cxx', '.inc', '.tpp', '.ipp']
+      const textFile = textExtensions.some((extension) => path.toLowerCase().endsWith(extension))
       let content = ''
       let encoding: 'text' | 'data' = 'text'
       if (textFile && !/\\.(?:jar|whl)$/i.test(path)) content = await file.text()
@@ -174,10 +175,10 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
         else if (path.endsWith('.js') || path.endsWith('.mjs')) setJavascript(await file.text())
       }
     } else if (language === 'python') {
-      const mainFile = added.find((file) => /(^|\\/)main\\.py$/i.test(safePath(file))) ?? added.find((file) => /\\.py$/i.test(file.name))
+      const mainFile = added.find((file) => safePath(file).toLowerCase().endsWith('/main.py') || safePath(file).toLowerCase() === 'main.py') ?? added.find((file) => file.name.toLowerCase().endsWith('.py'))
       if (mainFile) setPython(await mainFile.text())
     } else if (language === 'java') {
-      const mainFile = added.find((file) => /(^|\\/)main\\.java$/i.test(safePath(file))) ?? added.find((file) => /\\.java$/i.test(file.name))
+      const mainFile = added.find((file) => safePath(file).toLowerCase().endsWith('/main.java') || safePath(file).toLowerCase() === 'main.java') ?? added.find((file) => file.name.toLowerCase().endsWith('.java'))
       if (mainFile) setJava(await mainFile.text())
     }
   }
@@ -249,8 +250,8 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
       return text.split(file.path).join(file.content).split(base).join(file.content)
     }, value)
     const safeTagContent = (value: string, tag: string) => value.replace(new RegExp('</' + tag, 'gi'), '<\\\\/' + tag)
-    const importedStyles = textFiles.filter((file) => /\\.css$/i.test(file.path) && file.content !== css).map((file) => '<style>' + safeTagContent(replaceAsset(file.content), 'style') + '</style>').join('')
-    const importedScripts = textFiles.filter((file) => /\\.(?:js|mjs)$/i.test(file.path) && file.content !== javascript).map((file) => '<script>' + safeTagContent(replaceAsset(file.content), 'script') + '<\\/script>').join('')
+    const importedStyles = textFiles.filter((file) => file.path.toLowerCase().endsWith('.css') && file.content !== css).map((file) => '<style>' + safeTagContent(replaceAsset(file.content), 'style') + '</style>').join('')
+    const importedScripts = textFiles.filter((file) => (file.path.toLowerCase().endsWith('.js') || file.path.toLowerCase().endsWith('.mjs')) && file.content !== javascript).map((file) => '<script>' + safeTagContent(replaceAsset(file.content), 'script') + '<\\/script>').join('')
     let documentText = replaceAsset(html)
     documentText = documentText.replace(/<script\\b([^>]*?)src=(['"])([^'"]+)\\2([^>]*)>\\s*<\\/script>/gi, (match, _before, _quote, src) => {
       const requested = String(src).replace(/^\\.\\//, '')
