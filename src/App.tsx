@@ -8,6 +8,7 @@ import CppSimulator from './CppSimulator'
 import CodeSimulator from './CodeSimulator'
 import CircuitSimulator from './CircuitSimulator'
 import { installAppContextMenu } from './contextMenu'
+import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -712,6 +713,7 @@ function GraphSimulator({ onBack }: { onBack: () => void }) {
   const width = 1200
   const height = 720
   const colors = ['#2f71d5', '#d84d4d', '#278c66', '#8a57c4', '#d68a2e', '#1598ab']
+  const [simulatorTheme, setSimulatorTheme] = useSimulatorTheme()
   const graphRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<{ x: number; y: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, scale: 42 })
@@ -779,12 +781,12 @@ function GraphSimulator({ onBack }: { onBack: () => void }) {
   })
 
   return (
-    <main className="graph-workspace">
+    <main className="graph-workspace" data-theme={simulatorTheme}>
       <section className="graph-simulator-page">
         <header className="graph-topbar">
           <button type="button" className="graph-back-button" onClick={onBack} aria-label="Back to notes"><span aria-hidden="true">‹</span><span>Notes</span></button>
           <div className="graph-document-title"><span className="graph-document-glyph" aria-hidden="true">ƒ</span><span>Untitled Graph</span></div>
-          <div className="graph-view-controls" aria-label="Graph view controls">
+          <div className="graph-view-controls" aria-label="Graph view controls"><SimulatorThemePicker theme={simulatorTheme} onChange={setSimulatorTheme} />
             <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.25)}>+</button>
             <span>{Math.round(view.scale / 42 * 100)}%</span>
             <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(0.8)}>−</button>
@@ -987,6 +989,11 @@ function App() {
   })
   const dark = colorThemes.find((theme) => theme.id === colorTheme)?.dark ?? true
   useEffect(() => { localStorage.setItem('ozoo:color-theme', colorTheme) }, [colorTheme])
+  useEffect(() => {
+    const syncSimulatorTheme = (event: Event) => { const next = (event as CustomEvent<ColorTheme>).detail; if (colorThemes.some((theme) => theme.id === next)) setColorTheme(next) }
+    window.addEventListener('ozoo:color-theme-change', syncSimulatorTheme)
+    return () => window.removeEventListener('ozoo:color-theme-change', syncSimulatorTheme)
+  }, [])
   const brandLogo = `${import.meta.env.BASE_URL}${dark ? 'ozoo-logo-white-notes.png' : 'ozoo-logo-black-notes.png'}`
   const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>(initialWorkspace.strokesByPage)
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
