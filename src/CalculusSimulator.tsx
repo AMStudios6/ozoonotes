@@ -268,6 +268,6 @@ export default function CalculusSimulator({ onBack }: { onBack: () => void }) {
         <section className="calculus-answer" aria-live="polite"><div><span>ANSWER</span><small>{operation === 'differentiate' ? 'Derivative' : 'Indefinite integral'}</small></div>{result.error ? <p className="calculus-error" role="alert">{result.error}</p> : <output>{result.answer || 'Your result will appear here.'}</output>}</section>
       </section>
       <aside className="calculus-guide"><strong>What it supports</strong><p><b>Derivatives:</b> sums, products, quotients, powers, and chain rule for sin, cos, tan, exp, ln, and sqrt.</p><p><b>Integrals:</b> sums, constants, powers of a linear expression, and common functions with a linear inside expression.</p><small>This symbolic helper shows the result directly. Advanced integrals such as integration by parts are not included yet.</small></aside>
-    </main>
-  </div>
+    </div>
+  </main>
 }
