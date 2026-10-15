@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/ozoo-favicon.png" alt="OzooNotes mascot logo" width="112" />
+  <img src="https://raw.githubusercontent.com/AMStudios6/ozoonotes/main/public/ozoo-favicon.png" alt="OzooNotes mascot logo" width="112" />
   <br />
-  <img src="public/ozoo-logo.png" alt="OzooNotes" width="300" />
+  <img src="https://raw.githubusercontent.com/AMStudios6/ozoonotes/main/public/ozoo-logo.png" alt="OzooNotes" width="300" />
   <h3>✨ A little space for big ideas ✨</h3>
   <p>Write it, sketch it, connect it, and keep it all in one place.</p>
   <p>
@@ -12,7 +12,7 @@
 </div>
 
 <p align="center">
-  <img src="public/ozoonotes-landing.png" alt="OzooNotes website home page" width="880" />
+  <img src="https://raw.githubusercontent.com/AMStudios6/ozoonotes/main/public/ozoonotes-landing.png" alt="OzooNotes website home page" width="880" />
 </p>
 
 ## 🌈 One page, lots of ways to think
@@ -56,7 +56,7 @@ Students can save their study field, education level, and degree name in their b
 - Jot quick thoughts in a scratchpad, then move useful ideas into a notebook.
 
 <p align="center">
-  <img src="public/ozoo-favicon.png" alt="OzooNotes mascot" width="76" />
+  <img src="https://raw.githubusercontent.com/AMStudios6/ozoonotes/main/public/ozoo-favicon.png" alt="OzooNotes mascot" width="76" />
   <br />
   <em>Small notes can turn into big ideas. Keep them all connected.</em>
 </p>
