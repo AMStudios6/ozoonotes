@@ -10,3 +10,15 @@
 @media(max-width:680px){.circuit-topbar{grid-template-columns:auto 1fr auto;padding:0 10px;height:58px}.circuit-brand-icon{width:31px;height:31px}.circuit-brand{gap:6px}.circuit-brand strong{font-size:11px}.circuit-brand small{display:none}.circuit-top-actions{gap:4px}.circuit-top-actions button{padding:7px 6px;font-size:9px}.circuit-top-actions button:nth-child(2){display:none}.circuit-back{padding:7px 8px;font-size:10px}.circuit-heading{padding:19px 12px 13px;align-items:flex-start}.circuit-heading h1{font-size:22px}.circuit-heading>div>span{font-size:10px}.circuit-local{padding:6px;font-size:8px}.circuit-layout{display:flex;flex-direction:column;padding:0 10px 14px;gap:9px}.circuit-palette{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:8px;overflow:visible}.circuit-palette .circuit-section-title,.circuit-help{display:none}.circuit-palette>button{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:5px 2px;margin:0;min-height:59px;text-align:center}.circuit-palette>button small{font-size:8px}.circuit-palette .palette-symbol{width:26px;height:26px}.circuit-canvas{height:52vh;min-height:340px}.circuit-inspector{display:block}.circuit-result-row{grid-template-columns:1fr repeat(3,minmax(50px,.7fr));font-size:9px}.circuit-status{font-size:9px}}
 
 .circuit-top-actions button:disabled{opacity:.42;cursor:not-allowed}.circuit-top-actions button[aria-label="Delete selected"]:not(:disabled):hover{background:#482c29;border-color:#8f4c42;color:#ffb3a8}
+
+.symbol-meter{font-size:10px;letter-spacing:-.08em;background:#eff9f2;border-color:#cde4d2}
+.circuit-meter-panel{display:flex;flex-direction:column;gap:7px;padding:10px;margin:2px 0 10px;border:1px solid #cfe2d2;border-radius:8px;background:#f7fbf7;color:#526257;font-size:10px}
+.circuit-meter-panel strong{color:#34443a}
+.circuit-meter-panel select{height:31px;padding:0 7px;border:1px solid #d2e0d4;border-radius:6px;background:#fff;color:#27352b;font-size:10px}
+.circuit-meter-panel output{display:block;min-height:34px;padding:8px;border-radius:6px;background:#17201b;color:#8befa2;font:11px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
+.circuit-rotation{display:flex;align-items:center;gap:8px;margin:0 0 12px;color:#738077;font-size:10px}
+.circuit-rotation span{margin-right:auto}
+.circuit-rotation button{width:32px;height:30px;border:1px solid #dbe4dc;border-radius:6px;background:#fbfcfb;color:#334239;font-size:18px;cursor:pointer}
+.circuit-rotation button:hover{border-color:#a9d9b4;background:#f0faf2;color:#258d4b}
+.circuit-rotation output{min-width:38px;text-align:center;color:#34443a;font:11px ui-monospace,monospace}
+@media(max-width:680px){.circuit-meter-panel{grid-column:1/-1}.circuit-rotation{max-width:220px}}
