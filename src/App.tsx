@@ -960,6 +960,12 @@ function App() {
   const screenRecorderRef = useRef<MediaRecorder | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenChunksRef = useRef<Blob[]>([])
+  const [voiceRecordingState, setVoiceRecordingState] = useState<'idle' | 'recording' | 'paused'>('idle')
+  const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0)
+  const [voiceRecordingError, setVoiceRecordingError] = useState('')
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
   const hiddenLayers = boards[activeBoard]?.hiddenLayers ?? []
   const [quickStartOpen, setQuickStartOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -985,6 +991,16 @@ function App() {
     const interval = window.setInterval(() => setScreenRecordingSeconds((seconds) => seconds + 1), 1000)
     return () => window.clearInterval(interval)
   }, [screenRecordingState])
+  useEffect(() => {
+    if (voiceRecordingState !== 'recording') return
+    const interval = window.setInterval(() => setVoiceRecordingSeconds((seconds) => seconds + 1), 1000)
+    return () => window.clearInterval(interval)
+  }, [voiceRecordingState])
+  useEffect(() => () => {
+    const recorder = voiceRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
   useEffect(() => { try { localStorage.setItem('ozoo:notebooks', JSON.stringify(notebooks)) } catch { /* Notebook organization remains optional if storage is full. */ } }, [notebooks])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
   const [page, setPage] = useState(initialWorkspace.page)
@@ -1816,6 +1832,80 @@ function App() {
     } else if (recorder.state === 'paused') {
       recorder.resume()
       setScreenRecordingState('recording')
+    }
+  }
+  const startVoiceRecording = async () => {
+    setVoiceRecordingError('')
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceRecordingError('Voice recording is not supported in this browser. Try the latest version of Chrome or Edge.')
+      return
+    }
+    let acquiredStream: MediaStream | null = null
+    try {
+      acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = acquiredStream
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type))
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      voiceStreamRef.current = stream
+      voiceRecorderRef.current = recorder
+      voiceChunksRef.current = []
+      setVoiceRecordingSeconds(0)
+      const safeName = boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'OzooNotes'
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) voiceChunksRef.current.push(event.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        if (blob.size > 0) {
+          const extension = blob.type.includes('mp4') ? 'm4a' : 'webm'
+          downloadNamedBlob(blob, `${safeName}-voice-recording-${stamp}.${extension}`)
+          setSaveNotice('Voice recording downloaded')
+          window.setTimeout(() => setSaveNotice(''), 3000)
+        } else {
+          setVoiceRecordingError('The recording was empty. Check your microphone and try again.')
+        }
+        stream.getTracks().forEach((track) => track.stop())
+        if (voiceStreamRef.current === stream) voiceStreamRef.current = null
+        if (voiceRecorderRef.current === recorder) voiceRecorderRef.current = null
+        voiceChunksRef.current = []
+        setVoiceRecordingState('idle')
+      }
+      recorder.onerror = () => setVoiceRecordingError('The voice recording stopped because of a microphone error.')
+      stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+        if (recorder.state !== 'inactive') recorder.stop()
+      }, { once: true })
+      recorder.start(1000)
+      setVoiceRecordingState('recording')
+    } catch (error) {
+      acquiredStream?.getTracks().forEach((track) => track.stop())
+      voiceStreamRef.current = null
+      voiceRecorderRef.current = null
+      voiceChunksRef.current = []
+      setVoiceRecordingState('idle')
+      const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+      const messages: Record<string, string> = {
+        NotAllowedError: 'Microphone access was denied. Allow microphone access in your browser or device settings, then try again.',
+        NotFoundError: 'No microphone was found. Connect or enable a microphone, then try again.',
+        NotReadableError: 'The microphone could not be opened. Close other apps using it and try again.',
+        SecurityError: 'Voice recording requires a secure page. Open OzooNotes over HTTPS or localhost.',
+        AbortError: 'Microphone access was interrupted. Try starting the recording again.',
+      }
+      console.error('Voice recording could not start:', error)
+      setVoiceRecordingError(messages[name] ?? `Could not start voice recording${name ? ` (${name})` : ''}. Check microphone permissions and try again.`)
+    }
+  }
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+  }
+  const toggleVoiceRecordingPause = () => {
+    const recorder = voiceRecorderRef.current
+    if (!recorder) return
+    if (recorder.state === 'recording') {
+      recorder.pause()
+      setVoiceRecordingState('paused')
+    } else if (recorder.state === 'paused') {
+      recorder.resume()
+      setVoiceRecordingState('recording')
     }
   }
   const downloadBlob = (blob: Blob, extension: string) => {
@@ -2680,6 +2770,7 @@ function App() {
               </div>
               <div className="more-feature-section theme-feature"><span className="more-feature-label">APPEARANCE</span><label className="theme-toggle theme-picker"><span>Color theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>{!localOnly && <button className="account-button feature-account" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}</div>
               <div className="more-feature-section screen-recording-section"><span className="more-feature-label">SCREEN RECORDING</span><p className="screen-recording-hint">Capture a screen, window, or tab. The video downloads to your device as a WebM file.</p>{screenRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${screenRecordingState}`} /><strong>{screenRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(screenRecordingSeconds / 60)).padStart(2, '0')}:{String(screenRecordingSeconds % 60).padStart(2, '0')}</time></div>}{screenRecordingError && <p className="screen-recording-error" role="alert">{screenRecordingError}</p>}<div className="screen-recording-actions">{screenRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startScreenRecording() }}><span className="recording-button-dot" /> Record screen</button> : <><button onClick={toggleScreenRecordingPause}>{screenRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopScreenRecording}>Stop & save</button></>}</div></div>
+<div className="more-feature-section voice-recording-section"><span className="more-feature-label">VOICE RECORDING</span><p className="screen-recording-hint">Record spoken notes from your microphone. The audio downloads to your device.</p>{voiceRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${voiceRecordingState}`} /><strong>{voiceRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(voiceRecordingSeconds / 60)).padStart(2, '0')}:{String(voiceRecordingSeconds % 60).padStart(2, '0')}</time></div>}{voiceRecordingError && <p className="screen-recording-error" role="alert">{voiceRecordingError}</p>}<div className="screen-recording-actions">{voiceRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startVoiceRecording() }}><span className="recording-button-dot" /> Record voice</button> : <><button onClick={toggleVoiceRecordingPause}>{voiceRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopVoiceRecording}>Stop & save</button></>}</div></div>
               <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
             </section>}
           </div>

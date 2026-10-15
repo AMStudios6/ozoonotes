@@ -288,3 +288,10 @@
     text-align: left;
   }
 }
+
+.voice-recording-section {
+  padding-bottom: 13px;
+}
+.voice-recording-section + .timer-section {
+  margin-top: 0;
+}
