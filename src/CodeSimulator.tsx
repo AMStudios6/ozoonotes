@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './CodeSimulator.css'
+import CodeEditor from './CodeEditor'
 
 type CodeMode = 'python' | 'java' | 'web'
 type StudioFile = { path: string; type: string; encoding: 'text' | 'data'; content: string }
@@ -284,8 +285,8 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
         {files.length > 0 && <div className="studio-file-list">{files.map((file) => <span key={file.path} title={file.path}>{file.path}<button type="button" aria-label={'Remove ' + file.path} onClick={() => removeFile(file.path)}>×</button></span>)}</div>}
         {language === 'web' ? <>
           <div className="studio-code-tabs">{(['html', 'css', 'javascript'] as const).map((tab) => <button key={tab} className={webTab === tab ? 'active' : ''} onClick={() => setWebTab(tab)}>{tab === 'javascript' ? 'JavaScript' : tab.toUpperCase()}</button>)}</div>
-          <div className="studio-code-area"><div className="studio-gutter">{(webTab === 'html' ? html : webTab === 'css' ? css : javascript).split('\n').map((_, index) => <span key={index}>{index + 1}</span>)}</div><textarea aria-label={webTab + ' code'} spellCheck={false} autoCapitalize="off" autoCorrect="off" value={webTab === 'html' ? html : webTab === 'css' ? css : javascript} onChange={(event) => { if (webTab === 'html') setHtml(event.target.value); else if (webTab === 'css') setCss(event.target.value); else setJavascript(event.target.value) }} /></div>
-        </> : <div className="studio-code-area"><div className="studio-gutter">{currentCode.split('\n').map((_, index) => <span key={index}>{index + 1}</span>)}</div><textarea aria-label={language + ' code editor'} spellCheck={false} autoCapitalize="off" autoCorrect="off" value={currentCode} onChange={(event) => setCurrentCode(event.target.value)} /></div>}
+          <div className="studio-code-area"><div className="studio-gutter">{(webTab === 'html' ? html : webTab === 'css' ? css : javascript).split('\n').map((_, index) => <span key={index}>{index + 1}</span>)}</div><CodeEditor language={webTab === 'javascript' ? 'javascript' : webTab} value={webTab === 'html' ? html : webTab === 'css' ? css : javascript} label={webTab + ' code editor'} onChange={(value) => { if (webTab === 'html') setHtml(value); else if (webTab === 'css') setCss(value); else setJavascript(value) }} /></div>
+        </> : <div className="studio-code-area"><div className="studio-gutter">{currentCode.split('\n').map((_, index) => <span key={index}>{index + 1}</span>)}</div><CodeEditor language={language} value={currentCode} label={language + ' code editor'} onChange={setCurrentCode} /></div>}
         <footer className="studio-editor-foot"><span>Ctrl + Enter to {language === 'web' ? 'refresh preview' : 'run'}</span><span>{currentCode.length} characters</span></footer>
       </article>
       <article className="studio-output-panel">
