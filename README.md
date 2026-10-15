@@ -1,92 +1,114 @@
-# OzooNotes
+<div align="center">
+  <img src="public/ozoo-favicon.png" alt="OzooNotes mascot logo" width="112" />
+  <br />
+  <img src="public/ozoo-logo.png" alt="OzooNotes" width="300" />
+  <h3>✨ A little space for big ideas ✨</h3>
+  <p>Write it, sketch it, connect it, and keep it all in one place.</p>
+  <p>
+    <a href="https://amstudios6.github.io/ozoonotes/"><strong>🌐 Open OzooNotes</strong></a>
+    &nbsp; · &nbsp;
+    <a href="https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml"><strong>💻 Get the Windows app</strong></a>
+  </p>
+</div>
 
-![OzooNotes logo](public/ozoo-logo.png)
+<p align="center">
+  <img src="public/ozoonotes-landing.png" alt="OzooNotes website home page" width="880" />
+</p>
 
-**A little space for big ideas.** OzooNotes is a visual workspace for handwritten notes, typed explanations, sketches, diagrams, code, images, and plans. Put related material together on the same page, then organize it into notebooks and tags so it is easy to find again.
+## 🌈 One page, lots of ways to think
 
-[Open OzooNotes](https://amstudios6.github.io/ozoonotes/) · [Download for Windows](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml)
+OzooNotes is a visual workspace for handwritten notes, typed explanations, sketches, images, code, diagrams, and plans. It is made for school, teaching, projects, links, articles, brainstorming, and the thoughts you want to find later.
 
-![OzooNotes website preview](public/ozoonotes-landing.png)
+> **Why use it?** Some ideas click when the words, example, and sketch are right beside each other. OzooNotes gives those pieces room to connect.
 
-## Why use OzooNotes?
+## ✍️ Make your notes yours
 
-Plain text is useful for a lot of things, but some ideas are easier to understand when you can see the words, example, and sketch together. OzooNotes gives you an open page for class notes, lesson plans, project research, links, articles, brainstorming, and everyday thoughts.
+- **Write and draw:** Choose brush, pen, pencil, marker, highlighter, line, or eraser. Adjust the colors and stroke settings as you work.
+- **Map ideas visually:** Add rectangles, circles, triangles, diamonds, arrows, and other shapes. Select, move, resize, and arrange objects on the page.
+- **Mix writing styles:** Place typed notes and section titles next to handwriting. Add titles to build a navigable index for longer documents.
+- **Bring in images:** Keep diagrams, screenshots, or other visual references beside the notes they explain.
+- **Organize your canvas:** Separate writing and shapes, text, and pictures into layers. Hide a layer while you focus or clear its contents from a page.
+- **Choose your space:** Use A1, A2, A3, A4, A5, Letter, Legal, or Tabloid pages in portrait or landscape, or switch to an infinite canvas.
+- **Zoom in and out:** Use page controls to inspect details or move around a large canvas.
+- **Set the mood:** Pick a color theme and page background that feels comfortable for your work.
 
-## Write, draw, and build on one page
+## 🧑‍🎓 Start as a student or teacher
 
-- **Handwriting and drawing:** Use brush, pen, pencil, marker, highlighter, line, and eraser tools. Adjust colors and stroke settings to make notes readable and expressive.
-- **Shapes and diagrams:** Add and format shapes such as rectangles, circles, triangles, diamonds, and arrows. Select, move, resize, and arrange objects as your page develops.
-- **Typed notes:** Add text and section titles alongside handwriting. Section titles can be listed in an index page, making longer documents easier to navigate.
-- **Images and references:** Add images to a page and keep visual references next to the notes they explain.
-- **Pages and canvas size:** Build multi-page documents with A1, A2, A3, A4, A5, Letter, Legal, or Tabloid pages. Choose portrait or landscape, or use an infinite canvas when you want more room.
-- **Layers:** Keep writing and shapes, text, and pictures on separate layers. Hide a layer to focus or clear its contents from the current page.
-- **Zoom and navigation:** Zoom to inspect details, move between pages, and use the Hand tool to pan around a large or infinite canvas.
-- **Appearance:** Choose a color theme and page background to suit your workspace and reading preference.
+Choose a workspace and start with a template instead of staring at a blank page.
 
-## Start with a template
+| 🎒 Students | 🍎 Teachers |
+| --- | --- |
+| Class notes and study guides | Lesson plans and worksheets |
+| Cornell notes and concept maps | Exit tickets and rubrics |
+| Weekly planners and coding notes | Seating charts and class diagrams |
+| Mood boards and blank pages | Planning pages and blank pages |
 
-Choose a student or teacher workspace to see relevant starting points. Templates help you begin with a structure instead of a blank page.
+Students can save their study field, education level, and degree name in their browser. They can also create a school or degree folder, then organize subjects inside classes, semesters, or years.
 
-Student starters include class notes, study guides, concept maps, weekly planners, worksheets, mood boards, coding notes, and blank pages. Choose a paper size before starting and adapt the layout as you go.
+## 🗂️ Keep ideas easy to find
 
-Teacher starters include lesson plans, worksheets, exit tickets, rubrics, seating charts, class diagrams, and other planning pages. The same drawing, image, text, and export tools are available for both audiences.
+- Create several files and switch between them with file tabs.
+- Rename a file from the home page or while writing in it.
+- Use notebooks for broad groups such as School, Personal, Work, Projects, or Interests.
+- Add tags like `#active`, `#favorite`, `#travel`, and `#ideas`.
+- Search your saved files and filter by notebook, tags, or quick views.
+- Use **Active** and **Favorites**, plus the PARA views for **Projects**, **Areas**, **Resources**, and **Archives**.
+- Jot quick thoughts in a scratchpad, then move useful ideas into a notebook.
 
-Students can save their study field and current education level in the browser. They can also create a school or degree folder and organize work in nested folders for years, semesters, classes, and subjects.
+<p align="center">
+  <img src="public/ozoo-favicon.png" alt="OzooNotes mascot" width="76" />
+  <br />
+  <em>Small notes can turn into big ideas. Keep them all connected.</em>
+</p>
 
-## Keep a growing library organized
+## 🎨 Templates that help you begin
 
-- Create multiple files and switch between them using file tabs.
-- Rename a file while working on it or from the saved-files page.
-- Use notebooks to group related boards, such as personal notes, work, school, projects, or interests.
-- Add tags such as `#active`, `#favorite`, `#travel`, or `#ideas` to describe what a note is about.
-- Search saved files and narrow the list by notebook, tags, or quick views.
-- Use the PARA quick views—Projects, Areas, Resources, and Archives—along with Active and Favorites to get back to important notes quickly.
-- Keep a scratchpad for temporary thoughts and tasks before moving them into a permanent note.
+Try a coding-notes layout to put theory beside code, a Cornell page for class notes, a weekly planner to map study sessions, or a mood board to collect inspiration. Teachers can start with a lesson plan, worksheet, rubric, or seating chart. Templates are starting points, so you can still draw, type, and rearrange the page.
 
-## Export and keep a copy
+## 🧪 Explore the simulators
 
-Export selected pages or the whole board as PDF, PNG, or SVG. Choose page ranges where supported, and use image export for an infinite canvas. Download an OzooNotes file when you want a portable copy or to move a board to another device.
+Open **Simulator** on the home page to enter a focused workspace for a subject.
 
-Boards save automatically in the current browser on the device you are using. Browser storage belongs to that browser profile, so download a separate copy for backup. The Windows app keeps its boards in the app's own storage.
+### 📈 Graphing
 
-## Built-in simulators
+Plot formulas on an infinite coordinate plane. Keep several expressions in a list, add more as you explore, and pan or zoom to follow the graph.
 
-Open **Simulator** from the main page to move into a dedicated workspace for each subject.
+### 💻 Coding
 
-### Graphing
+Choose C++, Python, Java, or Web.
 
-Plot equations on an infinite coordinate plane, add formulas in a list, and keep adding expressions as you explore a problem. Pan and zoom to inspect different parts of the graph.
+- Write and run C++, Python, and Java programs.
+- Upload a `.cpp` file to work with existing code.
+- Use syntax highlighting and automatic closing for common brackets and quotation marks.
+- Build HTML, CSS, and JavaScript together with a live web preview.
+- Add local images and other project files to web projects.
 
-### Coding
+### ⚡ Electronics
 
-Choose C++, Python, Java, or Web from the coding simulator menu.
+Place voltage sources, resistors, switches, and ground; connect pins with routed wires and bend points; then run a supported DC circuit simulation. Rotate or mirror components and use the digital multimeter to measure voltage, current, and resistance.
 
-- Write and run C++, Python, and Java programs in the editor.
-- Upload a source file such as a `.cpp` file to work with existing code.
-- Use syntax coloring and automatic closing of common brackets and quotation marks.
-- Build web projects with HTML, CSS, and JavaScript in one workspace with a live preview.
-- Add local images and other project files to web workspaces.
+### ∫ Calculus
 
-### Electronics
+Enter a differentiation or integration expression and view the result in its own workspace.
 
-Build a schematic by placing voltage sources, resistors, switches, and ground. Connect component pins with routed wires and bend points, then run the supported DC circuit simulation. The digital multimeter can measure voltage, current, and resistance. Rotate and mirror components, inspect their values, and export the schematic.
+## 📤 Export, save, and take your work with you
 
-### Calculus
+Export pages or a whole board as **PDF, PNG, or SVG**. Choose pages for export where supported, and use image formats for an infinite canvas. Download an OzooNotes file to keep a portable copy or move a board to another device.
 
-Enter a differentiation or integration expression in the calculus simulator and view the resulting answer.
+Boards save automatically in the browser on the device you are using. Browser storage belongs to that browser profile, so download a separate copy for backup. The Windows app keeps boards in its own app storage.
 
-## Keyboard shortcuts and quick actions
+## ⌨️ Quick actions when you need them
 
-Open the keyboard-shortcuts guide from the note's three-line menu or the custom right-click menu. It lists editing shortcuts for undo, redo, selection, copy, cut, paste, and delete, as well as where to find common tools and page controls.
+Open the keyboard-shortcuts guide from the note’s three-line menu or custom right-click menu. It covers undo, redo, select all, copy, cut, paste, and delete, and points to the toolbar and page controls for other actions. Right-click also offers context-sensitive options when they are available.
 
-Right-click menus also provide context-sensitive actions, such as page and simulator commands, when they are available.
+## 💜 OzooNotes on Windows
 
-## Windows app
+The Windows app opens OzooNotes in its own window and loads the live website, so published site updates appear when the app launches with an internet connection.
 
-The Windows app opens OzooNotes in its own window and loads the website, so published site updates appear when the app is opened with an internet connection.
+<a href="https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml"><strong>⬇️ Download the latest Windows build</strong></a>
 
-To download it, open the [Windows build page](https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml), choose the newest successful run, and download the **OzooNotes-Windows** artifact.
+On the build page, open the newest successful run and download the **OzooNotes-Windows** artifact.
 
-## Keep in mind
+## ℹ️ A quick note
 
-OzooNotes is designed for visual note-taking, learning, teaching, and lightweight experimentation. The electronics simulator currently focuses on supported resistive DC circuits; it is not a full engineering package. Save a portable OzooNotes file or export a PDF when you need a copy outside the browser or app profile.
+OzooNotes is designed for visual note-taking, learning, teaching, and lightweight experimentation. The electronics simulator focuses on supported resistive DC circuits; it is not a full engineering package. Download a portable OzooNotes file or export a PDF when you need a copy outside the browser or app profile.
