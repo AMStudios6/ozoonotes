@@ -133,6 +133,7 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
   onPin: (pin: Pin) => void; voltageMap?: Record<string, number>
 }) {
   const pins = symbolPinsText(part)
+  const localPinOffset = (pin: Pin) => part.kind === 'ground' ? { x: 0, y: -23 } : { x: pin.id.endsWith(':a') ? -48 : 48, y: 0 }
   const voltageLabel = (pin: Pin) => voltageMap ? fmt(voltageMap[pin.id] ?? 0, 'V') : pin.label
   return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ') scale(' + (part.mirrorX ? -1 : 1) + ' ' + (part.mirrorY ? -1 : 1) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
     {part.kind === 'resistor' && <>
@@ -145,11 +146,14 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
       <line x1="-48" y1="0" x2="-25" y2="0" /><line x1="25" y1="0" x2="48" y2="0" /><circle cx="-25" r="3" /><circle cx="25" r="3" /><line x1="-25" y1="0" x2={part.on ? 24 : 12} y2={part.on ? 0 : -14} className="switch-lever" />
     </>}
     {part.kind === 'ground' && <g transform="translate(0 -23)"><line y1="0" y2="10" /><line x1="-17" y1="10" x2="17" y2="10" /><line x1="-11" y1="15" x2="11" y2="15" /><line x1="-5" y1="20" x2="5" y2="20" /></g>}
-    {pins.map((pin) => <g key={pin.id} className="circuit-pin" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onPin(pin) }}>
-      <circle cx={pin.x - part.x} cy={pin.y - part.y} r="8" className="pin-hit" />
-      <circle cx={pin.x - part.x} cy={pin.y - part.y} r="3.2" className="pin-dot" />
-      <text x={pin.x - part.x} y={pin.y - part.y - 12} className="pin-label">{voltageLabel(pin)}</text>
-    </g>)}
+    {pins.map((pin) => {
+      const local = localPinOffset(pin)
+      return <g key={pin.id} className="circuit-pin" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onPin(pin) }}>
+        <circle cx={local.x} cy={local.y} r="8" className="pin-hit" />
+        <circle cx={local.x} cy={local.y} r="3.2" className="pin-dot" />
+        <text x={local.x} y={local.y - 12} className="pin-label">{voltageLabel(pin)}</text>
+      </g>
+    })}
     <text x="0" y="39" className="part-label">{part.label}</text>
     {part.kind !== 'ground' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.on ? 'Closed' : 'Open'}</text>}
   </g>
