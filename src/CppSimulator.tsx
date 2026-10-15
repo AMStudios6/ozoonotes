@@ -22,7 +22,9 @@ const WORKER_SOURCE = [
   '    const { compile } = await import("https://cdn.jsdelivr.net/npm/browsercc@0.1.1/dist/index.js");',
   '    self.postMessage({ type: "status", value: "Compiling C++20…" });',
   '    const extraFiles = Object.fromEntries(libraries.map((file) => [file.path, file.content]));',
-  '    const result = await compile({ source, fileName: "main.cpp", flags: ["-std=c++20", "-I."], extraFiles });',
+  '    const projectSources = libraries.filter((file) => /\\.(?:cpp|cc|cxx)$/i.test(file.path));',
+  '    const combinedSource = source + "\\n" + projectSources.map((file) => "\\n#include \\\"" + file.path.replace(/\\\\/g, "/") + "\\\"").join("\\n");',
+  '    const result = await compile({ source: combinedSource, fileName: "main.cpp", flags: ["-std=c++20", "-I."], extraFiles });',
   '    if (!result.module) { self.postMessage({ type: "result", ok: false, output: result.compileOutput || "Compilation failed." }); return; }',
   '    self.postMessage({ type: "status", value: "Running program…" });',
   '    let output = ""; let input = new TextEncoder().encode(stdin || ""); let inputOffset = 0; let instance;',
@@ -83,20 +85,24 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
     if (!files?.length) return
     const next = new Map(libraries.map((file) => [file.path, file]))
     let skipped = 0
-    for (const file of Array.from(files)) {
-      if (!/\\.(?:h|hh|hpp|hxx|inc|tpp|ipp)$/i.test(file.name)) { skipped++; continue }
+    let mainSourceTaken = false
+    const selectedFiles = Array.from(files).sort((a, b) => Number(/(^|\\/)main\\.(?:cpp|cc|cxx)$/i.test(b.name)) - Number(/(^|\\/)main\\.(?:cpp|cc|cxx)$/i.test(a.name)))
+    for (const file of selectedFiles) {
+      if (!/\\.(?:h|hh|hpp|hxx|inc|tpp|ipp|cpp|cc|cxx)$/i.test(file.name)) { skipped++; continue }
       const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
       const path = relative.replace(/\\\\/g, '/').split('/').filter((part) => part && part !== '.' && part !== '..').join('/')
       if (!path) { skipped++; continue }
       if (file.size > 2_000_000) { skipped++; continue }
-      next.set(path, { path, content: await file.text() })
+      const content = await file.text()
+      if (/\\.(?:cpp|cc|cxx)$/i.test(file.name) && !mainSourceTaken) { setCode(content); mainSourceTaken = true; next.delete(path); continue }
+      next.set(path, { path, content })
     }
     const totalBytes = Array.from(next.values()).reduce((sum, file) => sum + new Blob([file.content]).size, 0)
     if (totalBytes > 3_500_000) {
-      setLibraryNotice('The imported headers exceed the 3.5 MB local limit. Remove files or import a smaller library.')
+      setLibraryNotice('The imported project files exceed the 3.5 MB local limit. Remove files or import a smaller project.')
     } else {
       setLibraries(Array.from(next.values()))
-      setLibraryNotice((files.length - skipped) + ' header file' + (files.length - skipped === 1 ? '' : 's') + ' imported' + (skipped ? '; unsupported or oversized files skipped.' : '.'))
+      setLibraryNotice((files.length - skipped) + ' project file' + (files.length - skipped === 1 ? '' : 's') + ' imported' + (skipped ? '; unsupported or oversized files skipped.' : '.'))
     }
     if (libraryFilesRef.current) libraryFilesRef.current.value = ''
     if (libraryFolderRef.current) libraryFolderRef.current.value = ''
@@ -183,13 +189,13 @@ export default function CppSimulator({ onBack }: { onBack: () => void }) {
       <article className="cpp-editor-panel">
         <div className="cpp-panel-head"><span><i className="cpp-file-dot" /> main.cpp</span><div><span>UTF-8</span><span>C++</span></div></div>
         <div className="cpp-library-tools">
-          <div className="cpp-library-copy"><strong>Libraries</strong><span>{libraries.length ? libraries.length + ' header files ready' : 'Import header-only libraries from your device'}</span></div>
+          <div className="cpp-library-copy"><strong>Libraries</strong><span>{libraries.length ? libraries.length + ' project files ready' : 'Import .cpp source files and headers from your device'}</span></div>
           <div className="cpp-library-actions"><button type="button" onClick={() => libraryFilesRef.current?.click()}>Add files</button><button type="button" onClick={() => libraryFolderRef.current?.click()}>Add folder</button></div>
-          <input ref={libraryFilesRef} className="cpp-hidden-input" type="file" accept=".h,.hh,.hpp,.hxx,.inc,.tpp,.ipp,text/plain" multiple aria-label="Import C++ header files" onChange={(event) => { void importLibraries(event.currentTarget.files) }} />
-          <input ref={(node) => { libraryFolderRef.current = node; if (node) node.setAttribute('webkitdirectory', '') }} className="cpp-hidden-input" type="file" multiple accept=".h,.hh,.hpp,.hxx,.inc,.tpp,.ipp,text/plain" aria-label="Import a C++ library folder" onChange={(event) => { void importLibraries(event.currentTarget.files) }} />
+          <input ref={libraryFilesRef} className="cpp-hidden-input" type="file" accept=".cpp,.cc,.cxx,.h,.hh,.hpp,.hxx,.inc,.tpp,.ipp,text/plain" multiple aria-label="Import C++ source and header files" onChange={(event) => { void importLibraries(event.currentTarget.files) }} />
+          <input ref={(node) => { libraryFolderRef.current = node; if (node) node.setAttribute('webkitdirectory', '') }} className="cpp-hidden-input" type="file" multiple accept=".cpp,.cc,.cxx,.h,.hh,.hpp,.hxx,.inc,.tpp,.ipp,text/plain" aria-label="Import a C++ source and header folder" onChange={(event) => { void importLibraries(event.currentTarget.files) }} />
         </div>
         {libraryNotice && <div className="cpp-library-notice" role="status">{libraryNotice}</div>}
-        {libraries.length > 0 && <div className="cpp-library-list" aria-label="Imported library headers">{libraries.map((file) => <span key={file.path} title={file.path}>{file.path}<button type="button" aria-label={'Remove ' + file.path} onClick={() => removeLibrary(file.path)}>×</button></span>)}</div>}
+        {libraries.length > 0 && <div className="cpp-library-list" aria-label="Imported C++ project files">{libraries.map((file) => <span key={file.path} title={file.path}>{file.path}<button type="button" aria-label={'Remove ' + file.path} onClick={() => removeLibrary(file.path)}>×</button></span>)}</div>}
         <div className="cpp-editor">
           <div className="cpp-gutter" aria-hidden="true">{code.split('\n').map((_, i) => <span key={i}>{i + 1}</span>)}</div>
           <textarea value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="C++ source code editor" />
