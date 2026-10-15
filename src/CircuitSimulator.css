@@ -55,3 +55,14 @@
 .circuit-workspace[data-theme="forest"] .circuit-meter-panel strong,.circuit-workspace[data-theme="purple"] .circuit-meter-panel strong,.circuit-workspace[data-theme="red-black"] .circuit-meter-panel strong,.circuit-workspace[data-theme="doom"] .circuit-meter-panel strong{color:var(--c-ink)}
 .circuit-workspace[data-theme="forest"] .circuit-meter-panel select,.circuit-workspace[data-theme="purple"] .circuit-meter-panel select,.circuit-workspace[data-theme="red-black"] .circuit-meter-panel select,.circuit-workspace[data-theme="doom"] .circuit-meter-panel select{background:#101713;color:var(--c-ink);border-color:var(--c-line)}
 .circuit-workspace[data-theme="forest"] .circuit-rotation output,.circuit-workspace[data-theme="purple"] .circuit-rotation output,.circuit-workspace[data-theme="red-black"] .circuit-rotation output,.circuit-workspace[data-theme="doom"] .circuit-rotation output{color:var(--c-ink)}
+
+.circuit-workspace[data-theme="white-purple"] .circuit-heading p,.circuit-workspace[data-theme="white-purple"] .circuit-rotation button:hover,.circuit-workspace[data-theme="white-purple"] .circuit-part.selected circle:not(.pin-hit){color:#8246c1;stroke:#8246c1}
+.circuit-workspace[data-theme="red-white"] .circuit-heading p,.circuit-workspace[data-theme="red-white"] .circuit-rotation button:hover,.circuit-workspace[data-theme="red-white"] .circuit-part.selected circle:not(.pin-hit){color:#c13e47;stroke:#c13e47}
+.circuit-workspace[data-theme="white-purple"] .circuit-run{background:#8246c1;border-color:#8246c1}
+.circuit-workspace[data-theme="red-white"] .circuit-run{background:#c13e47;border-color:#c13e47}
+.circuit-workspace[data-theme="white-purple"] .circuit-wire path,.circuit-workspace[data-theme="white-purple"] .wire-preview{stroke:#8246c1}
+.circuit-workspace[data-theme="red-white"] .circuit-wire path,.circuit-workspace[data-theme="red-white"] .wire-preview{stroke:#c13e47}
+.circuit-workspace[data-theme="purple"] .circuit-part.selected circle:not(.pin-hit),.circuit-workspace[data-theme="red-black"] .circuit-part.selected circle:not(.pin-hit),.circuit-workspace[data-theme="doom"] .circuit-part.selected circle:not(.pin-hit){stroke:var(--c-accent)}
+.circuit-workspace[data-theme="purple"] .circuit-run,.circuit-workspace[data-theme="red-black"] .circuit-run,.circuit-workspace[data-theme="doom"] .circuit-run{background:var(--c-accent);border-color:var(--c-accent)}
+.circuit-workspace .simulator-theme-picker select{max-width:132px}
+@media(max-width:680px){.circuit-workspace .simulator-theme-picker select{max-width:92px;padding:0 4px;font-size:9px}}
