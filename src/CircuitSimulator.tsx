@@ -3,8 +3,10 @@ import './CircuitSimulator.css'
 
 type Kind = 'source' | 'resistor' | 'switch' | 'ground'
 type MeterMode = 'voltage' | 'current' | 'resistance'
-type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; rotation?: number }
-type Wire = { id: string; from: string; to: string }
+type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; rotation?: number; mirrorX?: boolean; mirrorY?: boolean }
+type Point = { x: number; y: number }
+type Wire = { id: string; from: string; to: string; points?: Point[] }
+type WireHandle = { wireId: string; index: number }
 type Pin = { id: string; x: number; y: number; label: string }
 type Reading = { id: string; label: string; voltage: number; current: number; power: number }
 type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; message: string }
@@ -16,7 +18,8 @@ const makeId = () => globalThis.crypto?.randomUUID?.() ?? Math.random().toString
 const pinId = (part: Part, side: string) => part.id + ':' + side
 const rotatePoint = (part: Part, x: number, y: number) => {
   const angle = ((part.rotation ?? 0) * Math.PI) / 180
-  return { x: part.x + x * Math.cos(angle) - y * Math.sin(angle), y: part.y + x * Math.sin(angle) + y * Math.cos(angle) }
+  const localX = x * (part.mirrorX ? -1 : 1), localY = y * (part.mirrorY ? -1 : 1)
+  return { x: part.x + localX * Math.cos(angle) - localY * Math.sin(angle), y: part.y + localX * Math.sin(angle) + localY * Math.cos(angle) }
 }
 const pinsFor = (part: Part): Pin[] => {
   if (part.kind === 'ground') { const point = rotatePoint(part, 0, -23); return [{ id: pinId(part, 'g'), ...point, label: 'GND' }] }
@@ -123,13 +126,14 @@ const fmt = (value: number, unit: string) => {
 }
 const partNames: Record<Kind, string> = { source: 'DC source', resistor: 'Resistor', switch: 'Switch', ground: 'Ground' }
 const symbolPinsText = (part: Part) => pinsFor(part)
+const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
 function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
   part: Part; selected: boolean; onPointerDown: (event: ReactPointerEvent<SVGGElement>, part: Part) => void
   onPin: (pin: Pin) => void; voltageMap?: Record<string, number>
 }) {
   const pins = symbolPinsText(part)
   const voltageLabel = (pin: Pin) => voltageMap ? fmt(voltageMap[pin.id] ?? 0, 'V') : pin.label
-  return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
+  return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ') scale(' + (part.mirrorX ? -1 : 1) + ' ' + (part.mirrorY ? -1 : 1) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
     {part.kind === 'resistor' && <>
       <line x1="-48" y1="0" x2="-31" y2="0" /><path d="M-31 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L29 0" /><line x1="29" y1="0" x2="48" y2="0" />
     </>}
@@ -162,13 +166,16 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
+  const [dragPoint, setDragPoint] = useState<WireHandle | null>(null)
+  const [wirePoints, setWirePoints] = useState<Point[]>([])
+  const [wireCursor, setWireCursor] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const selected = circuit.parts.find((part) => part.id === selectedPart)
   const pinLookup = Object.fromEntries(circuit.parts.flatMap(pinsFor).map((pin) => [pin.id, pin]))
   useEffect(() => { try { localStorage.setItem('ozoo:circuit', JSON.stringify(circuit)) } catch {} }, [circuit])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setPlacement(null); setWireStart(null) }
+      if (event.key === 'Escape') { setPlacement(null); setWireStart(null); setWirePoints([]); setWireCursor(null); setDragPoint(null) }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPart) {
         setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selectedPart), wires: value.wires.filter((wire) => !wire.from.startsWith(selectedPart + ':') && !wire.to.startsWith(selectedPart + ':')) }))
         setSelectedPart(null); setSimulation(null)
@@ -191,6 +198,13 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.target !== event.currentTarget) return
+    if (wireStart) {
+      const point = screenPoint(event)
+      setWirePoints((current) => [...current, point])
+      setWireCursor(point)
+      setError('Bend added. Click to add another bend or select a pin to finish the wire.')
+      return
+    }
     if (placement) {
       const point = screenPoint(event)
       addPartAt(placement, point.x, point.y)
@@ -230,9 +244,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       setMeterFirstPin(null); return
     }
     setSelectedPart(null); setSelectedWire(null)
-    if (!wireStart) { setWireStart(pin.id); setError('Choose another pin to finish the wire.'); return }
-    if (wireStart !== pin.id) setCircuit((current) => ({ ...current, wires: [...current.wires, { id: makeId(), from: wireStart, to: pin.id }] }))
-    setWireStart(null); setError(''); setSimulation(null)
+    if (!wireStart) { setPlacement(null); setWireStart(pin.id); setWirePoints([]); setWireCursor({ x: pin.x, y: pin.y }); setError('Wire follows the pointer. Click the board to add a bend, then another pin to finish.'); return }
+    if (wireStart !== pin.id) setCircuit((current) => ({ ...current, wires: [...current.wires, { id: makeId(), from: wireStart, to: pin.id, points: wirePoints }] }))
+    setWireStart(null); setWirePoints([]); setWireCursor(null); setError(''); setSimulation(null)
   }
   const runSimulation = () => {
     setError('')
@@ -274,10 +288,12 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       <section className="circuit-main">
         <div className="circuit-canvas-head"><span><i /> Schematic</span><span>{placement ? 'Click to place · Esc to cancel' : wireStart ? 'Select the second pin' : 'Drag parts to arrange · click a pin to wire'}</span></div>
         <svg ref={svgRef} viewBox={'0 0 ' + W + ' ' + H} className={'circuit-canvas ' + (placement ? 'placing' : '')} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
-          if (!drag) return
           const point = screenPoint(event)
+          if (wireStart) setWireCursor(point)
+          if (dragPoint) { setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
+          if (!drag) return
           setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === drag.id ? { ...part, x: Math.max(55, Math.min(W - 55, point.x - drag.dx)), y: Math.max(70, Math.min(H - 45, point.y - drag.dy)) } : part) }))
-        }} onPointerUp={(event) => { if (drag) { setDrag(null); setSimulation(null); try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {} } }}>
+        }} onPointerUp={(event) => { if (drag || dragPoint) { setDrag(null); setDragPoint(null); setSimulation(null); try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {} } }}>
           <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern></defs>
           <rect width={W} height={H} fill="url(#circuit-grid)" />
           {circuit.wires.map((wire) => {
