@@ -2266,7 +2266,11 @@ function App() {
     const link = window.document.createElement('a')
     link.href = url
     link.download = `${boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'whiteboard'}.pdf`
-    link.cli  const launchGraphSimulator = () => {
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const launchGraphSimulator = () => {
     setSimulatorMenuOpen(false)
     setGraphSimulatorOpen(true)
   }
