@@ -285,9 +285,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         <div className="circuit-section-title">TOOLS</div>
         <button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setWireStart(null); setMeterFirstPin(null); setMeterReading('Voltage: select two pins · Current / resistance: select a component.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Digital multimeter</span><small>Measure voltage, current, resistance</small></button>
         {dmmActive && <div className="circuit-meter-panel"><strong>Meter mode</strong><select aria-label="Multimeter mode" value={meterMode} onChange={(event) => { setMeterMode(event.target.value as MeterMode); setMeterFirstPin(null); setMeterReading('Choose where to probe the circuit.') }}><option value="voltage">Voltage (two pins)</option><option value="current">Current (component)</option><option value="resistance">Resistance (component)</option></select><output>{meterReading}</output></div>}
-        <button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Click any two pins to connect them with a wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span><small>Click pin → click pin</small></button>
+        <button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Click any two pins to connect them with a wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span><small>Pin → bend points → pin</small></button>
         <button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New circuit</span><small>Clear this canvas</small></button>
-        <div className="circuit-help"><strong>Quick start</strong><p>Select a component, then click the canvas. To wire it, click one terminal dot and then another.</p><p>Try the loaded 5 V source and 1 kΩ resistor. Click <b>Simulate</b> to read voltage and current.</p></div>
+        <div className="circuit-help"><strong>Quick start</strong><p>Select a component, then click the canvas. To route a wire, click a terminal, add bend points on the board, then click the destination terminal.</p><p>Try the loaded 5 V source and 1 kΩ resistor. Click <b>Simulate</b> to read voltage and current.</p></div>
       </aside>
       <section className="circuit-main">
         <div className="circuit-canvas-head"><span><i /> Schematic</span><span>{placement ? 'Click to place · Esc to cancel' : wireStart ? 'Select the second pin' : 'Drag parts to arrange · click a pin to wire'}</span></div>
@@ -312,7 +312,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
               {simulation && <text x={middle.x} y={middle.y - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
             </g>
           })}
-          {wireStart && wireCursor && pinLookup[wireStart] && <path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />}
+          {wireStart && wireCursor && pinLookup[wireStart] && <><path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />{wirePoints.map((point, index) => <circle key={'route-' + index} className="wire-preview-handle" cx={point.x} cy={point.y} r="4" />)}</>}
           {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id} onPointerDown={handlePartPointerDown} onPin={handlePin} voltageMap={simulation?.nodeVoltages} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · 5 V example loaded · Double click a switch to toggle it in the inspector</span>}</div>
