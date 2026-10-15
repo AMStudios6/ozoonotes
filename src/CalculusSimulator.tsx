@@ -28,7 +28,7 @@ function tokenize(source: string): Token[] {
 }
 
 function parseExpression(source: string): Expr {
-  const tokens = tokenize(source.replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'pi'))
+  const tokens = tokenize(source.trim().replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'pi'))
   let index = 0
   const peek = () => tokens[index]
   const take = (value?: string) => {
@@ -256,8 +256,8 @@ export default function CalculusSimulator({ onBack }: { onBack: () => void }) {
       <div className="calculus-brand"><span className="calculus-brand-icon">∫</span><span><strong>Ozoo Calculus</strong><small>Derivatives & integrals</small></span></div>
       <SimulatorThemePicker theme={theme} onChange={setTheme} />
     </header>
-    <main className="calculus-layout">
-      <section className="calculus-intro"><p>CALCULUS WORKSPACE</p><h1>Derivation & integration</h1><span>Enter an expression to calculate its derivative or an antiderivative.</span></section>
+    <div className="calculus-layout">
+      <section className="calculus-intro"><p>CALCULUS WORKSPACE</p><h1>Differentiation & integration</h1><span>Enter an expression to calculate its derivative or an antiderivative.</span></section>
       <section className="calculus-card" aria-label="Calculus problem">
         <div className="calculus-mode" role="group" aria-label="Choose operation">
           <button type="button" className={operation === 'differentiate' ? 'active' : ''} aria-pressed={operation === 'differentiate'} onClick={() => setOperation('differentiate')}>Derivative <small>d / dx</small></button>
@@ -271,5 +271,5 @@ export default function CalculusSimulator({ onBack }: { onBack: () => void }) {
       </section>
       <aside className="calculus-guide"><strong>What it supports</strong><p><b>Derivatives:</b> sums, products, quotients, powers, and chain rule for sin, cos, tan, exp, ln, and sqrt.</p><p><b>Integrals:</b> sums, constants, powers of a linear expression, and common functions with a linear inside expression.</p><small>This symbolic helper shows the result directly. Advanced integrals such as integration by parts are not included yet.</small></aside>
     </main>
-  </main>
+  </div>
 }
