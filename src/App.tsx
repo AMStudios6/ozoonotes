@@ -823,7 +823,6 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
           </div>
           <p className="graph-formula-help">Use x, numbers, parentheses, + − × ÷ ^ and functions such as sin, cos, tan, sqrt, abs and log.</p>
         </section>
-        </section>
       </section>
     </main>
   )
