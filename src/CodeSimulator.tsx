@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './CodeSimulator.css'
 import CodeEditor from './CodeEditor'
+import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
 type CodeMode = 'python' | 'java' | 'web'
 type StudioFile = { path: string; type: string; encoding: 'text' | 'data'; content: string }
@@ -113,7 +114,8 @@ const EXEC_WORKER = [
 ].join('\n')
 
 export default function CodeSimulator({ initialLanguage = 'python', onBack }: { initialLanguage?: CodeMode; onBack: () => void }) {
-  const [language, setLanguage] = useState<CodeMode>(initialLanguage)
+  const [colorTheme, setColorTheme] = useSimulatorTheme()
+  const [language, setLanguage = useState<CodeMode>(initialLanguage)
   const [python, setPython] = useState(() => readCode('ozoo:python-code', PY_START))
   const [java, setJava] = useState(() => readCode('ozoo:java-code', JAVA_START))
   const [html, setHtml] = useState(() => readCode('ozoo:web-html', HTML_START))
@@ -270,11 +272,11 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
   const currentCode = language === 'python' ? python : language === 'java' ? java : html
   const setCurrentCode = language === 'python' ? setPython : language === 'java' ? setJava : setHtml
 
-  return <main className="studio-workspace">
+  return <main className="studio-workspace" data-theme={colorTheme}>
     <header className="studio-topbar">
       <button className="studio-back" onClick={onBack} aria-label="Back to OzooNotes">← <span>Simulator</span></button>
       <div className="studio-brand"><span className="studio-brand-mark">&lt;/&gt;</span><span><strong>Code Studio</strong><small>Local coding workspace</small></span></div>
-      <div className="studio-actions"><label className="studio-language-picker"><span className="sr-only">Language</span><select aria-label="Choose coding simulator" value={language} onChange={(event) => { setLanguage(event.target.value as CodeMode); setStatus('Ready'); setOutput('Run your program to see output here.') }}><option value="python">Python</option><option value="java">Java</option><option value="web">HTML · CSS · JavaScript</option></select></label><button className="studio-reset" onClick={resetCurrent}>Reset</button><button className="studio-run" onClick={runProgram} disabled={running}><span>{running ? '◌' : language === 'web' ? '↻' : '▶'}</span>{running ? status : language === 'web' ? 'Run preview' : 'Run code'}</button></div>
+      <div className="studio-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><label className="studio-language-picker"><span className="sr-only">Language</span><select aria-label="Choose coding simulator" value={language} onChange={(event) => { setLanguage(event.target.value as CodeMode); setStatus('Ready'); setOutput('Run your program to see output here.') }}><option value="python">Python</option><option value="java">Java</option><option value="web">HTML · CSS · JavaScript</option></select></label><button className="studio-reset" onClick={resetCurrent}>Reset</button><button className="studio-run" onClick={runProgram} disabled={running}><span>{running ? '◌' : language === 'web' ? '↻' : '▶'}</span>{running ? status : language === 'web' ? 'Run preview' : 'Run code'}</button></div>
     </header>
     <section className="studio-heading"><div><p>SIMULATOR / {language === 'web' ? 'WEB STUDIO' : language.toUpperCase()}</p><h1>{language === 'web' ? 'Build a web page.' : language === 'python' ? 'Write Python.' : 'Write Java.'}</h1><span>Code and project files save in this browser on this device.</span></div><span className="studio-local-badge"><i /> Local execution</span></section>
     <section className={'studio-panels ' + (language === 'web' ? 'studio-web-layout' : '')}>
