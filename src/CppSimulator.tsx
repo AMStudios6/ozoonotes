@@ -41,7 +41,7 @@ const WORKER_SOURCE = [
   '      if (name === "fd_prestat_get" || name === "fd_prestat_dir_name") return 8;',
   '      return 0;',
   '    }; } });',
-  '    const instantiated = await WebAssembly.instantiate(result.module, { wasi_snapshot_preview1: wasi }); instance = instantiated.instance;',
+  '    const instantiated = await WebAssembly.instantiate(result.module, { wasi_snapshot_preview1: wasi }); instance = instantiated instanceof WebAssembly.Instance ? instantiated : instantiated.instance;',
   '    try { const start = instance.exports._start; if (start) start(); else if (instance.exports.main) instance.exports.main(); }',
   '    catch (error) { if (!String(error).startsWith("Error: Program exited with code 0")) throw error; }',
   '    self.postMessage({ type: "result", ok: true, output: output || "(Program finished with no output.)", diagnostics: result.compileOutput || "" });',
