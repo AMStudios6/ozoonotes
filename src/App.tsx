@@ -704,10 +704,10 @@ function readSavedWorkspace(): RestoredWorkspace {
 
 type SimulatorFormula = { id: string; expression: string; color: string; visible: boolean }
 
-function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean }) {
+function GraphSimulator({ onBack }: { onBack: () => void }) {
   const width = 1200
   const height = 720
-  const colors = ['#55d98b', '#9b72f2', '#f0a24b', '#4bb9e8', '#f06c79', '#e6d85c']
+  const colors = ['#2f71d5', '#d84d4d', '#278c66', '#8a57c4', '#d68a2e', '#1598ab']
   const graphRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<{ x: number; y: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, scale: 42 })
@@ -734,6 +734,11 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
   const gridStep = [1, 2, 5, 10].map((factor) => factor * power).find((step) => step >= rawStep) ?? 10 * power
   const xToPx = (x: number) => width / 2 + (x - view.x) * view.scale
   const yToPx = (y: number) => height / 2 - (y - view.y) * view.scale
+  const minorStep = gridStep / 5
+  const minorXs: number[] = []
+  const minorYs: number[] = []
+  for (let x = Math.floor(xMin / minorStep) * minorStep, count = 0; x <= xMax && count < 600; x += minorStep, count++) minorXs.push(x)
+  for (let y = Math.floor(yMin / minorStep) * minorStep, count = 0; y <= yMax && count < 600; y += minorStep, count++) minorYs.push(y)
   const gridXs: number[] = []
   const gridYs: number[] = []
   for (let x = Math.floor(xMin / gridStep) * gridStep, count = 0; x <= xMax && count < 400; x += gridStep, count++) gridXs.push(x)
@@ -770,16 +775,16 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
   })
 
   return (
-    <main className={`app ${dark ? 'dark' : 'light'} graph-simulator-app`}>
+    <main className="graph-workspace">
       <section className="graph-simulator-page">
-        <header className="graph-simulator-topbar">
-          <button type="button" className="graph-back-button" onClick={onBack}><span aria-hidden="true">←</span><span>OzooNotes</span></button>
-          <div className="graph-simulator-heading"><span className="graph-heading-icon"><Icon name="graph" size={20} /></span><div><h1>Graph simulator</h1><p>Explore equations on an infinite coordinate plane</p></div></div>
+        <header className="graph-topbar">
+          <button type="button" className="graph-back-button" onClick={onBack} aria-label="Back to notes"><span aria-hidden="true">‹</span><span>Notes</span></button>
+          <div className="graph-document-title"><span className="graph-document-glyph" aria-hidden="true">ƒ</span><span>Untitled Graph</span></div>
           <div className="graph-view-controls" aria-label="Graph view controls">
-            <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(0.8)}>−</button>
-            <span>{Math.round(view.scale / 42 * 100)}%</span>
             <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.25)}>+</button>
-            <button type="button" className="graph-reset-button" onClick={() => setView({ x: 0, y: 0, scale: 42 })}>Center axes</button>
+            <span>{Math.round(view.scale / 42 * 100)}%</span>
+            <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(0.8)}>−</button>
+            <button type="button" className="graph-reset-button" onClick={() => setView({ x: 0, y: 0, scale: 42 })}>Reset view</button>
           </div>
         </header>
         <div className="graph-simulator-stage">
@@ -790,6 +795,7 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
             onPointerCancel={() => { dragRef.current = null }}>
             <defs><clipPath id="simulator-plot-clip"><rect width={width} height={height} /></clipPath></defs>
             <rect width={width} height={height} className="graph-plot-bg" />
+          <g className="graph-minor-grid">{minorXs.map((x) => <line key={`mx${x}`} x1={xToPx(x)} x2={xToPx(x)} y1="0" y2={height} />)}{minorYs.map((y) => <line key={`my${y}`} x1="0" x2={width} y1={yToPx(y)} y2={yToPx(y)} />)}</g>
             <g className="graph-grid-lines">
               {gridXs.map((x) => <line key={`gx${x}`} x1={xToPx(x)} x2={xToPx(x)} y1="0" y2={height} />)}
               {gridYs.map((y) => <line key={`gy${y}`} x1="0" x2={width} y1={yToPx(y)} y2={yToPx(y)} />)}
@@ -804,20 +810,20 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
             <g clipPath="url(#simulator-plot-clip)">
               {curves.map((curve) => <path key={curve.id} d={curve.path} className="graph-equation-curve" style={{ stroke: curve.color }} />)}
             </g>
-            <text className="graph-pan-hint" x="18" y={height - 18}>Drag to pan · Scroll to zoom</text>
           </svg>
+          <div className="graph-canvas-tools" aria-label="Graph navigation"><button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.25)}>+</button><button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(0.8)}>−</button></div>
         </div>
         <section className="graph-expression-panel" aria-label="Expressions">
           <div className="graph-expression-toolbar">
-            <div><h2>Expressions</h2><span>{formulas.length} {formulas.length === 1 ? 'equation' : 'equations'}</span></div>
-            <button type="button" className="graph-add-formula" onClick={addFormula}><span aria-hidden="true">+</span> Add expression</button>
+            <div className="graph-expression-title"><button type="button" className="graph-add-expression-icon" onClick={addFormula} aria-label="Add expression" title="Add expression">+</button><h2>Expressions</h2></div>
+            <span className="graph-expression-count">{formulas.filter((item) => item.expression.trim()).length} active</span>
           </div>
           <div className="graph-formula-list">
             {formulas.map((formula, index) => <div className="graph-formula-row" key={formula.id}>
               <span className="graph-formula-number">{index + 1}</span>
               <button type="button" className={`graph-formula-swatch-button ${formula.visible ? '' : 'is-hidden'}`} style={{ '--formula-color': formula.color } as CSSProperties} aria-label={formula.visible ? 'Hide formula' : 'Show formula'} title={formula.visible ? 'Hide curve' : 'Show curve'} onClick={() => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, visible: !item.visible } : item))}><span /></button>
               <span className="graph-equation-prefix">y =</span>
-              <input className="graph-formula-input" aria-label={`Formula ${index + 1}`} value={formula.expression.replace(/^y\s*=\s*/i, '')} onChange={(event) => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, expression: event.target.value } : item))} placeholder="x^2, sin(x), or sqrt(abs(x))" autoComplete="off" />
+              <input className="graph-formula-input" aria-label={`Formula ${index + 1}`} value={formula.expression.replace(/^y\s*=\s*/i, '')} onChange={(event) => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, expression: event.target.value } : item))} placeholder="Enter an expression, e.g. x^2" autoComplete="off" />
               <button type="button" className="graph-formula-remove" aria-label={`Remove formula ${index + 1}`} title="Remove formula" onClick={() => setFormulas((current) => current.filter((item) => item.id !== formula.id))}>×</button>
             </div>)}
           </div>
@@ -2487,7 +2493,7 @@ function App() {
     return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark, colorTheme) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
-  if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} dark={dark} />
+  if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
 
   if (boards.length === 0) {
     return (
