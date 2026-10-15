@@ -106,6 +106,13 @@ function makeActions(target: HTMLElement | null): MenuAction[] {
     if (run) actions.push({ label: 'Run / simulate', run: () => run.click(), shortcut: 'Ctrl+↵' })
     actions.push({ label: 'Select all', run: () => { document.execCommand('selectAll') }, shortcut: 'Ctrl+A' })
   }
+  if (target?.closest('.app')) {
+    actions.push({
+      label: 'Keyboard shortcuts',
+      run: () => window.dispatchEvent(new CustomEvent('ozoo:open-shortcuts')),
+      shortcut: '?',
+    })
+  }
   return actions
 }
 
