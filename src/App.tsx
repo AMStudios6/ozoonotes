@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent, type CSSProperties } from 'react'
 import './App.css'
+import './WorkspacePolish.css'
 import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
 import folderPng from './assets/folder.png'

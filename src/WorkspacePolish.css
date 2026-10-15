@@ -1,0 +1,204 @@
+/* Page hierarchy and navigation polish */
+.landing-page {
+  display: flex;
+  flex-direction: column;
+}
+.landing-page > .landing-hero { order: 0; }
+.landing-page > .landing-files { order: 1; }
+.landing-page > .audience-starters { order: 2; }
+.landing-page > .student-space { order: 3; }
+.landing-page > .landing-tools { order: 4; }
+.landing-page > footer { order: 5; }
+
+.landing-topbar {
+  gap: clamp(12px, 2vw, 26px);
+}
+.landing-nav {
+  min-width: 0;
+}
+.landing-nav a,
+.landing-simulator-trigger {
+  white-space: nowrap;
+}
+.landing-simulator-menu {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+.landing-files {
+  padding: clamp(28px, 4vw, 46px) 0;
+}
+.landing-files-heading {
+  align-items: center;
+}
+.landing-recent-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.landing-recent-list > button {
+  min-height: 66px;
+  border-radius: 12px;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.landing-recent-list > button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.landing-section-heading,
+.landing-files-heading {
+  scroll-margin-top: 86px;
+}
+.landing-page button:focus-visible,
+.landing-page a:focus-visible,
+.landing-page select:focus-visible,
+.landing-page input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.landing-feature,
+.starter-card,
+.landing-quick-setup,
+.landing-recent-list > button {
+  transition-duration: .16s;
+}
+
+/* Give each simulator a consistent, comfortable control rhythm. */
+:is(.graph-workspace, .studio-workspace, .cpp-workspace, .calculus-workspace, .circuit-workspace) {
+  min-height: 100vh;
+}
+:is(.graph-workspace, .studio-workspace, .cpp-workspace, .calculus-workspace) :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent, #67db83);
+  outline-offset: 2px;
+}
+:is(.graph-topbar, .studio-topbar, .cpp-topbar, .calculus-topbar) {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.circuit-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.circuit-layout {
+  align-items: stretch;
+}
+.circuit-palette,
+.circuit-inspector {
+  scrollbar-width: thin;
+}
+.circuit-main {
+  min-width: 0;
+}
+.circuit-canvas {
+  touch-action: none;
+}
+
+@media (max-width: 960px) {
+  .landing-topbar {
+    padding-inline: 18px;
+    gap: 12px;
+  }
+  .landing-brand .brand-mark {
+    width: 130px;
+  }
+  .landing-nav {
+    gap: 0;
+  }
+  .landing-nav a,
+  .landing-simulator-trigger {
+    padding-inline: 8px;
+    font-size: 11px;
+  }
+  .landing-recent-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .circuit-layout {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+  .circuit-inspector {
+    grid-column: 1 / -1;
+    min-height: 120px;
+  }
+}
+@media (max-width: 680px) {
+  .landing-page {
+    width: min(100% - 32px, 560px);
+  }
+  .landing-topbar {
+    min-height: 58px;
+    height: auto;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+  }
+  .landing-brand .brand-mark {
+    width: 112px;
+    height: 40px;
+  }
+  .landing-nav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 2px 0 5px;
+  }
+  .landing-nav a,
+  .landing-simulator-trigger {
+    flex: none;
+  }
+  .landing-top-actions {
+    margin-left: auto;
+  }
+  .landing-recent-list {
+    grid-template-columns: 1fr;
+  }
+  .landing-files-heading {
+    align-items: flex-start;
+  }
+  .circuit-topbar {
+    height: auto;
+    min-height: 58px;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 9px 12px;
+  }
+  .circuit-brand {
+    justify-self: end;
+  }
+  .circuit-top-actions {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .circuit-top-actions > * {
+    flex: none;
+  }
+  .circuit-heading {
+    align-items: flex-start;
+    padding: 20px 16px 14px;
+  }
+  .circuit-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 12px 14px;
+  }
+  .circuit-palette {
+    max-height: 260px;
+  }
+  .circuit-main {
+    min-height: 380px;
+  }
+  .circuit-inspector {
+    min-height: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-feature,
+  .landing-recent-list > button {
+    transition: none;
+  }
+}

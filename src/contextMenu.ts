@@ -114,7 +114,7 @@ function renderMenu(menu: HTMLDivElement, target: HTMLElement | null, x: number,
   menu.replaceChildren()
   const heading = document.createElement('div')
   heading.className = 'ozoo-menu-heading'
-  heading.textContent = target?.closest('.circuit-workspace') ? 'Circuit tools' : target?.closest('.graph-simulator') ? 'Graph tools' : target?.closest('.code-simulator, .cpp-simulator') ? 'Code tools' : 'Page tools'
+  heading.textContent = target?.closest('.circuit-workspace') ? 'Circuit tools' : target?.closest('.graph-workspace') ? 'Graph tools' : target?.closest('.studio-workspace, .cpp-workspace') ? 'Code tools' : 'Page tools'
   menu.append(heading)
   const divider = document.createElement('div')
   divider.className = 'ozoo-menu-divider'
@@ -149,9 +149,18 @@ export function installAppContextMenu() {
   const menu = createMenuElement()
   const hide = () => { menu.hidden = true }
   const onContextMenu = (event: MouseEvent) => {
-    if (!(event.target instanceof HTMLElement)) return
+    const eventTarget = event.target
+    const target = eventTarget instanceof HTMLElement
+      ? eventTarget
+      : eventTarget instanceof SVGElement
+        ? eventTarget.parentElement
+        : null
+    if (!target) return
     event.preventDefault()
-    renderMenu(menu, event.target, event.clientX, event.clientY)
+    const bounds = target.getBoundingClientRect()
+    const x = event.clientX || bounds.left + bounds.width / 2
+    const y = event.clientY || bounds.top + bounds.height / 2
+    renderMenu(menu, target, x, y)
   }
   const onPointerDown = (event: PointerEvent) => {
     if (!menu.contains(event.target as Node)) hide()
