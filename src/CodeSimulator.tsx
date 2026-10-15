@@ -85,16 +85,18 @@ const EXEC_WORKER = [
   '      compiler.setSdk(new Int8Array(await sdkResponse.arrayBuffer()));',
   '      compiler.setTeaVMClasslib(new Int8Array(await runtimeLibResponse.arrayBuffer()));',
   '      const javaFiles = files.filter((file) => file.path.toLowerCase().endsWith(".java"));',
-  '      if (!javaFiles.some((file) => /(^|\\/)Main\\.java$/i.test(file.path))) compiler.addSourceFile("Main.java", code);',
-  '      for (const file of javaFiles) compiler.addSourceFile(file.path, file.content);',
+  '      const declared = code.match(/\\b(?:public\\s+)?class\\s+([A-Za-z_$][\\w$]*)/);',
+  '      const packageName = code.match(/^\\s*package\\s+([\\w.]+)\\s*;/m);',
+  '      const className = declared ? declared[1] : "Main";',
+  '      const sourcePath = (packageName ? packageName[1].replace(/\\./g, "/") + "/" : "") + className + ".java";',
+  '      compiler.addSourceFile(sourcePath, code);',
+  '      for (const file of javaFiles) if (file.path.split("/").pop().toLowerCase() !== (className + ".java").toLowerCase()) compiler.addSourceFile(file.path, file.content);',
   '      const diagnostics = []; compiler.onDiagnostic((item) => diagnostics.push(item.fileName + ":" + item.lineNumber + " " + item.message));',
   '      self.postMessage({ type: "status", value: "Compiling Java…" });',
   '      const compiled = compiler.compile();',
   '      if (!compiled) { self.postMessage({ type: "result", ok: false, output: diagnostics.join("\\n") || "Java compilation failed." }); return; }',
   '      const mainClasses = compiler.detectMainClasses();',
-  '      const sourceName = files.find((file) => file.path.toLowerCase().endsWith("/main.java") || file.path.toLowerCase() === "main.java");',
-  '      const declared = (sourceName ? sourceName.content : code).match(/\\bclass\\s+([A-Za-z_$][\\w$]*)/);',
-  '      const mainClass = mainClasses[0] || (declared ? declared[1] : "Main");',
+  '      const mainClass = mainClasses[0] || className;',
   '      self.postMessage({ type: "status", value: "Building Java program…" });',
   '      if (!compiler.generateWebAssembly({ outputName: "app", mainClass })) { self.postMessage({ type: "result", ok: false, output: diagnostics.join("\\n") || "TeaVM could not build this Java program." }); return; }',
   '      const program = await load(compiler.getWebAssemblyOutputFile("app.wasm"));',
@@ -279,8 +281,8 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
       </article>
       <article className="studio-output-panel">
         {language === 'web' ? <><div className="studio-panel-head"><span>Live preview</span><span className="studio-preview-safe">Sandboxed preview</span></div><iframe key={previewKey} title="Web project preview" className="studio-preview" sandbox="allow-scripts" srcDoc={previewDocument} /></> : <>
-          <div className="studio-panel-head studio-output-head"><div className="studio-output-tabs"><button className="active">Output</button><button onClick={() => document.getElementById('studio-input')?.focus()}>Program input</button></div><span className="studio-status"><i className={running ? 'busy' : ''} />{status}</span></div>
-          <div className="studio-input-pane"><label htmlFor="studio-input">Standard input</label><textarea id="studio-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Optional input for input() or Scanner…" /><small>Enter values here before you run the program.</small></div>
+          <div className="studio-panel-head studio-output-head"><div className="studio-output-tabs"><button className="active">Output</button>{language === 'python' && <button onClick={() => document.getElementById('studio-input')?.focus()}>Program input</button>}</div><span className="studio-status"><i className={running ? 'busy' : ''} />{status}</span></div>
+          {language === 'python' && <div className="studio-input-pane"><label htmlFor="studio-input">Standard input</label><textarea id="studio-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Optional input read by input()…" /><small>Enter values here before you run the program.</small></div>}
           <pre className="studio-output" aria-live="polite">{output}</pre>
           <div className="studio-console-foot"><span>Browser-based {language === 'python' ? 'Python' : 'Java'} · source stays on device</span><span>Saved locally</span></div>
         </>}
