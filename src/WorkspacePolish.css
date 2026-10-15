@@ -639,3 +639,46 @@
     transition: none;
   }
 }
+
+
+/* Social links in the landing page footer */
+.landing-footer-socials {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.landing-footer-socials :is(.landing-footer-instagram, .landing-footer-github) {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--muted);
+  transition: color .16s ease, border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.landing-footer-socials :is(.landing-footer-instagram, .landing-footer-github) svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+.landing-footer-socials :is(.landing-footer-instagram, .landing-footer-github):hover,
+.landing-footer-socials :is(.landing-footer-instagram, .landing-footer-github):focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  outline: none;
+}
+@media (max-width: 560px) {
+  .landing-footer {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    padding-block: 12px;
+  }
+  .landing-footer-socials {
+    margin-left: auto;
+  }
+}
