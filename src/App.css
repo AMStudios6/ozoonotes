@@ -670,3 +670,40 @@
  .graph-simulator-heading {margin-right:0}
  .graph-view-controls .graph-reset-button {display:none}
 }
+
+/* The graph stays above the Desmos-style expression list. */
+.graph-simulator-page {grid-template-rows:auto minmax(220px,1fr) minmax(210px,32vh)}
+.graph-simulator-stage {min-height:220px}
+.graph-simulator-app {overflow:hidden}
+.graph-expression-panel {min-height:0;display:flex;flex-direction:column;padding:0 22px 12px;background:var(--frame-top);border-top:1px solid var(--line)}
+.graph-expression-toolbar {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.graph-expression-toolbar>div {display:flex;align-items:baseline;gap:10px}
+.graph-expression-toolbar h2 {font-size:14px;margin:0}
+.graph-expression-toolbar>div span {font-size:12px;color:var(--muted)}
+.graph-expression-toolbar .graph-add-formula {padding:8px 12px;font-size:13px}
+.graph-formula-list {flex:1;min-height:0;max-height:none;overflow:auto;display:flex;flex-direction:column;gap:0;padding:0}
+.graph-formula-row {flex:none;display:grid;grid-template-columns:38px 28px auto minmax(80px,1fr) 34px;align-items:center;gap:9px;min-height:44px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:13px}
+.graph-formula-number {color:var(--muted);font-size:12px;text-align:center}
+.graph-formula-swatch-button {width:24px;height:24px;display:grid;place-items:center;border:0;background:transparent;cursor:pointer}
+.graph-formula-swatch-button span {width:13px;height:13px;border-radius:50%;background:var(--formula-color);box-shadow:0 0 0 2px color-mix(in srgb,var(--formula-color),transparent 70%)}
+.graph-formula-swatch-button.is-hidden span {opacity:.28}
+.graph-formula-row .graph-equation-prefix {font-size:13px}
+.graph-formula-input {width:100%;min-width:0;padding:7px 9px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);font:14px ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}
+.graph-formula-input:hover {background:var(--panel)}
+.graph-formula-input:focus {border-color:var(--accent);background:var(--panel)}
+.graph-formula-remove {width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:21px;line-height:1;cursor:pointer}
+.graph-formula-remove:hover {background:var(--accent-soft);color:var(--ink)}
+.graph-formula-help {flex:none;color:var(--muted);font-size:11px;margin:8px 0 0}
+@media(max-width:700px) {
+ .graph-simulator-page {grid-template-rows:auto minmax(190px,1fr) minmax(220px,35vh)}
+ .graph-expression-panel {padding:0 10px 8px}
+ .graph-expression-toolbar {padding:8px 0}
+ .graph-formula-row {grid-template-columns:26px 22px auto minmax(60px,1fr) 28px;gap:5px;min-height:42px;padding:3px 4px}
+ .graph-formula-input {font-size:13px;padding:7px 5px}
+ .graph-formula-row .graph-equation-prefix {font-size:12px}
+}
+@media(max-width:420px) {
+ .graph-simulator-page {grid-template-rows:auto minmax(180px,1fr) minmax(220px,38vh)}
+ .graph-formula-help {font-size:10px}
+ .graph-expression-toolbar .graph-add-formula {padding:7px 9px;font-size:12px}
+}
