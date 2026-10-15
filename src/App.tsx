@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type FormEvent, type WheelEvent } from 'react'
 import './App.css'
 import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
@@ -701,6 +701,146 @@ function readSavedWorkspace(): RestoredWorkspace {
   }
 }
 
+
+type SimulatorFormula = { id: string; expression: string; color: string; visible: boolean }
+
+function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean }) {
+  const width = 1200
+  const height = 720
+  const colors = ['#55d98b', '#9b72f2', '#f0a24b', '#4bb9e8', '#f06c79', '#e6d85c']
+  const graphRef = useRef<SVGSVGElement>(null)
+  const dragRef = useRef<{ x: number; y: number } | null>(null)
+  const [view, setView] = useState({ x: 0, y: 0, scale: 42 })
+  const [formulas, setFormulas] = useState<SimulatorFormula[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ozoo:graph-formulas') ?? '[]')
+      return Array.isArray(saved) ? saved.filter((item) => item && typeof item.expression === 'string' && typeof item.color === 'string').map((item) => ({ id: String(item.id || crypto.randomUUID()), expression: item.expression, color: item.color, visible: item.visible !== false })) : []
+    } catch { return [] }
+  })
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem('ozoo:graph-formulas', JSON.stringify(formulas))
+  }, [formulas])
+
+  const visibleX = width / view.scale
+  const visibleY = height / view.scale
+  const xMin = view.x - visibleX / 2
+  const xMax = view.x + visibleX / 2
+  const yMin = view.y - visibleY / 2
+  const yMax = view.y + visibleY / 2
+  const rawStep = 52 / view.scale
+  const power = Math.pow(10, Math.floor(Math.log10(rawStep)))
+  const gridStep = [1, 2, 5, 10].map((factor) => factor * power).find((step) => step >= rawStep) ?? 10 * power
+  const xToPx = (x: number) => width / 2 + (x - view.x) * view.scale
+  const yToPx = (y: number) => height / 2 - (y - view.y) * view.scale
+  const gridXs: number[] = []
+  const gridYs: number[] = []
+  for (let x = Math.floor(xMin / gridStep) * gridStep, count = 0; x <= xMax && count < 400; x += gridStep, count++) gridXs.push(x)
+  for (let y = Math.floor(yMin / gridStep) * gridStep, count = 0; y <= yMax && count < 400; y += gridStep, count++) gridYs.push(y)
+  const addFormula = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const expression = draft.trim().replace(/^y\s*=\s*/i, '')
+    if (!expression) return
+    try {
+      evaluateGraphExpression(expression, 1)
+      setFormulas((current) => [...current, { id: crypto.randomUUID(), expression, color: colors[current.length % colors.length], visible: true }])
+      setDraft('')
+      setError('')
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Check the formula and try again.') }
+  }
+  const zoom = (factor: number, anchorX = width / 2, anchorY = height / 2) => {
+    setView((current) => {
+      const nextScale = Math.max(5, Math.min(220, current.scale * factor))
+      const worldX = current.x + (anchorX - width / 2) / current.scale
+      const worldY = current.y - (anchorY - height / 2) / current.scale
+      return { x: worldX - (anchorX - width / 2) / nextScale, y: worldY + (anchorY - height / 2) / nextScale, scale: nextScale }
+    })
+  }
+  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    zoom(Math.exp(-event.deltaY * 0.0012), (event.clientX - rect.left) * width / rect.width, (event.clientY - rect.top) * height / rect.height)
+  }
+  const curves = formulas.filter((formula) => formula.visible).map((formula) => {
+    let path = ''
+    let penDown = false
+    const expression = formula.expression.replace(/^y\s*=\s*/i, '')
+    for (let index = 0; index <= 700; index++) {
+      const x = xMin + (xMax - xMin) * index / 700
+      try {
+        const y = evaluateGraphExpression(expression, x)
+        const py = yToPx(y)
+        if (!Number.isFinite(py) || py < -height || py > height * 2) { penDown = false; continue }
+        path += `${penDown ? 'L' : 'M'}${xToPx(x).toFixed(2)},${py.toFixed(2)} `
+        penDown = true
+      } catch { penDown = false }
+    }
+    return { ...formula, path }
+  })
+
+  return (
+    <main className={`app ${dark ? 'dark' : 'light'} graph-simulator-app`}>
+      <section className="graph-simulator-page">
+        <header className="graph-simulator-topbar">
+          <button type="button" className="graph-back-button" onClick={onBack}><span aria-hidden="true">←</span><span>OzooNotes</span></button>
+          <div className="graph-simulator-heading"><span className="graph-heading-icon"><Icon name="graph" size={20} /></span><div><h1>Graph simulator</h1><p>Explore equations on an infinite coordinate plane</p></div></div>
+          <div className="graph-view-controls" aria-label="Graph view controls">
+            <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(0.8)}>−</button>
+            <span>{Math.round(view.scale / 42 * 100)}%</span>
+            <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.25)}>+</button>
+            <button type="button" className="graph-reset-button" onClick={() => setView({ x: 0, y: 0, scale: 42 })}>Center axes</button>
+          </div>
+        </header>
+        <div className="graph-simulator-stage">
+          <svg ref={graphRef} className="graph-simulator-canvas" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-label="Infinite graph coordinate plane" onWheel={handleWheel}
+            onPointerDown={(event) => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { x: event.clientX, y: event.clientY } }}
+            onPointerMove={(event) => { if (!dragRef.current) return; const rect = event.currentTarget.getBoundingClientRect(); const dx = (event.clientX - dragRef.current.x) * width / rect.width; const dy = (event.clientY - dragRef.current.y) * height / rect.height; dragRef.current = { x: event.clientX, y: event.clientY }; setView((current) => ({ ...current, x: current.x - dx / current.scale, y: current.y + dy / current.scale })) }}
+            onPointerUp={(event) => { dragRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+            onPointerCancel={() => { dragRef.current = null }}>
+            <defs><clipPath id="simulator-plot-clip"><rect width={width} height={height} /></clipPath></defs>
+            <rect width={width} height={height} className="graph-plot-bg" />
+            <g className="graph-grid-lines">
+              {gridXs.map((x) => <line key={`gx${x}`} x1={xToPx(x)} x2={xToPx(x)} y1="0" y2={height} />)}
+              {gridYs.map((y) => <line key={`gy${y}`} x1="0" x2={width} y1={yToPx(y)} y2={yToPx(y)} />)}
+            </g>
+            {xToPx(0) >= 0 && xToPx(0) <= width && <line className="graph-axis" x1={xToPx(0)} x2={xToPx(0)} y1="0" y2={height} />}
+            {yToPx(0) >= 0 && yToPx(0) <= height && <line className="graph-axis" x1="0" x2={width} y1={yToPx(0)} y2={yToPx(0)} />}
+            <g className="graph-coordinate-labels">
+              {gridXs.filter((x) => x !== 0).map((x) => <text key={`xl${x}`} x={xToPx(x) + 5} y={Math.max(16, Math.min(height - 6, yToPx(0) + 17))}>{Number(x.toPrecision(4))}</text>)}
+              {gridYs.filter((y) => y !== 0).map((y) => <text key={`yl${y}`} x={Math.max(6, Math.min(width - 38, xToPx(0) + 7))} y={yToPx(y) - 5}>{Number(y.toPrecision(4))}</text>)}
+              {xToPx(0) >= 0 && xToPx(0) <= width && yToPx(0) >= 0 && yToPx(0) <= height && <text x={xToPx(0) + 7} y={yToPx(0) - 7}>0</text>}
+            </g>
+            <g clipPath="url(#simulator-plot-clip)">
+              {curves.map((curve) => <path key={curve.id} d={curve.path} className="graph-equation-curve" style={{ stroke: curve.color }} />)}
+            </g>
+            <text className="graph-pan-hint" x="18" y={height - 18}>Drag to pan · Scroll to zoom</text>
+          </svg>
+        </div>
+        <section className="graph-formula-area" aria-label="Graph formulas">
+          {formulas.length > 0 && <div className="graph-formula-list">
+            {formulas.map((formula) => <div className="graph-formula-row" key={formula.id}>
+              <span className="graph-formula-swatch" style={{ background: formula.color }} />
+              <span className="graph-formula-expression">{formula.expression.startsWith('y =') ? formula.expression : `y = ${formula.expression}`}</span>
+              <button type="button" aria-label={formula.visible ? 'Hide formula' : 'Show formula'} title={formula.visible ? 'Hide curve' : 'Show curve'} onClick={() => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, visible: !item.visible } : item))}>{formula.visible ? 'Hide' : 'Show'}</button>
+              <button type="button" aria-label="Remove formula" title="Remove formula" onClick={() => setFormulas((current) => current.filter((item) => item.id !== formula.id))}>×</button>
+            </div>)}
+          </div>}
+          <form className="graph-formula-composer" onSubmit={addFormula}>
+            <label htmlFor="simulator-equation">Add a formula</label>
+            <span className="graph-equation-prefix">y =</span>
+            <input id="simulator-equation" value={draft} onChange={(event) => { setDraft(event.target.value); setError('') }} placeholder="x^2, sin(x), or sqrt(abs(x))" autoComplete="off" />
+            <button type="submit" className="graph-add-formula">Add formula <span aria-hidden="true">+</span></button>
+          </form>
+          {error && <p className="graph-formula-error" role="alert">{error}</p>}
+          <p className="graph-formula-help">Use x, numbers, parentheses, + − × ÷ ^ and functions such as sin, cos, tan, sqrt, abs and log.</p>
+        </section>
+      </section>
+    </main>
+  )
+}
+
 function App() {
   const localOnly = import.meta.env.VITE_LOCAL_ONLY === 'true'
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -717,6 +857,7 @@ function App() {
   const [activeTool, setActiveTool] = useState<Tool>('Brush')
   const [drawingToolsOpen, setDrawingToolsOpen] = useState(false)
   const [simulatorMenuOpen, setSimulatorMenuOpen] = useState(false)
+  const [graphSimulatorOpen, setGraphSimulatorOpen] = useState(false)
   const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
@@ -2138,29 +2279,10 @@ function App() {
     const link = window.document.createElement('a')
     link.href = url
     link.download = `${boards[activeBoard].name.replace(/[^a-z0-9-_ ]/gi, '').trim() || 'whiteboard'}.pdf`
-    link.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
-  const launchGraphSimulator = () => {
+    link.cli  const launchGraphSimulator = () => {
     setSimulatorMenuOpen(false)
-    const takenNames = new Set([...boards.map((board) => board.name), ...recentFiles].map(normalizeBoardName))
-    let name = 'Graph Simulator'
-    let suffix = 2
-    while (takenNames.has(normalizeBoardName(name))) name = `Graph Simulator ${suffix++}`
-    const boardIndex = boards.length
-    setStrokesByPage((current) => ({ ...current, [`${boardIndex}:1`]: [] }))
-    setBoards((current) => [...current, { name, pages: 1, pageSize: 'A4', orientation: 'portrait', pageOrientations: ['portrait'], pageBackground: 'auto', notebook: 'Inbox', tags: [] }])
-    setActiveBoard(boardIndex)
-    setPage(1)
-    setIndexView(false)
-    setIndexPage(1)
-    setPageSize('A4')
-    setInfinitePage(false)
-    setOrientation('portrait')
-    setPageBackground('auto')
-    setGridEnabled(false)
-    setShowScale(false)
+    setGraphSimulatorOpen(true)
+  }  setShowScale(false)
     setGraphError('')
     setGraphOpen(true)
   }
@@ -2376,6 +2498,8 @@ function App() {
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
     return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark, colorTheme) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
+
+  if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} dark={dark} />
 
   if (boards.length === 0) {
     return (
