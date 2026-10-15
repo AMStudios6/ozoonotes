@@ -81,9 +81,13 @@ export default function CodeEditor({ language, value, onChange, label }: {
         insertion = '\n' + indent
         cursor = start + insertion.length
       }
-    } else if (start === end && event.key.length === 1) {
+    } else if (event.key.length === 1) {
       const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '\x60': '\x60' }
-      if ([')', ']', '}', '"', "'", '\x60'].includes(event.key) && after.startsWith(event.key)) {
+      if (selected.length > 0 && pairs[event.key]) {
+        event.preventDefault()
+        insertion = event.key + selected + pairs[event.key]
+        cursor = start + insertion.length
+      } else if (start === end && [')', ']', '}', '"', "'", '\x60'].includes(event.key) && after.startsWith(event.key)) {
         event.preventDefault()
         editor.setSelectionRange(start + 1, start + 1)
         return
