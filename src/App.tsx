@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type FormEvent, type WheelEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent, type CSSProperties } from 'react'
 import './App.css'
 import notesPng from './assets/notes.png'
 import downloadPng from './assets/download.png'
@@ -714,11 +714,10 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
   const [formulas, setFormulas] = useState<SimulatorFormula[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('ozoo:graph-formulas') ?? '[]')
-      return Array.isArray(saved) ? saved.filter((item) => item && typeof item.expression === 'string' && typeof item.color === 'string').map((item) => ({ id: String(item.id || crypto.randomUUID()), expression: item.expression, color: item.color, visible: item.visible !== false })) : []
-    } catch { return [] }
+      const valid = Array.isArray(saved) ? saved.filter((item) => item && typeof item.expression === 'string' && typeof item.color === 'string').map((item) => ({ id: String(item.id || crypto.randomUUID()), expression: item.expression, color: item.color, visible: item.visible !== false })) : []
+      return valid.length ? valid : [{ id: crypto.randomUUID(), expression: '', color: colors[0], visible: true }]
+    } catch { return [{ id: crypto.randomUUID(), expression: '', color: colors[0], visible: true }] }
   })
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState('')
 
   useEffect(() => {
     localStorage.setItem('ozoo:graph-formulas', JSON.stringify(formulas))
@@ -739,17 +738,7 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
   const gridYs: number[] = []
   for (let x = Math.floor(xMin / gridStep) * gridStep, count = 0; x <= xMax && count < 400; x += gridStep, count++) gridXs.push(x)
   for (let y = Math.floor(yMin / gridStep) * gridStep, count = 0; y <= yMax && count < 400; y += gridStep, count++) gridYs.push(y)
-  const addFormula = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const expression = draft.trim().replace(/^y\s*=\s*/i, '')
-    if (!expression) return
-    try {
-      evaluateGraphExpression(expression, 1)
-      setFormulas((current) => [...current, { id: crypto.randomUUID(), expression, color: colors[current.length % colors.length], visible: true }])
-      setDraft('')
-      setError('')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Check the formula and try again.') }
-  }
+  const addFormula = () => setFormulas((current) => [...current, { id: crypto.randomUUID(), expression: '', color: colors[current.length % colors.length], visible: true }])
   const zoom = (factor: number, anchorX = width / 2, anchorY = height / 2) => {
     setView((current) => {
       const nextScale = Math.max(5, Math.min(220, current.scale * factor))
@@ -763,7 +752,7 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
     const rect = event.currentTarget.getBoundingClientRect()
     zoom(Math.exp(-event.deltaY * 0.0012), (event.clientX - rect.left) * width / rect.width, (event.clientY - rect.top) * height / rect.height)
   }
-  const curves = formulas.filter((formula) => formula.visible).map((formula) => {
+  const curves = formulas.filter((formula) => formula.visible && formula.expression.trim()).map((formula) => {
     let path = ''
     let penDown = false
     const expression = formula.expression.replace(/^y\s*=\s*/i, '')
@@ -818,23 +807,22 @@ function GraphSimulator({ onBack, dark }: { onBack: () => void; dark: boolean })
             <text className="graph-pan-hint" x="18" y={height - 18}>Drag to pan · Scroll to zoom</text>
           </svg>
         </div>
-        <section className="graph-formula-area" aria-label="Graph formulas">
-          {formulas.length > 0 && <div className="graph-formula-list">
-            {formulas.map((formula) => <div className="graph-formula-row" key={formula.id}>
-              <span className="graph-formula-swatch" style={{ background: formula.color }} />
-              <span className="graph-formula-expression">{formula.expression.startsWith('y =') ? formula.expression : `y = ${formula.expression}`}</span>
-              <button type="button" aria-label={formula.visible ? 'Hide formula' : 'Show formula'} title={formula.visible ? 'Hide curve' : 'Show curve'} onClick={() => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, visible: !item.visible } : item))}>{formula.visible ? 'Hide' : 'Show'}</button>
-              <button type="button" aria-label="Remove formula" title="Remove formula" onClick={() => setFormulas((current) => current.filter((item) => item.id !== formula.id))}>×</button>
+        <section className="graph-expression-panel" aria-label="Expressions">
+          <div className="graph-expression-toolbar">
+            <div><h2>Expressions</h2><span>{formulas.length} {formulas.length === 1 ? 'equation' : 'equations'}</span></div>
+            <button type="button" className="graph-add-formula" onClick={addFormula}><span aria-hidden="true">+</span> Add expression</button>
+          </div>
+          <div className="graph-formula-list">
+            {formulas.map((formula, index) => <div className="graph-formula-row" key={formula.id}>
+              <span className="graph-formula-number">{index + 1}</span>
+              <button type="button" className={`graph-formula-swatch-button ${formula.visible ? '' : 'is-hidden'}`} style={{ '--formula-color': formula.color } as CSSProperties} aria-label={formula.visible ? 'Hide formula' : 'Show formula'} title={formula.visible ? 'Hide curve' : 'Show curve'} onClick={() => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, visible: !item.visible } : item))}><span /></button>
+              <span className="graph-equation-prefix">y =</span>
+              <input className="graph-formula-input" aria-label={`Formula ${index + 1}`} value={formula.expression.replace(/^y\s*=\s*/i, '')} onChange={(event) => setFormulas((current) => current.map((item) => item.id === formula.id ? { ...item, expression: event.target.value } : item))} placeholder="x^2, sin(x), or sqrt(abs(x))" autoComplete="off" />
+              <button type="button" className="graph-formula-remove" aria-label={`Remove formula ${index + 1}`} title="Remove formula" onClick={() => setFormulas((current) => current.filter((item) => item.id !== formula.id))}>×</button>
             </div>)}
-          </div>}
-          <form className="graph-formula-composer" onSubmit={addFormula}>
-            <label htmlFor="simulator-equation">Add a formula</label>
-            <span className="graph-equation-prefix">y =</span>
-            <input id="simulator-equation" value={draft} onChange={(event) => { setDraft(event.target.value); setError('') }} placeholder="x^2, sin(x), or sqrt(abs(x))" autoComplete="off" />
-            <button type="submit" className="graph-add-formula">Add formula <span aria-hidden="true">+</span></button>
-          </form>
-          {error && <p className="graph-formula-error" role="alert">{error}</p>}
+          </div>
           <p className="graph-formula-help">Use x, numbers, parentheses, + − × ÷ ^ and functions such as sin, cos, tan, sqrt, abs and log.</p>
+        </section>
         </section>
       </section>
     </main>
