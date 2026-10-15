@@ -261,7 +261,7 @@
 .landing-window {min-height:100vh;background:var(--panel);color:var(--ink)}
 .landing-topbar {position:sticky;z-index:10;top:0;height:66px;padding:0 max(24px,calc((100vw - 1120px)/2));gap:26px;background:color-mix(in srgb,var(--panel) 94%,transparent);border-bottom:1px solid color-mix(in srgb,var(--line) 76%,transparent);backdrop-filter:blur(14px)}
 .landing-brand {display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px;font-weight:750;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
-.landing-brand .brand-mark {width:160px;height:58px;border:0}
+.landing-brand .brand-mark {width:160px;height:58px;border:0}.landing-mascot {width:42px;height:42px;flex:none;object-fit:cover;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));border-radius:12px;box-shadow:0 3px 12px color-mix(in srgb,var(--accent) 18%,transparent)}
 .landing-nav {display:flex;align-items:center;justify-content:center;gap:5px;flex:1}
 .landing-nav a {padding:9px 12px;border:1px solid transparent;border-radius:999px;color:var(--muted);font-size:12px;font-weight:650;text-decoration:none;transition:color .15s,background .15s,border-color .15s}
 .landing-nav a:hover,.landing-nav a:focus-visible {border-color:var(--line);background:var(--accent-soft);color:var(--accent);outline:none}
@@ -406,7 +406,7 @@
 }
 @media(max-width:650px) {
   .landing-topbar {height:auto;min-height:56px;flex-wrap:wrap;padding:0 14px;gap:0 10px}
-  .landing-brand .brand-mark {width:138px;height:52px}
+  .landing-brand .brand-mark {width:138px;height:52px}\n  .landing-mascot {width:36px;height:36px;border-radius:10px}
   .landing-nav {order:3;flex-basis:100%;justify-content:flex-start;gap:5px;margin:0 -2px;padding:0 0 8px;overflow-x:auto;scrollbar-width:none}
   .landing-nav::-webkit-scrollbar {display:none}
   .landing-nav a {flex:none;padding:7px 10px;border-color:var(--line);background:var(--workspace);font-size:11px;white-space:nowrap}
