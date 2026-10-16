@@ -23,7 +23,7 @@ type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Lega
 type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart' | 'Mood board' | 'Coding notes'
 type SectionTitle = { id: string; title: string; page: number }
 type LayerName = 'writing' | 'text' | 'images'
-type DrawingStyle = 'solid' | 'fine-pen' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
+type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
 type CloudUser = { id: number; username: string }
@@ -397,11 +397,12 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     const last = drawing.points[drawing.points.length - 1]
     context.strokeStyle = drawing.color
     context.fillStyle = drawing.color
-    context.lineWidth = drawing.width * (drawing.drawingStyle === 'fine-pen' ? 0.62 : drawing.drawingStyle === 'calligraphy' ? 1.7 : 1)
+    context.lineWidth = drawing.width
     context.lineCap = drawing.drawingStyle === 'calligraphy' ? 'square' : 'round'
     context.lineJoin = 'round'
     context.setLineDash(drawing.drawingStyle === 'dashed' ? [drawing.width * 2.5, drawing.width * 1.8] : drawing.drawingStyle === 'dotted' ? [drawing.width * .15, drawing.width * 1.8] : [])
-    context.globalAlpha = drawing.opacity / 100 * (drawing.drawingStyle === 'fine-pen' ? 0.92 : 1) * (drawing.tool === 'Pencil' ? 0.62 : drawing.tool === 'Marker' ? 0.82 : drawing.tool === 'Highlighter' ? 0.24 : 1)
+    if (drawing.drawingStyle === 'calligraphy') context.lineWidth *= 1.7
+    context.globalAlpha = drawing.opacity / 100 * (drawing.tool === 'Pencil' ? 0.62 : drawing.tool === 'Marker' ? 0.82 : drawing.tool === 'Highlighter' ? 0.24 : 1)
     if (erasePreview.includes(drawingIndex)) context.globalAlpha *= 0.3
     if (drawing.tool === 'Image' && drawing.imageData && drawing.points.length > 1) {
       const image = getImage(drawing.imageData, () => renderDrawings(canvas, drawings, selected, erasePreview, eraserPoint, eraserRadius, cameraOffset, undefined, hiddenLayers))
@@ -1961,7 +1962,7 @@ function App() {
     const paths = pageStrokes.map((stroke) => {
       if (!stroke.points.length || stroke.tool === 'Eraser') return ''
       const [first, last] = [stroke.points[0], stroke.points[stroke.points.length - 1]]
-      const alpha = stroke.opacity / 100 * (stroke.drawingStyle === 'fine-pen' ? .92 : 1) * (stroke.tool === 'Brush' ? .72 : stroke.tool === 'Pencil' ? .62 : stroke.tool === 'Marker' ? .82 : stroke.tool === 'Highlighter' ? .24 : 1)
+      const alpha = stroke.opacity / 100 * (stroke.tool === 'Brush' ? .72 : stroke.tool === 'Pencil' ? .62 : stroke.tool === 'Marker' ? .82 : stroke.tool === 'Highlighter' ? .24 : 1)
       if (stroke.tool === 'Image' && stroke.imageData && stroke.points.length > 1) return `<image href="${stroke.imageData}" x="${first.x * width}" y="${first.y * height}" width="${(last.x - first.x) * width}" height="${(last.y - first.y) * height}" preserveAspectRatio="none"/>`
       if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(8, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
       const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last, stroke.cornerRadius).points : stroke.points
@@ -1970,7 +1971,7 @@ function App() {
       const pathData = handwriting ? `M ${points[0].x * width} ${points[0].y * height} ${points.slice(1, -1).map((point, index) => { const next = points[index + 2]; return `Q ${point.x * width} ${point.y * height} ${(point.x + next.x) * width / 2} ${(point.y + next.y) * height / 2}` }).join(' ')} L ${last.x * width} ${last.y * height}` : ''
       const dash = stroke.drawingStyle === 'dashed' ? ` stroke-dasharray="${stroke.width * 2.5} ${stroke.width * 1.8}"` : stroke.drawingStyle === 'dotted' ? ` stroke-dasharray="${stroke.width * .15} ${stroke.width * 1.8}"` : ''
       const cap = stroke.drawingStyle === 'calligraphy' ? 'square' : 'round'
-      const widthScale = stroke.drawingStyle === 'calligraphy' ? 1.7 : stroke.drawingStyle === 'fine-pen' ? .62 : 1
+      const widthScale = stroke.drawingStyle === 'calligraphy' ? 1.7 : 1
       const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : handwriting ? 'path' : 'polyline'
       return handwriting ? `<path d="${pathData}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>` : `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>`
     }).join('')
@@ -2839,7 +2840,7 @@ function App() {
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
                     {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
-            {inkTools.includes(activeTool) && <div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="fine-pen">Fine pen</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div>}
+            {inkTools.includes(activeTool) && <><div className="settings-group"><label className="settings-heading" htmlFor="drawing-tool-choice">Brush & pen tool</label><select id="drawing-tool-choice" className="drawing-style-select" value={activeTool} onChange={(event) => { const tool = event.target.value as Tool; setActiveTool(tool); lastDrawingTool.current = tool }}><option value="Brush">Brush</option><option value="Pen">Pen</option><option value="Pencil">Pencil</option><option value="Marker">Marker</option><option value="Highlighter">Highlighter</option></select></div><div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div></>}
             {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
