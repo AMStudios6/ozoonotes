@@ -524,7 +524,8 @@ function evaluateGraphExpression(expression: string, x: number): number {
   }
   const power = (): number => { const left = primary(); return peek() === '^' ? (take(), left ** unary()) : left }
   const unary = (): number => peek() === '+' ? (take(), unary()) : peek() === '-' ? (take(), -unary()) : power()
-  const product = (): number => { let value = unary(); while (peek() === '*' || peek() === '/') { const op = take(); const next = unary(); value = op === '*' ? value * next : value / next } return value }
+  const startsPrimary = (token: string | undefined) => Boolean(token && (token === '(' || /^[a-z]+$/i.test(token) || /^(?:\\d*\\.?\\d+)(?:e[+-]?\\d+)?$/i.test(token)))
+  const product = (): number => { let value = unary(); while (peek() === '*' || peek() === '/' || startsPrimary(peek())) { const explicitOperator = peek() === '*' || peek() === '/'; const op = explicitOperator ? take() : '*'; const next = unary(); value = op === '*' ? value * next : value / next } return value }
   const sum = (): number => { let value = product(); while (peek() === '+' || peek() === '-') { const op = take(); const next = product(); value = op === '+' ? value + next : value - next } return value }
   const result = sum()
   if (index !== tokens.length) throw new Error('Check the equation format.')
