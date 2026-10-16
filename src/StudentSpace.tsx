@@ -13,6 +13,19 @@ const emptyProfile: StudentProfile = { field: 'Computer science', otherField: ''
 function readStorage<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback } catch { return fallback }
 }
+function readNotes(): StudyNote[] {
+  const saved = readStorage<unknown>(notesKey, [])
+  if (!Array.isArray(saved)) return []
+  return saved.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object').map((item) => ({
+    id: typeof item.id === 'string' ? item.id : newId(),
+    parentId: typeof item.parentId === 'string' ? item.parentId : '',
+    title: typeof item.title === 'string' && item.title.trim() ? item.title : 'Untitled note',
+    body: typeof item.body === 'string' ? item.body : typeof item.content === 'string' ? item.content : '',
+    images: Array.isArray(item.images) ? item.images.filter((image): image is { name: string; data: string } => Boolean(image) && typeof image === 'object' && typeof image.name === 'string' && typeof image.data === 'string') : [],
+    files: Array.isArray(item.files) ? item.files.filter((file): file is StudyAttachment => Boolean(file) && typeof file === 'object' && typeof file.name === 'string' && typeof file.data === 'string').map((file) => ({ ...file, type: typeof file.type === 'string' ? file.type : 'application/octet-stream' })) : [],
+    updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
+  }))
+}
 function newId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}` }
 function readFileData(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read that file.')); reader.onerror = () => reject(new Error('Could not read that file.')); reader.readAsDataURL(file) }) }
 async function compressImage(file: File): Promise<{ name: string; data: string }> {
@@ -33,7 +46,7 @@ async function compressImage(file: File): Promise<{ name: string; data: string }
 export default function StudentSpace() {
   const [profile, setProfile] = useState<StudentProfile>(() => readStorage(profileKey, emptyProfile))
   const [folders, setFolders] = useState<StudyFolder[]>(() => readStorage(foldersKey, []))
-  const [notes, setNotes] = useState<StudyNote[]>(() => readStorage(notesKey, []))
+  const [notes, setNotes] = useState<StudyNote[]>(readNotes)
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [folderDialog, setFolderDialog] = useState(false)
   const [folderName, setFolderName] = useState('')
@@ -71,7 +84,13 @@ export default function StudentSpace() {
     if (folderKind === 'program') setSelectedFolderId(folder.id)
   }
   const openNewNote = (note?: StudyNote) => {
-    setEditingNoteId(note?.id ?? null); setNoteTitle(note?.title ?? ''); setNoteBody(note?.body ?? ''); setNoteImages(note?.images ?? []); setNoteFiles(note?.files ?? []); setNoteDialog(true)
+    if (note) setSelectedFolderId(note.parentId || null)
+    setEditingNoteId(note?.id ?? null)
+    setNoteTitle(note?.title ?? '')
+    setNoteBody(note?.body ?? '')
+    setNoteImages(note?.images ?? [])
+    setNoteFiles(note?.files ?? [])
+    setNoteDialog(true)
   }
   const saveNote = (event: FormEvent) => {
     event.preventDefault()
@@ -118,7 +137,7 @@ export default function StudentSpace() {
         <div className="study-breadcrumbs"><button onClick={() => setSelectedFolderId(null)}>Study space</button>{breadcrumbs.map((folder) => <span key={folder.id}> / <button onClick={() => setSelectedFolderId(folder.id)}>{folder.name}</button></span>)}</div>
         <div className="study-content-heading"><div><h3>{selectedFolder?.name ?? 'Your study folders'}</h3><p>{selectedFolder ? `${selectedFolder.kind === 'program' ? 'School or program' : selectedFolder.kind} folder` : 'Start with a school, college, or degree folder. You choose the names and structure.'}</p></div><div className="study-content-actions">{selectedFolder && <button className="study-action-secondary" onClick={() => openNewFolder('custom')}>＋ Folder</button>}{selectedFolder && <button className="study-action-primary" onClick={() => openNewNote()}>＋ New note</button>}</div></div>
         {selectedFolder && <div className="study-folder-quick-add"><span>Add inside {selectedFolder.name}:</span>{(['year', 'semester', 'class', 'subject'] as const).map((kind) => <button key={kind} onClick={() => openNewFolder(kind)}>＋ {kind === 'year' ? 'Year' : kind[0].toUpperCase() + kind.slice(1)}</button>)}</div>}
-        {childFolders.length || childNotes.length ? <div className="study-items-grid">{childFolders.map((folder) => <article className="study-item-card study-folder-card" key={folder.id}><button className="study-item-open" onClick={() => setSelectedFolderId(folder.id)}><span className="study-item-icon">{folder.kind === 'subject' ? '▤' : '▰'}</span><strong>{folder.name}</strong><small>{folder.kind} folder · {folders.filter((item) => item.parentId === folder.id).length} folders · {notes.filter((item) => item.parentId === folder.id).length} notes</small><span className="study-card-chevron">Open →</span></button></article>)}{childNotes.map((note) => <article className="study-item-card study-note-card" key={note.id}><button className="study-item-open" onClick={() => openNewNote(note)}><span className="study-item-icon">✎</span><strong>{note.title}</strong><small>{note.body || 'No text yet'}{note.images.length + (note.files?.length ?? 0) > 0 ? ` · ${note.images.length + (note.files?.length ?? 0)} attachment${note.images.length + (note.files?.length ?? 0) === 1 ? '' : 's'}` : ''}</small>{note.images.length > 0 && <span className="study-note-thumbnails">{note.images.slice(0, 3).map((image) => <img key={image.name} src={image.data} alt={image.name} />)}</span>}<span className="study-card-chevron">Open →</span></button><button className="study-note-delete" aria-label={`Delete ${note.title}`} onClick={() => deleteNote(note.id)}>×</button></article>)}</div> : <div className="study-empty-state"><span>▤</span><strong>{selectedFolder ? 'This folder is ready for your study materials.' : 'Your study space is ready when you are.'}</strong><p>{selectedFolder ? 'Create a year, semester, class, or subject folder, or add a note here.' : 'Add your school or degree first, then organize it into subjects and notes.'}</p><button className="study-action-primary" onClick={() => openNewFolder(selectedFolder ? 'subject' : 'program')}>＋ {selectedFolder ? 'Add subject folder' : 'Add school or degree'}</button></div>}
+        {childFolders.length || childNotes.length ? <div className="study-items-grid">{childFolders.map((folder) => <article className="study-item-card study-folder-card" key={folder.id}><button className="study-item-open" onClick={() => setSelectedFolderId(folder.id)}><span className="study-item-icon">{folder.kind === 'subject' ? '▤' : '▰'}</span><strong>{folder.name}</strong><small>{folder.kind} folder · {folders.filter((item) => item.parentId === folder.id).length} folders · {notes.filter((item) => item.parentId === folder.id).length} notes</small><span className="study-card-chevron">Open →</span></button></article>)}{childNotes.map((note) => <article className="study-item-card study-note-card" key={note.id}><button type="button" className="study-item-open" aria-label={`Open note ${note.title}`} onClick={() => openNewNote(note)}><span className="study-item-icon">✎</span><strong>{note.title}</strong><small>{note.body || 'No text yet'}{note.images.length + (note.files?.length ?? 0) > 0 ? ` · ${note.images.length + (note.files?.length ?? 0)} attachment${note.images.length + (note.files?.length ?? 0) === 1 ? '' : 's'}` : ''}</small>{note.images.length > 0 && <span className="study-note-thumbnails">{note.images.slice(0, 3).map((image) => <img key={image.name} src={image.data} alt={image.name} />)}</span>}<span className="study-card-chevron">Open →</span></button><button className="study-note-delete" aria-label={`Delete ${note.title}`} onClick={() => deleteNote(note.id)}>×</button></article>)}</div> : <div className="study-empty-state"><span>▤</span><strong>{selectedFolder ? 'This folder is ready for your study materials.' : 'Your study space is ready when you are.'}</strong><p>{selectedFolder ? 'Create a year, semester, class, or subject folder, or add a note here.' : 'Add your school or degree first, then organize it into subjects and notes.'}</p><button className="study-action-primary" onClick={() => openNewFolder(selectedFolder ? 'subject' : 'program')}>＋ {selectedFolder ? 'Add subject folder' : 'Add school or degree'}</button></div>}
         {message && <p className="study-storage-message" role="status">{message}</p>}
       </main>
     </div>
