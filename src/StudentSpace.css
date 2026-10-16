@@ -22,3 +22,17 @@
 @media(max-width:480px) {.student-space-header {display:block}.study-profile-summary {max-width:none;margin-top:12px;text-align:left}.study-profile-fields {grid-template-columns:1fr}.study-content-heading {align-items:flex-start;flex-direction:column}.study-content-actions {width:100%}.study-items-grid {grid-template-columns:1fr 1fr}.study-item-open {min-height:125px;padding:10px}}
 .study-file-attachments {display:grid;gap:6px;margin-top:9px}.study-file-attachments>div {display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--muted)}.study-file-attachments>div>span {color:var(--accent)}.study-file-attachments a {flex:1;overflow:hidden;color:var(--ink);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.study-file-attachments button {width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:16px;cursor:pointer}
 
+
+/* Give study notes a focused, full-page writing workspace. */
+.study-note-dialog {width:min(1120px,calc(100vw - 40px));height:calc(100dvh - 40px);max-height:none;display:flex;flex-direction:column;padding:clamp(20px,3vw,34px)}
+.study-note-dialog>span {flex:none}
+.study-note-dialog h3 {flex:none;margin-bottom:12px}
+.study-note-dialog>label {flex:none}
+.study-note-dialog>label:nth-of-type(2) {flex:1;min-height:0;display:flex;flex-direction:column}
+.study-note-dialog>label:nth-of-type(2) textarea {flex:1;min-height:180px;resize:none;font-size:14px;line-height:1.75}
+.study-note-dialog footer {flex:none;margin-top:14px}
+@media(max-width:600px) {
+  .study-dialog-backdrop:has(.study-note-dialog) {padding:0}
+  .study-note-dialog {width:100%;height:100dvh;padding:22px 16px max(16px,env(safe-area-inset-bottom));border:0;border-radius:0}
+  .study-note-dialog>label:nth-of-type(2) textarea {min-height:120px}
+}
