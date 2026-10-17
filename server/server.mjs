@@ -1,11 +1,11 @@
 import { createServer } from 'node:http'
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 const port = Number(process.env.PORT ?? 8787)
-const host = process.env.HOST ?? '127.0.0.1'
+const host = process.env.HOST ?? '0.0.0.0'
 const databasePath = process.env.DOOMNOTES_DB ?? join(process.cwd(), 'data', 'doomnotes.sqlite')
 const staticRoot = resolve(process.cwd(), 'dist')
 mkdirSync(dirname(databasePath), { recursive: true })
@@ -27,14 +27,22 @@ const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) =>
 if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 
-const sessions = new Map()
+db.exec('CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)')
 const eventClients = new Map()
 const googleStates = new Map()
 const cookieName = 'doomnotes_session'
 const cookieFlags = `Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
 const googleStateCookie = 'doomnotes_google_state'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI ?? ''
+const appOrigin = process.env.APP_ORIGIN ?? 'https://ozoonotes.com'
+const allowedOrigins = new Set([appOrigin, 'https://www.ozoonotes.com', 'http://localhost:5173', 'http://127.0.0.1:5173'])
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && googleRedirectUri)
+const sessionTokenHash = (token) => createHash('sha256').update(token).digest('hex')
+const createSession = (userId) => {
+  const token = randomBytes(32).toString('hex')
+  db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(token), userId, Date.now() + 30 * 24 * 60 * 60 * 1000)
+  return token
+}
 const sendJson = (res, status, data, extra = {}) => {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra })
   res.end(JSON.stringify(data))
@@ -49,8 +57,10 @@ const readBody = (req, limit = 60 * 1024 * 1024) => new Promise((resolve, reject
 const sessionUser = (req) => {
   const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
   const sessionId = cookie?.slice(cookieName.length + 1)
-  const userId = sessionId ? sessions.get(sessionId) : undefined
-  return userId ? db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId) : null
+  if (!sessionId) return null
+  const hash = sessionTokenHash(sessionId)
+  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
+  return db.prepare('SELECT users.id, users.username FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now()) ?? null
 }
 const notifyBoard = (boardId, type) => {
   for (const client of eventClients.get(boardId) ?? []) client.write(`event: ${type}\ndata: {}\n\n`)
@@ -67,6 +77,17 @@ const boardRole = (boardId, userId) => {
 const shapeBoard = (row) => ({ id: row.id, ownerId: row.owner_id, ownerName: db.prepare('SELECT username FROM users WHERE id = ?').get(row.owner_id)?.username, folderId: row.folder_id, name: row.name, state: JSON.parse(row.state_json), updatedAt: row.updated_at })
 
 async function handler(req, res) {
+  const origin = req.headers.origin
+  if (origin && !allowedOrigins.has(origin)) return sendJson(res, 403, { error: 'This website is not allowed to use the OzooNotes API.' })
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Vary', 'Origin')
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Last-Event-ID', 'Access-Control-Max-Age': '600' }).end()
+    return
+  }
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
   const route = url.pathname
   const method = req.method ?? 'GET'
@@ -111,9 +132,8 @@ async function handler(req, res) {
         const result = db.prepare('INSERT INTO users(username,salt,password_hash,google_sub) VALUES(?,?,?,?)').run(username, salt, hash, profile.sub)
         user = { id: Number(result.lastInsertRowid), username }
       }
-      const sessionId = randomBytes(32).toString('hex')
-      sessions.set(sessionId, user.id)
-      return res.writeHead(303, { Location: new URL('/', googleRedirectUri).origin + '/', 'Set-Cookie': [`${cookieName}=${sessionId}; ${cookieFlags}`, clearStateCookie], 'Cache-Control': 'no-store' }).end()
+      const sessionId = createSession(user.id)
+      return res.writeHead(303, { Location: `${appOrigin.replace(/\/$/, '')}/`, 'Set-Cookie': [`${cookieName}=${sessionId}; ${cookieFlags}; Max-Age=2592000`, clearStateCookie], 'Cache-Control': 'no-store' }).end()
     }
     if (route === '/api/auth/register' && method === 'POST') {
       const { username, password } = await readBody(req)
@@ -123,7 +143,7 @@ async function handler(req, res) {
       const hash = scryptSync(password, salt, 64).toString('hex')
       const result = db.prepare('INSERT INTO users(username,salt,password_hash) VALUES(?,?,?)').run(cleanName, salt, hash)
       const sessionId = randomBytes(32).toString('hex')
-      sessions.set(sessionId, Number(result.lastInsertRowid))
+      db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), Number(result.lastInsertRowid), Date.now() + 30 * 24 * 60 * 60 * 1000)
       return sendJson(res, 201, { user: { id: Number(result.lastInsertRowid), username: cleanName } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/login' && method === 'POST') {
@@ -133,12 +153,12 @@ async function handler(req, res) {
       const candidate = scryptSync(password, user.salt, 64)
       if (!timingSafeEqual(candidate, Buffer.from(user.password_hash, 'hex'))) return sendJson(res, 401, { error: 'Username or password is incorrect.' })
       const sessionId = randomBytes(32).toString('hex')
-      sessions.set(sessionId, user.id)
+      db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
       return sendJson(res, 200, { user: { id: user.id, username: user.username } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/logout' && method === 'POST') {
       const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
-      if (cookie) sessions.delete(cookie.slice(cookieName.length + 1))
+      if (cookie) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sessionTokenHash(cookie.slice(cookieName.length + 1)))
       return sendJson(res, 200, { ok: true }, { 'Set-Cookie': `${cookieName}=; ${cookieFlags}; Max-Age=0` })
     }
     const publicBoard = route.match(/^\/api\/public\/([a-f0-9]+)$/)
