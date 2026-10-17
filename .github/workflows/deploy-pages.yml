@@ -28,7 +28,7 @@ jobs:
       - name: Build static site
         run: npm run build
         env:
-          VITE_BASE_PATH: /ozoonotes/
+          VITE_BASE_PATH: /
           VITE_LOCAL_ONLY: 'true'
       - name: Configure Pages
         uses: actions/configure-pages@v5
