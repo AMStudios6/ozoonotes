@@ -2688,7 +2688,86 @@ function App() {
 
   if (authStatus !== 'signed-in') {
     const gateTitle = authStatus === 'loading' ? 'Preparing your workspace…' : authStatus === 'error' ? 'Sign-in is temporarily unavailable' : 'Your notes, ready when you are'
-    return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--app-bg, #f5f3ff)' }}><div style={{ width: 'min(440px, 100%)', padding: '40px 36px', borderRadius: 24, border: '1px solid var(--line, #ded7f5)', background: 'var(--panel, #fff)', boxShadow: '0 24px 80px rgba(38, 20, 76, .12)', textAlign: 'center' }}><img src={brandLogo} alt="OzooNotes" style={{ width: 62, height: 62, objectFit: 'contain', marginBottom: 18 }} /><p className="eyebrow">YOUR PERSONAL WORKSPACE</p><h1 style={{ margin: '0 0 12px', fontSize: 30 }}>{gateTitle}</h1><p style={{ margin: '0 auto 26px', maxWidth: 330, lineHeight: 1.6, color: 'var(--muted, #6f687b)' }}>Sign in with Google or GitHub to open your notes, projects, and simulators.</p>{authStatus === 'loading' ? <div role="status" aria-live="polite">Checking your sign-in…</div> : authStatus === 'error' ? <><p role="alert" style={{ color: '#b42318', fontSize: 14 }}>{authError}</p><button className="dialog-create full-button" onClick={() => window.location.reload()}>Try again</button></> : googleLoginEnabled || githubLoginEnabled ? <div style={{ display: 'grid', gap: 12 }}>{googleLoginEnabled && <a className="dialog-create full-button" href={`${API_BASE}/api/auth/google`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>G</span>Continue with Google</a>}{githubLoginEnabled && <a className="dialog-create full-button" href={`${API_BASE}/api/auth/github`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>●</span>Continue with GitHub</a>}</div> : <div role="status" style={{ padding: 16, borderRadius: 12, background: 'var(--soft, #f4f1fa)', fontSize: 14, lineHeight: 1.6 }}>Google or GitHub sign-in is not configured yet. Add OAuth credentials to Railway to enable sign-in.</div>}</div></section></main>
+    return (
+      <main className={'app ' + (dark ? 'dark' : 'light') + ' auth-app'} data-theme={colorTheme}>
+        <section className="auth-screen" aria-labelledby="auth-heading">
+          <header className="auth-topbar">
+            <a className="auth-brand" href="/" aria-label="OzooNotes home">
+              <img src={brandLogo} alt="OzooNotes" />
+            </a>
+            <label className="auth-theme-picker">
+              <span>Theme</span>
+              <select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>
+                {colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}
+              </select>
+            </label>
+          </header>
+
+          <div className="auth-layout">
+            <section className="auth-intro" aria-label="About your OzooNotes workspace">
+              <p className="auth-kicker"><span /> A calmer place for big ideas</p>
+              <h1>Think it through.<br /><em>See the whole picture.</em></h1>
+              <p className="auth-intro-copy">Bring notes, sketches, graphs, code, and projects together in one flexible workspace.</p>
+
+              <div className="auth-benefits" aria-label="Workspace features">
+                <span><i aria-hidden="true">✎</i> Notes &amp; boards</span>
+                <span><i aria-hidden="true">⌁</i> Graphs &amp; ideas</span>
+                <span><i aria-hidden="true">⌘</i> Projects</span>
+              </div>
+
+              <div className="auth-preview" aria-hidden="true">
+                <div className="auth-preview-toolbar"><span /><span /><span /><b>OZOO NOTES</b><i>•••</i></div>
+                <div className="auth-preview-paper">
+                  <small>THOUGHTS, IN PROGRESS</small>
+                  <strong>Make room<br />for a new idea.</strong>
+                  <div className="auth-preview-lines"><i /><i /><i /></div>
+                  <svg className="auth-preview-doodle" viewBox="0 0 120 80" fill="none">
+                    <path d="M7 63c16-38 22 25 41-7s20-32 31-6 21-29 34-35" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    <path d="M13 18h27M74 65h28" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity=".45" />
+                    <circle cx="91" cy="23" r="8" stroke="currentColor" strokeWidth="2" opacity=".65" />
+                  </svg>
+                </div>
+                <div className="auth-preview-caption"><span className="auth-live-dot" /> A workspace that follows your thinking</div>
+              </div>
+            </section>
+
+            <section className="auth-card" aria-labelledby="auth-heading">
+              <div className="auth-card-icon" aria-hidden="true"><img src={brandLogo} alt="" /></div>
+              <p className="auth-card-eyebrow">YOUR PERSONAL WORKSPACE</p>
+              <h2 id="auth-heading">{gateTitle}</h2>
+              <p className="auth-card-copy">Sign in to open your notes, projects, and simulators.</p>
+
+              {authStatus === 'loading' ? (
+                <div className="auth-loading" role="status" aria-live="polite"><span className="auth-spinner" />Checking your sign-in…</div>
+              ) : authStatus === 'error' ? (
+                <div className="auth-error" role="alert">
+                  <p>{authError}</p>
+                  <button className="auth-provider auth-retry" onClick={() => window.location.reload()}>Try again <span aria-hidden="true">↻</span></button>
+                </div>
+              ) : googleLoginEnabled || githubLoginEnabled ? (
+                <div className="auth-provider-list">
+                  {googleLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/google'}>
+                    <span className="auth-provider-mark auth-google-mark" aria-hidden="true">G</span>
+                    <span>Continue with Google</span><b aria-hidden="true">→</b>
+                  </a>}
+                  {githubLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/github'}>
+                    <span className="auth-provider-mark auth-github-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.32-3.76-1.32-.5-1.3-1.23-1.65-1.23-1.65-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.59 1.21 3.22.92.1-.72.39-1.21.7-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.06 1.15a10.67 10.67 0 0 1 5.57 0c2.13-1.45 3.06-1.15 3.06-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.24-5.11 5.51.4.35.75 1.02.75 2.06v3.12c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg></span>
+                    <span>Continue with GitHub</span><b aria-hidden="true">→</b>
+                  </a>}
+                </div>
+              ) : (
+                <div className="auth-unavailable" role="status">Sign-in is not configured yet. Add OAuth credentials to the OzooNotes server to enable an account provider.</div>
+              )}
+
+              <div className="auth-security-note"><span aria-hidden="true">✓</span><p>Secure sign-in. You’ll return to OzooNotes after authorizing your account.</p></div>
+              <div className="auth-card-footer"><span className="auth-live-dot" /> OzooNotes workspace access</div>
+            </section>
+          </div>
+
+          <footer className="auth-footer"><span>OzooNotes</span><span>Make space for the way you think.</span></footer>
+        </section>
+      </main>
+    )
   }
 
   if (calculusSimulatorOpen) return <CalculusSimulator onBack={() => setCalculusSimulatorOpen(false)} />
