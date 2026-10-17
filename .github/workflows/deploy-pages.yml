@@ -29,7 +29,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: /
-          VITE_LOCAL_ONLY: 'true'
+          VITE_API_BASE: https://api.ozoonotes.com
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
