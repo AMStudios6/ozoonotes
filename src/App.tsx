@@ -216,7 +216,11 @@ const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE || 'h
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init.headers } })
   const data = await response.json() as T & { error?: string }
-  if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`)
+  if (!response.ok) {
+    const error = new Error(data.error ?? `Request failed (${response.status})`) as Error & { code?: string }
+    error.code = (data as { code?: string }).code
+    throw error
+  }
   return data
 }
 
@@ -901,6 +905,7 @@ function App() {
   const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
   const [githubLoginEnabled, setGithubLoginEnabled] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [authNotice, setAuthNotice] = useState('')
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
   const [cloudFolders, setCloudFolders] = useState<{ id: number; name: string }[]>([])
@@ -910,7 +915,8 @@ function App() {
   const [accountOpen, setAccountOpen] = useState(false)
   const profileMenuRef = useRef<HTMLDetailsElement>(null)
   const [studentProfileSummary, setStudentProfileSummary] = useState<{ field?: string; otherField?: string; stage?: string; otherStage?: string; degree?: string } | null>(() => { try { return JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null') } catch { return null } })
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [passwordResetToken, setPasswordResetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_password') ?? sessionStorage.getItem('ozoo:password-reset-token') ?? '')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify' | 'forgot' | 'reset'>(() => new URLSearchParams(window.location.search).has('reset_password') ? 'reset' : 'login')
   const [authUsername, setAuthUsername] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -1225,18 +1231,39 @@ function App() {
       apiRequest<{ google: boolean; github: boolean }>('/api/auth/providers'),
     ]).then(([{ user }, providers]) => {
       if (!active) return
-      setCloudUser(user)
+      setCloudUser(passwordResetToken ? null : user)
       setGoogleLoginEnabled(providers.google)
       setGithubLoginEnabled(providers.github)
-      setAuthStatus(user ? 'signed-in' : 'signed-out')
+      setAuthStatus(user && !passwordResetToken ? 'signed-in' : 'signed-out')
       setAuthError('')
-      if (user) void refreshCloudBoards()
+      if (user && !passwordResetToken) void refreshCloudBoards()
     }).catch((error) => {
       if (!active) return
       setAuthStatus('error')
       setAuthError(error instanceof Error ? error.message : 'Could not connect to the sign-in server.')
     })
     return () => { active = false }
+  }, [passwordResetToken])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const verificationToken = url.searchParams.get('verify_email')
+    const resetToken = url.searchParams.get('reset_password')
+    const verified = url.searchParams.get('verified')
+    if (resetToken) sessionStorage.setItem('ozoo:password-reset-token', resetToken)
+    if (!verificationToken && !resetToken && verified !== '1') return
+    url.searchParams.delete('verify_email')
+    url.searchParams.delete('reset_password')
+    url.searchParams.delete('verified')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+    if (verified === '1') {
+      setAuthMode('login')
+      setAuthNotice('Your email is verified. Sign in to continue.')
+      return
+    }
+    void apiRequest<{ message: string }>('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: verificationToken }) })
+      .then(({ message }) => { setAuthMode('login'); setAuthNotice(message); setAuthError('') })
+      .catch((error) => { setAuthMode('verify'); setAuthError(error instanceof Error ? error.message : 'That verification link is invalid or has expired.') })
   }, [])
 
   useEffect(() => {
@@ -1294,12 +1321,38 @@ function App() {
   const submitAccount = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      const accountPayload = authMode === 'register'
-        ? { username: authUsername, email: authEmail, password: authPassword }
-        : { login: authUsername, password: authPassword }
-      const { user } = await apiRequest<{ user: CloudUser }>(`/api/auth/${authMode === 'register' ? 'register' : 'login'}`, { method: 'POST', body: JSON.stringify(accountPayload) })
+      if (authMode === 'verify' || authMode === 'forgot') {
+        const route = authMode === 'verify' ? '/api/auth/resend-verification' : '/api/auth/password-reset/request'
+        const { message } = await apiRequest<{ message: string }>(route, { method: 'POST', body: JSON.stringify({ email: authEmail }) })
+        setAuthNotice(message)
+        setAuthError('')
+        return
+      }
+      if (authMode === 'reset') {
+        const { message } = await apiRequest<{ message: string }>('/api/auth/password-reset/complete', { method: 'POST', body: JSON.stringify({ token: passwordResetToken, password: authPassword }) })
+        setPasswordResetToken('')
+        sessionStorage.removeItem('ozoo:password-reset-token')
+        setAuthMode('login')
+        setAuthPassword('')
+        setAuthUsername('')
+        setAuthNotice(message)
+        setAuthError('')
+        return
+      }
+      if (authMode === 'register') {
+        const { message } = await apiRequest<{ requiresVerification: boolean; message: string }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: authUsername, email: authEmail, password: authPassword }) })
+        setAuthMode('login')
+        setAuthUsername(authEmail)
+        setAuthPassword('')
+        setAuthNotice(message)
+        setAuthError('')
+        return
+      }
+      const { user } = await apiRequest<{ user: CloudUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ login: authUsername, password: authPassword }) })
       setCloudUser(user)
       setAuthStatus('signed-in')
+      setAuthNotice('')
+      setAuthError('')
       setCloudBoardIds({})
       setSelectedFolderId(null)
       localStorage.removeItem('doomnotes:cloud-board-ids')
@@ -1313,6 +1366,10 @@ function App() {
       const message = error instanceof Error ? error.message : 'Could not sign in.'
       setCloudMessage(message)
       setAuthError(message)
+      if ((error as Error & { code?: string }).code === 'EMAIL_NOT_VERIFIED') {
+        setAuthEmail(authUsername.includes('@') ? authUsername : '')
+        setAuthMode('verify')
+      }
     }
   }
 
@@ -2742,8 +2799,8 @@ function App() {
             <section className="auth-card" aria-labelledby="auth-heading">
               <div className="auth-card-icon" aria-hidden="true"><img src={brandLogo} alt="" /></div>
               <p className="auth-card-eyebrow">YOUR PERSONAL WORKSPACE</p>
-              <h2 id="auth-heading">{gateTitle}</h2>
-              <p className="auth-card-copy">Sign in to open your notes, projects, and simulators.</p>
+              <h2 id="auth-heading">{authMode === 'register' ? 'Create your account' : authMode === 'verify' ? 'Verify your email' : authMode === 'forgot' ? 'Reset your password' : authMode === 'reset' ? 'Choose a new password' : gateTitle}</h2>
+              <p className="auth-card-copy">{authMode === 'register' ? 'Create a free account to open your notes, projects, and simulators.' : authMode === 'verify' ? 'We’ll send a fresh one-time verification link to your inbox.' : authMode === 'forgot' ? 'Enter the email address on your account and we’ll send a reset link.' : authMode === 'reset' ? 'Choose a new password for your OzooNotes account.' : 'Sign in to open your notes, projects, and simulators.'}</p>
 
               {authStatus === 'loading' ? (
                 <div className="auth-loading" role="status" aria-live="polite"><span className="auth-spinner" />Checking your sign-in…</div>
@@ -2755,13 +2812,15 @@ function App() {
               ) : (
                 <>
                   <form className="auth-local-form" onSubmit={(event) => { void submitAccount(event) }}>
-                    {authMode === 'register' && <label className="auth-field">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}
-                    <label className="auth-field">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label>
-                    <label className="auth-field">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>
-                    {authMode === 'register' && <p className="auth-account-note">Email verification and password recovery are not enabled yet. Use an email you can access.</p>}
+                    {['register', 'verify', 'forgot'].includes(authMode) && <label className="auth-field">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}
+                    {authMode === 'register' && <label className="auth-field">Username<input required minLength={3} maxLength={32} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder="Choose a username" /></label>}
+                    {authMode === 'login' && <label className="auth-field">Email or username<input required maxLength={254} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder="you@example.com" /></label>}
+                    {['login', 'register', 'reset'].includes(authMode) && <label className="auth-field">{authMode === 'reset' ? 'New password' : 'Password'}<input required minLength={authMode === 'register' || authMode === 'reset' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'login' ? '' : 'At least 12 characters'} /></label>}
+                    {authMode === 'register' && <p className="auth-account-note">We’ll email a verification link before allowing sign-in. Use an address you can access.</p>}
                     {authError && <p className="auth-form-error" role="alert">{authError}</p>}
-                    <button className="auth-submit">{authMode === 'register' ? 'Create free account' : 'Sign in with email'}</button>
-                    <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setAuthError(''); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New to OzooNotes? Create an account'}</button>
+                    {authNotice && <p className="auth-form-notice" role="status">{authNotice}</p>}
+                    <button className="auth-submit">{authMode === 'register' ? 'Create free account' : authMode === 'verify' ? 'Resend verification email' : authMode === 'forgot' ? 'Send password reset link' : authMode === 'reset' ? 'Update password' : 'Sign in with email'}</button>
+                    {authMode === 'login' ? <div className="auth-secondary-actions"><button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('register'); setAuthError(''); setAuthNotice('') }}>Create an account</button><button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('forgot'); setAuthError(''); setAuthNotice('') }}>Forgot password?</button><button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('verify'); setAuthError(''); setAuthNotice('') }}>Resend verification email</button></div> : authMode === 'register' ? <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthNotice('') }}>Already have an account? Sign in</button> : <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthNotice('') }}>Back to sign in</button>}
                   </form>
                   {(googleLoginEnabled || githubLoginEnabled) && <>
                     <div className="auth-provider-divider"><span>or continue with</span></div>

@@ -27,11 +27,14 @@ const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) =>
 if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
 if (!userColumns.includes('github_id')) db.exec('ALTER TABLE users ADD COLUMN github_id TEXT')
 if (!userColumns.includes('email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT COLLATE NOCASE')
+if (!userColumns.includes('email_verified_at')) db.exec('ALTER TABLE users ADD COLUMN email_verified_at INTEGER')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
 
 db.exec('CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)')
+db.exec(`CREATE TABLE IF NOT EXISTS auth_tokens (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, purpose TEXT NOT NULL CHECK(purpose IN ('verify-email','reset-password')), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`)
+db.exec(`CREATE TABLE IF NOT EXISTS auth_mail_limits (email_hash TEXT NOT NULL, purpose TEXT NOT NULL, window_started_at INTEGER NOT NULL, sent_count INTEGER NOT NULL, last_sent_at INTEGER NOT NULL, PRIMARY KEY(email_hash,purpose))`)
 const eventClients = new Map()
 const googleStates = new Map()
 const githubStates = new Map()
@@ -42,10 +45,61 @@ const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI ?? ''
 const githubStateCookie = 'doomnotes_github_state'
 const githubRedirectUri = process.env.GITHUB_REDIRECT_URI ?? ''
 const appOrigin = process.env.APP_ORIGIN ?? 'https://ozoonotes.com'
+const emailConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
 const allowedOrigins = new Set([appOrigin, 'https://www.ozoonotes.com', 'http://localhost:5173', 'http://127.0.0.1:5173'])
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && googleRedirectUri)
 const githubEnabled = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && githubRedirectUri)
 const sessionTokenHash = (token) => createHash('sha256').update(token).digest('hex')
+const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254
+const createAuthToken = (userId, purpose, ttlMs) => {
+  const token = randomBytes(32).toString('hex')
+  db.prepare('DELETE FROM auth_tokens WHERE user_id=? AND purpose=?').run(userId, purpose)
+  db.prepare('INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at,created_at) VALUES(?,?,?,?,?)').run(sessionTokenHash(token), userId, purpose, Date.now() + ttlMs, Date.now())
+  return token
+}
+const canSendAuthEmail = (email, purpose) => {
+  const now = Date.now()
+  const emailHash = sessionTokenHash(email.toLowerCase())
+  const row = db.prepare('SELECT * FROM auth_mail_limits WHERE email_hash=? AND purpose=?').get(emailHash, purpose)
+  if (row && now - row.last_sent_at < 60_000) return false
+  if (row && now - row.window_started_at < 60 * 60 * 1000 && row.sent_count >= 5) return false
+  if (!row || now - row.window_started_at >= 60 * 60 * 1000) {
+    db.prepare('INSERT INTO auth_mail_limits(email_hash,purpose,window_started_at,sent_count,last_sent_at) VALUES(?,?,?,1,?) ON CONFLICT(email_hash,purpose) DO UPDATE SET window_started_at=excluded.window_started_at,sent_count=1,last_sent_at=excluded.last_sent_at').run(emailHash, purpose, now, now)
+  } else {
+    db.prepare('UPDATE auth_mail_limits SET sent_count=sent_count+1,last_sent_at=? WHERE email_hash=? AND purpose=?').run(now, emailHash, purpose)
+  }
+  return true
+}
+const sendAuthEmail = async ({ to, subject, text, html }) => {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text, html }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    console.error('Transactional email delivery failed:', response.status)
+    throw new Error('Email delivery is temporarily unavailable. Try again in a few minutes.')
+  }
+}
+const sendAuthLink = async (user, purpose) => {
+  if (!emailConfigured) throw new Error('Email service is not configured yet. Please try again later.')
+  if (!canSendAuthEmail(user.email, purpose)) return false
+  const token = createAuthToken(user.id, purpose, purpose === 'verify-email' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000)
+  const isVerification = purpose === 'verify-email'
+  const parameter = isVerification ? 'verify_email' : 'reset_password'
+  const link = `${appOrigin.replace(/\/$/, '')}/?${parameter}=${token}`
+  const action = isVerification ? 'Verify email address' : 'Reset password'
+  const title = isVerification ? 'Verify your OzooNotes email' : 'Reset your OzooNotes password'
+  const expiry = isVerification ? '24 hours' : '1 hour'
+  await sendAuthEmail({
+    to: user.email,
+    subject: title,
+    text: `${title}\n\nOpen this link to continue: ${link}\n\nThis link expires in ${expiry}. If you did not request this, you can ignore this email.`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:32px auto;padding:28px;border:1px solid #e6e2ec;border-radius:14px;color:#211d2a"><p style="color:#6a35e8;font-weight:700;letter-spacing:.08em">OZOONOTES</p><h1 style="font-size:24px">${title}</h1><p>Use the button below to continue. This one-time link expires in ${expiry}.</p><p style="margin:28px 0"><a href="${link}" style="padding:13px 20px;border-radius:9px;background:#6a35e8;color:white;text-decoration:none;font-weight:700">${action}</a></p><p style="font-size:12px;color:#716b7c">If you did not request this, you can safely ignore this email.</p></div>`,
+  })
+  return true
+}
 const createSession = (userId) => {
   const token = randomBytes(32).toString('hex')
   db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(token), userId, Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -185,19 +239,75 @@ async function handler(req, res) {
       const sessionId = createSession(user.id)
       return res.writeHead(303, { Location: `${appOrigin.replace(/\/$/, '')}/`, 'Set-Cookie': [`${cookieName}=${sessionId}; ${cookieFlags}; Max-Age=2592000`, clearStateCookie], 'Cache-Control': 'no-store' }).end()
     }
+    if (route === '/api/auth/verify-email' && method === 'POST') {
+      const { token } = await readBody(req, 10_000)
+      if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return sendJson(res, 400, { error: 'That verification link is invalid or has expired.' })
+      const tokenHash = sessionTokenHash(token)
+      const record = db.prepare("SELECT user_id,expires_at FROM auth_tokens WHERE token_hash=? AND purpose='verify-email'").get(tokenHash)
+      if (!record || record.expires_at <= Date.now()) {
+        db.prepare('DELETE FROM auth_tokens WHERE token_hash=?').run(tokenHash)
+        return sendJson(res, 400, { error: 'That verification link is invalid or has expired. Request a new one and try again.' })
+      }
+      db.prepare('UPDATE users SET email_verified_at=? WHERE id=?').run(Date.now(), record.user_id)
+      db.prepare("DELETE FROM auth_tokens WHERE user_id=? AND purpose='verify-email'").run(record.user_id)
+      return sendJson(res, 200, { ok: true, message: 'Email verified. You can now sign in.' })
+    }
+    if (route === '/api/auth/resend-verification' && method === 'POST') {
+      const { email } = await readBody(req, 10_000)
+      const cleanEmail = String(email ?? '').trim().toLowerCase()
+      if (!validEmail(cleanEmail)) return sendJson(res, 400, { error: 'Enter a valid email address.' })
+      if (!emailConfigured) return sendJson(res, 503, { error: 'Email service is not configured yet. Please try again later.' })
+      const user = db.prepare('SELECT id,email,email_verified_at FROM users WHERE email=?').get(cleanEmail)
+      if (user && !user.email_verified_at) {
+        try { await sendAuthLink(user, 'verify-email') } catch { /* Keep the response uniform so email addresses cannot be discovered. */ }
+      }
+      return sendJson(res, 200, { ok: true, message: 'If that address has an unverified OzooNotes account, a verification link will arrive shortly.' })
+    }
+    if (route === '/api/auth/password-reset/request' && method === 'POST') {
+      const { email } = await readBody(req, 10_000)
+      const cleanEmail = String(email ?? '').trim().toLowerCase()
+      if (!validEmail(cleanEmail)) return sendJson(res, 400, { error: 'Enter a valid email address.' })
+      if (!emailConfigured) return sendJson(res, 503, { error: 'Email service is not configured yet. Please try again later.' })
+      const user = db.prepare('SELECT id,email,email_verified_at FROM users WHERE email=?').get(cleanEmail)
+      if (user?.email_verified_at) {
+        try { await sendAuthLink(user, 'reset-password') } catch { /* Keep the response uniform so email addresses cannot be discovered. */ }
+      }
+      return sendJson(res, 200, { ok: true, message: 'If that address belongs to a verified OzooNotes account, a password reset link will arrive shortly.' })
+    }
+    if (route === '/api/auth/password-reset/complete' && method === 'POST') {
+      const { token, password } = await readBody(req, 10_000)
+      if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return sendJson(res, 400, { error: 'That reset link is invalid or has expired.' })
+      if (typeof password !== 'string' || password.length < 12 || password.length > 256) return sendJson(res, 400, { error: 'Use a password between 12 and 256 characters.' })
+      const tokenHash = sessionTokenHash(token)
+      const record = db.prepare("SELECT user_id,expires_at FROM auth_tokens WHERE token_hash=? AND purpose='reset-password'").get(tokenHash)
+      if (!record || record.expires_at <= Date.now()) {
+        db.prepare('DELETE FROM auth_tokens WHERE token_hash=?').run(tokenHash)
+        return sendJson(res, 400, { error: 'That reset link is invalid or has expired. Request a new one and try again.' })
+      }
+      const salt = randomBytes(16).toString('hex')
+      const hash = scryptSync(password, salt, 64).toString('hex')
+      db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(salt, hash, record.user_id)
+      db.prepare("DELETE FROM auth_tokens WHERE user_id=? AND purpose='reset-password'").run(record.user_id)
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(record.user_id)
+      return sendJson(res, 200, { ok: true, message: 'Password updated. Sign in with your new password.' }, { 'Set-Cookie': `${cookieName}=; ${cookieFlags}; Max-Age=0` })
+    }
     if (route === '/api/auth/register' && method === 'POST') {
       const { username, email, password } = await readBody(req)
       const cleanName = String(username ?? '').trim()
       const cleanEmail = String(email ?? '').trim().toLowerCase()
       if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(cleanName)) return sendJson(res, 400, { error: 'Use a 3–32 character username with letters, numbers, dots, underscores, or hyphens.' })
-      if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) return sendJson(res, 400, { error: 'Enter a valid email address.' })
+      if (!validEmail(cleanEmail)) return sendJson(res, 400, { error: 'Enter a valid email address.' })
       if (typeof password !== 'string' || password.length < 12 || password.length > 256) return sendJson(res, 400, { error: 'Use a password between 12 and 256 characters.' })
+      if (!emailConfigured) return sendJson(res, 503, { error: 'Email verification is not configured yet. Please try again later.' })
       const salt = randomBytes(16).toString('hex')
       const hash = scryptSync(password, salt, 64).toString('hex')
-      const result = db.prepare('INSERT INTO users(username,salt,password_hash,email) VALUES(?,?,?,?)').run(cleanName, salt, hash, email === undefined ? null : cleanEmail)
-      const sessionId = randomBytes(32).toString('hex')
-      db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), Number(result.lastInsertRowid), Date.now() + 30 * 24 * 60 * 60 * 1000)
-      return sendJson(res, 201, { user: { id: Number(result.lastInsertRowid), username: cleanName } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
+      const result = db.prepare('INSERT INTO users(username,salt,password_hash,email) VALUES(?,?,?,?)').run(cleanName, salt, hash, cleanEmail)
+      const user = { id: Number(result.lastInsertRowid), email: cleanEmail }
+      try {
+        const sent = await sendAuthLink(user, 'verify-email')
+        if (!sent) return sendJson(res, 429, { error: 'Please wait a minute before requesting another verification email.' })
+      } catch (error) { return sendJson(res, 503, { error: error instanceof Error ? error.message : 'Could not send the verification email.' }) }
+      return sendJson(res, 201, { requiresVerification: true, message: 'Check your inbox for a verification link before signing in.' })
     }
     if (route === '/api/auth/login' && method === 'POST') {
       const { login, username, password } = await readBody(req)
@@ -206,6 +316,7 @@ async function handler(req, res) {
       if (!user || typeof password !== 'string' || password.length > 256) return sendJson(res, 401, { error: 'Email/username or password is incorrect.' })
       const candidate = scryptSync(password, user.salt, 64)
       if (!timingSafeEqual(candidate, Buffer.from(user.password_hash, 'hex'))) return sendJson(res, 401, { error: 'Email/username or password is incorrect.' })
+      if (user.email && !user.email_verified_at) return sendJson(res, 403, { error: 'Verify your email before signing in.', code: 'EMAIL_NOT_VERIFIED' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
       return sendJson(res, 200, { user: { id: user.id, username: user.username } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
