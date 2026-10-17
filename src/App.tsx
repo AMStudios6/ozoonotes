@@ -211,8 +211,10 @@ function normalizeBoardName(name: string) {
   return name.trim().normalize('NFKC').toLocaleLowerCase()
 }
 
+const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE || 'https://api.ozoonotes.com')
+
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, { ...init, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...init.headers } })
+  const response = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init.headers } })
   const data = await response.json() as T & { error?: string }
   if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`)
   return data
@@ -895,6 +897,9 @@ function App() {
   const [graphRange, setGraphRange] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 })
   const [graphError, setGraphError] = useState('')
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'signed-out' | 'signed-in' | 'error'>('loading')
+  const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
+  const [authError, setAuthError] = useState('')
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
   const [cloudFolders, setCloudFolders] = useState<{ id: number; name: string }[]>([])
@@ -1195,12 +1200,24 @@ function App() {
   }
 
   useEffect(() => {
-    if (localOnly) return
-    apiRequest<{ user: CloudUser | null }>('/api/me').then(({ user }) => {
+    let active = true
+    Promise.all([
+      apiRequest<{ user: CloudUser | null }>('/api/me'),
+      apiRequest<{ google: boolean }>('/api/auth/providers'),
+    ]).then(([{ user }, providers]) => {
+      if (!active) return
       setCloudUser(user)
+      setGoogleLoginEnabled(providers.google)
+      setAuthStatus(user ? 'signed-in' : 'signed-out')
+      setAuthError('')
       if (user) void refreshCloudBoards()
-    }).catch(() => undefined)
-  }, [localOnly])
+    }).catch((error) => {
+      if (!active) return
+      setAuthStatus('error')
+      setAuthError(error instanceof Error ? error.message : 'Could not connect to the sign-in server.')
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (!inkTools.includes(activeTool)) setShowSettingsPanel(false)
@@ -1259,6 +1276,7 @@ function App() {
     try {
       const { user } = await apiRequest<{ user: CloudUser }>(`/api/auth/${authMode === 'register' ? 'register' : 'login'}`, { method: 'POST', body: JSON.stringify({ username: authUsername, password: authPassword }) })
       setCloudUser(user)
+      setAuthStatus('signed-in')
       setCloudBoardIds({})
       setSelectedFolderId(null)
       localStorage.removeItem('doomnotes:cloud-board-ids')
@@ -1448,6 +1466,7 @@ function App() {
   const logout = async () => {
     try { await apiRequest('/api/auth/logout', { method: 'POST', body: '{}' }) } catch { /* server may be offline */ }
     setCloudUser(null)
+    setAuthStatus('signed-out')
     setCloudBoards([])
     setCloudBoardIds({})
     setCloudFolders([])
@@ -1461,7 +1480,7 @@ function App() {
     if (!cloudUser) return
     const id = cloudBoardIds[boards[activeBoard]?.name]
     if (!id) return
-    const stream = new EventSource(`/api/boards/${id}/events`)
+    const stream = new EventSource(`${API_BASE}/api/boards/${id}/events`, { withCredentials: true })
     stream.addEventListener('board-updated', () => {
       void apiRequest<{ board: CloudBoard }>(`/api/boards/${id}`).then(async ({ board: remote }) => {
         const localIndex = boards.findIndex((item) => cloudBoardIds[item.name] === id)
@@ -2646,6 +2665,11 @@ function App() {
     const sharedWidth = state?.infinite ? 2800 : Math.round(sharedMmOriented[0] * 3.78)
     const sharedHeight = state?.infinite ? 2800 : Math.round(sharedMmOriented[1] * 3.78)
     return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark, colorTheme) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
+  }
+
+  if (authStatus !== 'signed-in') {
+    const gateTitle = authStatus === 'loading' ? 'Preparing your workspace…' : authStatus === 'error' ? 'Sign-in is temporarily unavailable' : 'Your notes, ready when you are'
+    return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--app-bg, #f5f3ff)' }}><div style={{ width: 'min(440px, 100%)', padding: '40px 36px', borderRadius: 24, border: '1px solid var(--line, #ded7f5)', background: 'var(--panel, #fff)', boxShadow: '0 24px 80px rgba(38, 20, 76, .12)', textAlign: 'center' }}><img src={brandLogo} alt="OzooNotes" style={{ width: 62, height: 62, objectFit: 'contain', marginBottom: 18 }} /><p className="eyebrow">YOUR PERSONAL WORKSPACE</p><h1 style={{ margin: '0 0 12px', fontSize: 30 }}>{gateTitle}</h1><p style={{ margin: '0 auto 26px', maxWidth: 330, lineHeight: 1.6, color: 'var(--muted, #6f687b)' }}>{authStatus === 'signed-in' ? 'Opening your workspace…' : 'Sign in with Google to open your notes, projects, and simulators.'}</p>{authStatus === 'loading' ? <div role="status" aria-live="polite">Checking your sign-in…</div> : authStatus === 'error' ? <><p role="alert" style={{ color: '#b42318', fontSize: 14 }}>{authError}</p><button className="dialog-create full-button" onClick={() => window.location.reload()}>Try again</button></> : googleLoginEnabled ? <a className="dialog-create full-button" href={`${API_BASE}/api/auth/google`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>G</span>Continue with Google</a> : <div role="status" style={{ padding: 16, borderRadius: 12, background: 'var(--soft, #f4f1fa)', fontSize: 14, lineHeight: 1.6 }}>Google sign-in is not configured yet. The site owner needs to add the Google OAuth credentials to Railway.</div>}</div></section></main>
   }
 
   if (calculusSimulatorOpen) return <CalculusSimulator onBack={() => setCalculusSimulatorOpen(false)} />
