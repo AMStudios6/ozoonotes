@@ -25,18 +25,24 @@ db.exec(`
 `)
 const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name)
 if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
+if (!userColumns.includes('github_id')) db.exec('ALTER TABLE users ADD COLUMN github_id TEXT')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 
 db.exec('CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)')
 const eventClients = new Map()
 const googleStates = new Map()
+const githubStates = new Map()
 const cookieName = 'doomnotes_session'
 const cookieFlags = `Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
 const googleStateCookie = 'doomnotes_google_state'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI ?? ''
+const githubStateCookie = 'doomnotes_github_state'
+const githubRedirectUri = process.env.GITHUB_REDIRECT_URI ?? ''
 const appOrigin = process.env.APP_ORIGIN ?? 'https://ozoonotes.com'
 const allowedOrigins = new Set([appOrigin, 'https://www.ozoonotes.com', 'http://localhost:5173', 'http://127.0.0.1:5173'])
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && googleRedirectUri)
+const githubEnabled = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && githubRedirectUri)
 const sessionTokenHash = (token) => createHash('sha256').update(token).digest('hex')
 const createSession = (userId) => {
   const token = randomBytes(32).toString('hex')
@@ -93,7 +99,7 @@ async function handler(req, res) {
   const method = req.method ?? 'GET'
   try {
     if (route === '/api/health') return sendJson(res, 200, { ok: true })
-    if (route === '/api/auth/providers' && method === 'GET') return sendJson(res, 200, { google: googleEnabled })
+    if (route === '/api/auth/providers' && method === 'GET') return sendJson(res, 200, { google: googleEnabled, github: githubEnabled })
     if (route === '/api/auth/google' && method === 'GET') {
       if (!googleEnabled) return sendJson(res, 503, { error: 'Google sign-in is not configured on this OzooNotes server yet.' })
       const now = Date.now()
@@ -130,6 +136,48 @@ async function handler(req, res) {
         const salt = randomBytes(16).toString('hex')
         const hash = randomBytes(64).toString('hex')
         const result = db.prepare('INSERT INTO users(username,salt,password_hash,google_sub) VALUES(?,?,?,?)').run(username, salt, hash, profile.sub)
+        user = { id: Number(result.lastInsertRowid), username }
+      }
+      const sessionId = createSession(user.id)
+      return res.writeHead(303, { Location: `${appOrigin.replace(/\/$/, '')}/`, 'Set-Cookie': [`${cookieName}=${sessionId}; ${cookieFlags}; Max-Age=2592000`, clearStateCookie], 'Cache-Control': 'no-store' }).end()
+    }
+    if (route === '/api/auth/github' && method === 'GET') {
+      if (!githubEnabled) return sendJson(res, 503, { error: 'GitHub sign-in is not configured on this OzooNotes server yet.' })
+      const now = Date.now()
+      for (const [key, entry] of githubStates) if (entry.expiresAt <= now) githubStates.delete(key)
+      const state = randomBytes(32).toString('hex')
+      const browserBinding = randomBytes(32).toString('hex')
+      githubStates.set(state, { browserBinding, expiresAt: now + 10 * 60 * 1000 })
+      const authorization = new URL('https://github.com/login/oauth/authorize')
+      authorization.search = new URLSearchParams({ client_id: process.env.GITHUB_CLIENT_ID, redirect_uri: githubRedirectUri, scope: 'read:user', state }).toString()
+      return res.writeHead(302, { Location: authorization.toString(), 'Set-Cookie': `${githubStateCookie}=${browserBinding}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`, 'Cache-Control': 'no-store' }).end()
+    }
+    if (route === '/api/auth/github/callback' && method === 'GET') {
+      if (!githubEnabled) return sendJson(res, 503, { error: 'GitHub sign-in is not configured on this OzooNotes server yet.' })
+      const state = url.searchParams.get('state') ?? ''
+      const stateEntry = githubStates.get(state)
+      githubStates.delete(state)
+      const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${githubStateCookie}=`))
+      const browserBinding = cookie?.slice(githubStateCookie.length + 1)
+      const clearStateCookie = `${githubStateCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+      if (url.searchParams.has('error')) return sendJson(res, 400, { error: 'GitHub sign-in was cancelled.' }, { 'Set-Cookie': clearStateCookie })
+      const code = url.searchParams.get('code')
+      if (!stateEntry || stateEntry.expiresAt <= Date.now() || stateEntry.browserBinding !== browserBinding || !code) return sendJson(res, 400, { error: 'GitHub sign-in expired or could not be verified. Please try again.' }, { 'Set-Cookie': clearStateCookie })
+      const tokenResponse = await fetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code, redirect_uri: githubRedirectUri }) })
+      const token = await tokenResponse.json()
+      if (!tokenResponse.ok || typeof token.access_token !== 'string') return sendJson(res, 401, { error: 'GitHub could not complete sign-in. Check the OAuth callback URL and try again.' }, { 'Set-Cookie': clearStateCookie })
+      const profileResponse = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${token.access_token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'OzooNotes' } })
+      const profile = await profileResponse.json()
+      if (!profileResponse.ok || (typeof profile.id !== 'number' && typeof profile.id !== 'string') || typeof profile.login !== 'string' || !profile.login) return sendJson(res, 401, { error: 'GitHub did not return a valid account.' }, { 'Set-Cookie': clearStateCookie })
+      const githubId = String(profile.id)
+      let user = db.prepare('SELECT id, username FROM users WHERE github_id = ?').get(githubId)
+      if (!user) {
+        const loginPrefix = String(profile.login).toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 24) || 'github_user'
+        let username = loginPrefix
+        while (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) username = `${loginPrefix.slice(0, 23)}_${randomBytes(3).toString('hex')}`
+        const salt = randomBytes(16).toString('hex')
+        const hash = randomBytes(64).toString('hex')
+        const result = db.prepare('INSERT INTO users(username,salt,password_hash,github_id) VALUES(?,?,?,?)').run(username, salt, hash, githubId)
         user = { id: Number(result.lastInsertRowid), username }
       }
       const sessionId = createSession(user.id)
