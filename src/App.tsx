@@ -908,6 +908,8 @@ function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [cloudBoardIds, setCloudBoardIds] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem('doomnotes:cloud-board-ids') ?? '{}') as Record<string, number>)
   const [accountOpen, setAccountOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDetailsElement>(null)
+  const [studentProfileSummary, setStudentProfileSummary] = useState<{ field?: string; otherField?: string; stage?: string; otherStage?: string; degree?: string } | null>(() => { try { return JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null') } catch { return null } })
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authUsername, setAuthUsername] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -1199,6 +1201,21 @@ function App() {
     setLibraryItems(updated)
     localStorage.setItem('doomnotes:library', JSON.stringify(updated))
   }
+
+  useEffect(() => {
+    const closeIfOutside = (event: PointerEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) profileMenuRef.current.removeAttribute('open')
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') profileMenuRef.current?.removeAttribute('open')
+    }
+    document.addEventListener('pointerdown', closeIfOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -2695,7 +2712,35 @@ function App() {
               </div>
             </nav>
             <div className="landing-top-actions">
-              {!localOnly && <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}
+              {!localOnly && (cloudUser ? <details ref={profileMenuRef} className="profile-menu" onToggle={(event) => { if (event.currentTarget.open) { try { setStudentProfileSummary(JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null')) } catch { setStudentProfileSummary(null) } } }}>
+                <summary className="profile-menu-trigger" aria-label={`Open profile menu for ${cloudUser.username}`}>
+                  <span className="profile-avatar" aria-hidden="true">{cloudUser.username.trim().slice(0, 1).toUpperCase() || 'O'}</span>
+                  <span className="profile-trigger-copy"><strong>{cloudUser.username}</strong><small>Profile</small></span>
+                  <Icon name="chevronDown" size={12} />
+                </summary>
+                <div className="profile-dropdown">
+                  <div className="profile-dropdown-top">
+                    <span className="profile-avatar profile-avatar-large" aria-hidden="true">{cloudUser.username.trim().slice(0, 1).toUpperCase() || 'O'}</span>
+                    <span className="profile-identity"><small>Signed in to OzooNotes</small><strong>{cloudUser.username}</strong><span className="profile-status"><i /> Account active</span></span>
+                  </div>
+                  <div className="profile-stat-grid">
+                    <div className="profile-stat"><strong>{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).length}</strong><span>Device files</span></div>
+                    <div className="profile-stat"><strong>{cloudBoards.length}</strong><span>Cloud boards</span></div>
+                  </div>
+                  <div className="profile-data-list">
+                    <div className="profile-data-row"><span>Workspace</span><strong>{landingAudience === 'student' ? 'Student' : 'Teacher'}</strong></div>
+                    <div className="profile-data-row"><span>Theme</span><strong>{colorThemes.find((theme) => theme.id === colorTheme)?.name ?? 'Custom'}</strong></div>
+                    {landingAudience === 'student' && studentProfileSummary && <div className="profile-study-summary"><span>Study profile</span><strong>{studentProfileSummary.field === 'Other' ? (studentProfileSummary.otherField || 'Other') : (studentProfileSummary.field || 'Student')}</strong><small>{studentProfileSummary.stage === 'Other' ? (studentProfileSummary.otherStage || 'Study level not set') : (studentProfileSummary.stage || 'Study level not set')}{studentProfileSummary.degree ? ` · ${studentProfileSummary.degree}` : ''}</small></div>}
+                  </div>
+                  <div className="profile-menu-actions">
+                    <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="notes" size={15} /> My files</button>
+                    {landingAudience === 'student' && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="study" size={15} /> Study space</button>}
+                    <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setProjectsPageOpen(true) }}><Icon name="duplicate" size={15} /> Projects</button>
+                    <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setAccountOpen(true) }}><Icon name="cloud" size={15} /> Account & storage</button>
+                    <button type="button" className="profile-signout" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); void logout() }}><Icon name="close" size={15} /> Sign out</button>
+                  </div>
+                </div>
+              </details> : <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> Sign in</button>)}
               <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             </div>
           </header>
