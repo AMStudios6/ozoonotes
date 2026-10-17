@@ -26,8 +26,10 @@ db.exec(`
 const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name)
 if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
 if (!userColumns.includes('github_id')) db.exec('ALTER TABLE users ADD COLUMN github_id TEXT')
+if (!userColumns.includes('email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT COLLATE NOCASE')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
 
 db.exec('CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)')
 const eventClients = new Map()
@@ -184,22 +186,26 @@ async function handler(req, res) {
       return res.writeHead(303, { Location: `${appOrigin.replace(/\/$/, '')}/`, 'Set-Cookie': [`${cookieName}=${sessionId}; ${cookieFlags}; Max-Age=2592000`, clearStateCookie], 'Cache-Control': 'no-store' }).end()
     }
     if (route === '/api/auth/register' && method === 'POST') {
-      const { username, password } = await readBody(req)
+      const { username, email, password } = await readBody(req)
       const cleanName = String(username ?? '').trim()
-      if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(cleanName) || typeof password !== 'string' || password.length < 12) return sendJson(res, 400, { error: 'Use a 3–32 character username and a password of at least 12 characters.' })
+      const cleanEmail = String(email ?? '').trim().toLowerCase()
+      if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(cleanName)) return sendJson(res, 400, { error: 'Use a 3–32 character username with letters, numbers, dots, underscores, or hyphens.' })
+      if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) return sendJson(res, 400, { error: 'Enter a valid email address.' })
+      if (typeof password !== 'string' || password.length < 12 || password.length > 256) return sendJson(res, 400, { error: 'Use a password between 12 and 256 characters.' })
       const salt = randomBytes(16).toString('hex')
       const hash = scryptSync(password, salt, 64).toString('hex')
-      const result = db.prepare('INSERT INTO users(username,salt,password_hash) VALUES(?,?,?)').run(cleanName, salt, hash)
+      const result = db.prepare('INSERT INTO users(username,salt,password_hash,email) VALUES(?,?,?,?)').run(cleanName, salt, hash, email === undefined ? null : cleanEmail)
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), Number(result.lastInsertRowid), Date.now() + 30 * 24 * 60 * 60 * 1000)
       return sendJson(res, 201, { user: { id: Number(result.lastInsertRowid), username: cleanName } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/login' && method === 'POST') {
-      const { username, password } = await readBody(req)
-      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(String(username ?? '').trim())
-      if (!user || typeof password !== 'string') return sendJson(res, 401, { error: 'Username or password is incorrect.' })
+      const { login, username, password } = await readBody(req)
+      const identifier = String(login ?? username ?? '').trim()
+      const user = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(identifier, identifier.toLowerCase())
+      if (!user || typeof password !== 'string' || password.length > 256) return sendJson(res, 401, { error: 'Email/username or password is incorrect.' })
       const candidate = scryptSync(password, user.salt, 64)
-      if (!timingSafeEqual(candidate, Buffer.from(user.password_hash, 'hex'))) return sendJson(res, 401, { error: 'Username or password is incorrect.' })
+      if (!timingSafeEqual(candidate, Buffer.from(user.password_hash, 'hex'))) return sendJson(res, 401, { error: 'Email/username or password is incorrect.' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
       return sendJson(res, 200, { user: { id: user.id, username: user.username } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
@@ -372,9 +378,10 @@ async function handler(req, res) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Server error'
     const status = message.includes('UNIQUE constraint failed') ? 409 : message === 'Request is too large' ? 413 : 400
-    return sendJson(res, status, { error: status === 409 ? 'That username or folder already exists.' : message })
+    return sendJson(res, status, { error: status === 409 ? 'That username, email, or folder already exists.' : message })
   }
 }
 
 createServer((req, res) => { void handler(req, res) }).listen(port, host, () => console.log(`OzooNotes server listening at http://${host}:${port}`))
+
 

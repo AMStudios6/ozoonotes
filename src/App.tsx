@@ -912,6 +912,7 @@ function App() {
   const [studentProfileSummary, setStudentProfileSummary] = useState<{ field?: string; otherField?: string; stage?: string; otherStage?: string; degree?: string } | null>(() => { try { return JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null') } catch { return null } })
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authUsername, setAuthUsername] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [cloudMessage, setCloudMessage] = useState('')
   const [cloudSaveOpen, setCloudSaveOpen] = useState(false)
@@ -1293,7 +1294,10 @@ function App() {
   const submitAccount = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      const { user } = await apiRequest<{ user: CloudUser }>(`/api/auth/${authMode === 'register' ? 'register' : 'login'}`, { method: 'POST', body: JSON.stringify({ username: authUsername, password: authPassword }) })
+      const accountPayload = authMode === 'register'
+        ? { username: authUsername, email: authEmail, password: authPassword }
+        : { login: authUsername, password: authPassword }
+      const { user } = await apiRequest<{ user: CloudUser }>(`/api/auth/${authMode === 'register' ? 'register' : 'login'}`, { method: 'POST', body: JSON.stringify(accountPayload) })
       setCloudUser(user)
       setAuthStatus('signed-in')
       setCloudBoardIds({})
@@ -1305,7 +1309,11 @@ function App() {
       await refreshCloudBoards()
       const { teams: availableTeams } = await apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams')
       setTeams(availableTeams)
-    } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not sign in.') }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not sign in.'
+      setCloudMessage(message)
+      setAuthError(message)
+    }
   }
 
   const saveToCloud = async (passphrase?: string) => {
@@ -2652,7 +2660,7 @@ function App() {
     <footer className="dialog-actions"><button className="dialog-create" onClick={() => setShortcutsOpen(false)}>Done</button></footer>
   </section></div>
 
-  const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">SELF-HOSTED CLOUD</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}><label className="dialog-label">Username<input required minLength={3} maxLength={32} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} /></label><button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => setAuthMode(authMode === 'register' ? 'login' : 'register')}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
+  const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES ACCOUNT</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}>{authMode === 'register' && <label className="dialog-label">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}<label className="dialog-label">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete={authMode === 'register' ? 'username' : 'username'} value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>{authMode === 'register' && <p className="auth-account-note">Your email is used for sign-in. Email verification and password recovery are not enabled yet.</p>}<button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
   const shareDialog = shareOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShareOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="Close sharing" onClick={() => setShareOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">ACCESS MANAGEMENT</p><h2 id="share-title">Share “{boards[activeBoard]?.name}”</h2><form className="share-form" onSubmit={(event) => { void inviteToBoard(event) }}><label className="dialog-label">Username<input required value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} placeholder="Their OzooNotes username" /></label><label className="dialog-label">Permission<select value={shareRole} onChange={(event) => setShareRole(event.target.value as 'view' | 'edit')}><option value="view">View only</option><option value="edit">Can edit</option></select></label><button className="dialog-create">Grant access</button></form><h3 className="small-heading">People with access</h3>{shareList.length ? <ul className="access-list">{shareList.map((entry) => <li key={entry.username}><span>{entry.username}<small>{entry.role === 'view' ? 'View only' : 'Can edit'}</small></span><button onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/share`, { method: 'DELETE', body: JSON.stringify({ username: entry.username }) }).then(() => setShareList((current) => current.filter((item) => item.username !== entry.username))).catch((error) => setCloudMessage(error.message)) }}>Remove</button></li>)}</ul> : <p className="empty-hint">No one else has access yet.</p>}<h3 className="small-heading">Share with a team</h3>{teams.length ? <><form className="share-form" onSubmit={(event) => { void grantTeamBoardAccess(event) }}><label className="dialog-label">Team<select value={shareTeamId ?? ''} onChange={(event) => setShareTeamId(Number(event.target.value) || null)}><option value="">Choose a team</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label><label className="dialog-label">Permission<select value={shareTeamRole} onChange={(event) => setShareTeamRole(event.target.value as 'view' | 'edit')}><option value="view">View only</option><option value="edit">Can edit</option></select></label><button className="dialog-create">Grant</button></form>{shareTeams.map((team) => <p className="team-access-row" key={team.id}>{team.name}: {team.role}<button onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/teams`, { method: 'DELETE', body: JSON.stringify({ teamId: team.id }) }).then(() => setShareTeams((current) => current.filter((item) => item.id !== team.id))) }}>Remove</button></p>)}</> : <p className="empty-hint">Create a team to grant access to a group.</p>}<div className="menu-divider" /><button className="dialog-create full-button" onClick={() => { void createPublicLink() }}>Create read-only link</button>{publicLink && <><div className="public-link-value">{publicLink}</div><button className="text-button" onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/public-link`, { method: 'DELETE', body: '{}' }).then(() => { setPublicLink(''); setCloudMessage('Read-only links revoked.') }).catch((error) => setCloudMessage(error.message)) }}>Revoke read-only links</button></>}{cloudMessage && <p className="cloud-message">{cloudMessage}</p>}</section></div>
 
@@ -2744,22 +2752,28 @@ function App() {
                   <p>{authError}</p>
                   <button className="auth-provider auth-retry" onClick={() => window.location.reload()}>Try again <span aria-hidden="true">↻</span></button>
                 </div>
-              ) : googleLoginEnabled || githubLoginEnabled ? (
-                <div className="auth-provider-list">
-                  {googleLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/google'}>
-                    <span className="auth-provider-mark auth-google-mark" aria-hidden="true">G</span>
-                    <span>Continue with Google</span><b aria-hidden="true">→</b>
-                  </a>}
-                  {githubLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/github'}>
-                    <span className="auth-provider-mark auth-github-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.32-3.76-1.32-.5-1.3-1.23-1.65-1.23-1.65-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.59 1.21 3.22.92.1-.72.39-1.21.7-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.06 1.15a10.67 10.67 0 0 1 5.57 0c2.13-1.45 3.06-1.15 3.06-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.24-5.11 5.51.4.35.75 1.02.75 2.06v3.12c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg></span>
-                    <span>Continue with GitHub</span><b aria-hidden="true">→</b>
-                  </a>}
-                </div>
               ) : (
-                <div className="auth-unavailable" role="status">Sign-in is not configured yet. Add OAuth credentials to the OzooNotes server to enable an account provider.</div>
+                <>
+                  <form className="auth-local-form" onSubmit={(event) => { void submitAccount(event) }}>
+                    {authMode === 'register' && <label className="auth-field">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}
+                    <label className="auth-field">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete="username" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label>
+                    <label className="auth-field">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>
+                    {authMode === 'register' && <p className="auth-account-note">Email verification and password recovery are not enabled yet. Use an email you can access.</p>}
+                    {authError && <p className="auth-form-error" role="alert">{authError}</p>}
+                    <button className="auth-submit">{authMode === 'register' ? 'Create free account' : 'Sign in with email'}</button>
+                    <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setAuthError(''); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New to OzooNotes? Create an account'}</button>
+                  </form>
+                  {(googleLoginEnabled || githubLoginEnabled) && <>
+                    <div className="auth-provider-divider"><span>or continue with</span></div>
+                    <div className="auth-provider-list">
+                      {googleLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/google'}><span className="auth-provider-mark auth-google-mark" aria-hidden="true">G</span><span>Continue with Google</span><b aria-hidden="true">→</b></a>}
+                      {githubLoginEnabled && <a className="auth-provider" href={API_BASE + '/api/auth/github'}><span className="auth-provider-mark auth-github-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.32-3.76-1.32-.5-1.3-1.23-1.65-1.23-1.65-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.59 1.21 3.22.92.1-.72.39-1.21.7-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.06 1.15a10.67 10.67 0 0 1 5.57 0c2.13-1.45 3.06-1.15 3.06-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.24-5.11 5.51.4.35.75 1.02.75 2.06v3.12c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg></span><span>Continue with GitHub</span><b aria-hidden="true">→</b></a>}
+                    </div>
+                  </>}
+                </>
               )}
 
-              <div className="auth-security-note"><span aria-hidden="true">✓</span><p>Secure sign-in. You’ll return to OzooNotes after authorizing your account.</p></div>
+              <div className="auth-security-note"><span aria-hidden="true">✓</span><p>Passwords are stored as salted hashes. Keep your password private.</p></div>
               <div className="auth-card-footer"><span className="auth-live-dot" /> OzooNotes workspace access</div>
             </section>
           </div>
@@ -3048,4 +3062,5 @@ function App() {
 }
 
 export default App
+
 
