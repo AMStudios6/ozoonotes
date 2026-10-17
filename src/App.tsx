@@ -899,6 +899,7 @@ function App() {
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'loading' | 'signed-out' | 'signed-in' | 'error'>('loading')
   const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
+  const [githubLoginEnabled, setGithubLoginEnabled] = useState(false)
   const [authError, setAuthError] = useState('')
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
@@ -1203,11 +1204,12 @@ function App() {
     let active = true
     Promise.all([
       apiRequest<{ user: CloudUser | null }>('/api/me'),
-      apiRequest<{ google: boolean }>('/api/auth/providers'),
+      apiRequest<{ google: boolean; github: boolean }>('/api/auth/providers'),
     ]).then(([{ user }, providers]) => {
       if (!active) return
       setCloudUser(user)
       setGoogleLoginEnabled(providers.google)
+      setGithubLoginEnabled(providers.github)
       setAuthStatus(user ? 'signed-in' : 'signed-out')
       setAuthError('')
       if (user) void refreshCloudBoards()
@@ -2669,7 +2671,7 @@ function App() {
 
   if (authStatus !== 'signed-in') {
     const gateTitle = authStatus === 'loading' ? 'Preparing your workspace…' : authStatus === 'error' ? 'Sign-in is temporarily unavailable' : 'Your notes, ready when you are'
-    return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--app-bg, #f5f3ff)' }}><div style={{ width: 'min(440px, 100%)', padding: '40px 36px', borderRadius: 24, border: '1px solid var(--line, #ded7f5)', background: 'var(--panel, #fff)', boxShadow: '0 24px 80px rgba(38, 20, 76, .12)', textAlign: 'center' }}><img src={brandLogo} alt="OzooNotes" style={{ width: 62, height: 62, objectFit: 'contain', marginBottom: 18 }} /><p className="eyebrow">YOUR PERSONAL WORKSPACE</p><h1 style={{ margin: '0 0 12px', fontSize: 30 }}>{gateTitle}</h1><p style={{ margin: '0 auto 26px', maxWidth: 330, lineHeight: 1.6, color: 'var(--muted, #6f687b)' }}>Sign in with Google to open your notes, projects, and simulators.</p>{authStatus === 'loading' ? <div role="status" aria-live="polite">Checking your sign-in…</div> : authStatus === 'error' ? <><p role="alert" style={{ color: '#b42318', fontSize: 14 }}>{authError}</p><button className="dialog-create full-button" onClick={() => window.location.reload()}>Try again</button></> : googleLoginEnabled ? <a className="dialog-create full-button" href={`${API_BASE}/api/auth/google`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>G</span>Continue with Google</a> : <div role="status" style={{ padding: 16, borderRadius: 12, background: 'var(--soft, #f4f1fa)', fontSize: 14, lineHeight: 1.6 }}>Google sign-in is not configured yet. The site owner needs to add the Google OAuth credentials to Railway.</div>}</div></section></main>
+    return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--app-bg, #f5f3ff)' }}><div style={{ width: 'min(440px, 100%)', padding: '40px 36px', borderRadius: 24, border: '1px solid var(--line, #ded7f5)', background: 'var(--panel, #fff)', boxShadow: '0 24px 80px rgba(38, 20, 76, .12)', textAlign: 'center' }}><img src={brandLogo} alt="OzooNotes" style={{ width: 62, height: 62, objectFit: 'contain', marginBottom: 18 }} /><p className="eyebrow">YOUR PERSONAL WORKSPACE</p><h1 style={{ margin: '0 0 12px', fontSize: 30 }}>{gateTitle}</h1><p style={{ margin: '0 auto 26px', maxWidth: 330, lineHeight: 1.6, color: 'var(--muted, #6f687b)' }}>Sign in with Google or GitHub to open your notes, projects, and simulators.</p>{authStatus === 'loading' ? <div role="status" aria-live="polite">Checking your sign-in…</div> : authStatus === 'error' ? <><p role="alert" style={{ color: '#b42318', fontSize: 14 }}>{authError}</p><button className="dialog-create full-button" onClick={() => window.location.reload()}>Try again</button></> : googleLoginEnabled || githubLoginEnabled ? <div style={{ display: 'grid', gap: 12 }}>{googleLoginEnabled && <a className="dialog-create full-button" href={`${API_BASE}/api/auth/google`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>G</span>Continue with Google</a>}{githubLoginEnabled && <a className="dialog-create full-button" href={`${API_BASE}/api/auth/github`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, textDecoration: 'none' }}><span aria-hidden="true" style={{ fontWeight: 700, fontSize: 19 }}>●</span>Continue with GitHub</a>}</div> : <div role="status" style={{ padding: 16, borderRadius: 12, background: 'var(--soft, #f4f1fa)', fontSize: 14, lineHeight: 1.6 }}>Google or GitHub sign-in is not configured yet. Add OAuth credentials to Railway to enable sign-in.</div>}</div></section></main>
   }
 
   if (calculusSimulatorOpen) return <CalculusSimulator onBack={() => setCalculusSimulatorOpen(false)} />
