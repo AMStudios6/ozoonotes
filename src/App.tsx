@@ -39,7 +39,7 @@ type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
 function themedCanvasBackground(theme: ColorTheme) {
-  return '#08060d'
+  return theme === 'purple' ? '#08060d' : '#f8f5ff'
 }
 const colorThemes: { id: ColorTheme; name: string; dark: boolean }[] = [
   { id: 'purple', name: 'Purple & Black', dark: true },
@@ -167,7 +167,7 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
   }
   return lines
 }
-function resolvePageBackground(background: string, dark: boolean, theme: ColorTheme = 'forest') {
+function resolvePageBackground(background: string, dark: boolean, theme: ColorTheme = 'purple') {
   if (background === 'auto' || background === '#ffffff') return dark ? themedCanvasBackground(theme) : '#ffffff'
   if (background === 'white') return '#ffffff'
   return background
@@ -184,8 +184,9 @@ function pageBackgroundLabel(background: string) {
   if (background === 'white') return 'Page background white'
   return 'Page background ' + background
 }
-function gridLineColor(dark: boolean, theme: ColorTheme = 'forest') {
-  return dark ? 'rgba(189, 139, 255, .48)' : 'rgba(130, 70, 193, .34)'
+function gridLineColor(dark: boolean, theme: ColorTheme = 'purple') {
+  const purpleTheme = theme === 'purple'
+  return dark ? (purpleTheme ? 'rgba(189, 139, 255, .48)' : 'rgba(130, 70, 193, .34)') : 'rgba(130, 70, 193, .34)'
 }
 const inkTools: Tool[] = ['Brush', 'Pen', 'Pencil', 'Marker', 'Highlighter']
 const drawingToolGroup: Tool[] = [...inkTools, 'Eraser']
@@ -2318,7 +2319,7 @@ function App() {
     const indexStrokes = (sheet: number): Stroke[] => {
       const rows = (board.titles ?? []).slice(sheet * 20, sheet * 20 + 20)
       const textStroke = (value: string, x: number, y: number, width: number, color = dark ? '#f3f4f6' : '#20252b'): Stroke => ({ tool: 'Text', color, width, opacity: 100, points: [{ x, y }], text: value })
-      return [textStroke('CONTENTS', .09, .09, 7, colorTheme === 'purple' ? '#bd8bff' : '#8052bc'), textStroke(board.name, .09, .125, 3), ...rows.flatMap((item, row) => { const y = .19 + row * .037; return [textStroke(item.title, .10, y, 3.2), textStroke(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
+      return [textStroke('CONTENTS', .09, .09, 7, colorTheme === 'purple' ? '#bd8bff' : '#8052bc'), textStroke(board.name, .09, .125, 3), ...rows.flatMap((item, row) => { const y = .19 + row * .037; return [textStroke(item.title, .10, y, 3.2), textStroke(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'purple' ? '#bd8bff' : '#8052bc')] })]
     }
     const pages: { strokes: Stroke[]; label: string; pageIndex: number | null }[] = [
       ...(exportIncludeIndex && (board.titles?.length ?? 0) > 1 ? Array.from({ length: indexPageCount }, (_, i) => ({ strokes: indexStrokes(i), label: `Index ${i + 1}`, pageIndex: null })) : []),
@@ -2492,7 +2493,7 @@ function App() {
       const firstIndex = sheet * 20
       const rows = titles.slice(firstIndex, firstIndex + 20)
       const text = (value: string, x: number, y: number, size: number, color = dark ? '#f3f4f6' : '#20252b'): Stroke => ({ tool: 'Text', color, width: size, opacity: 100, points: [{ x, y }], text: value })
-      return [text('CONTENTS', .09, .09, 7, colorTheme === 'forest' ? '#39a96b' : '#8052bc'), text(activePdfBoard.name, .09, .125, 3), ...rows.flatMap((item, index) => { const y = .19 + index * .037; return [text(item.title, .10, y, 3.2), text(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
+      return [text('CONTENTS', .09, .09, 7, colorTheme === 'purple' ? '#bd8bff' : '#8052bc'), text(activePdfBoard.name, .09, .125, 3), ...rows.flatMap((item, index) => { const y = .19 + index * .037; return [text(item.title, .10, y, 3.2), text(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'purple' ? '#bd8bff' : '#8052bc')] })]
     }
     const indexCount = includeIndex && (activePdfBoard.titles?.length ?? 0) > 1 ? Math.ceil((activePdfBoard.titles?.length ?? 0) / 20) : 0
     const exportPages: { pageStrokes: Stroke[]; pageIndex: number | null }[] = [
