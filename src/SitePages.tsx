@@ -1,12 +1,14 @@
 import { useState, type MouseEvent as ReactMouseEvent } from 'react'
 import './SitePages.css'
 
-export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'notes' | 'signin' | 'profile' | 'admin'
+export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'roadmaps' | 'notes' | 'signin' | 'profile' | 'admin'
 
 type SharedProps = {
   logo: string
   theme: string
   onNavigate: (target: string) => void
+  onThemeChange: (theme: 'purple' | 'white-purple') => void
+  user: { username: string; displayName?: string; avatar?: string | null } | null
 }
 
 function routeLink(target: string, onNavigate: (target: string) => void) {
@@ -16,7 +18,7 @@ function routeLink(target: string, onNavigate: (target: string) => void) {
   }
 }
 
-function SiteHeader({ logo, onNavigate }: Pick<SharedProps, 'logo' | 'onNavigate'>) {
+function SiteHeader({ logo, theme, onNavigate, onThemeChange, user }: SharedProps) {
   return <header className="site-header">
     <a className="site-brand" href="/" onClick={routeLink('home', onNavigate)} aria-label="OzooNotes home"><img src={logo} alt="OzooNotes" /></a>
     <nav className="site-nav" aria-label="Main navigation">
@@ -27,8 +29,9 @@ function SiteHeader({ logo, onNavigate }: Pick<SharedProps, 'logo' | 'onNavigate
         <a href="/?page=product#future" onClick={routeLink('product#future', onNavigate)}><b>What’s ahead</b><small>Ideas we plan to build gradually</small></a>
       </div></details>
       <a href="/?page=pricing" onClick={routeLink('pricing', onNavigate)}>Pricing</a>
+      <a href="/?page=roadmaps" onClick={routeLink('roadmaps', onNavigate)}>Road map</a>
     </nav>
-    <a className="site-signin" href="/?page=signin" onClick={routeLink('signin', onNavigate)}>Sign in <span aria-hidden="true">↗</span></a>
+    <div className="site-header-actions"><label className="site-theme-picker"><span>Theme</span><select aria-label="Color theme" value={theme} onChange={(event) => onThemeChange(event.target.value as 'purple' | 'white-purple')}><option value="purple">Purple &amp; Black</option><option value="white-purple">White &amp; Purple</option></select></label>{user ? <a className="site-signin site-account-link" href="/?page=profile" onClick={routeLink('profile', onNavigate)} aria-label={`Edit profile for ${user.username}`} title={`Signed in as ${user.username}`}>{user.avatar ? <img src={user.avatar} alt="" /> : <span className="site-account-initial" aria-hidden="true">{(user.displayName || user.username).slice(0, 1).toUpperCase()}</span>}<span className="site-account-name">{user.displayName || user.username}</span></a> : <a className="site-signin" href="/?page=signin" onClick={routeLink('signin', onNavigate)}>Sign in <span aria-hidden="true">↗</span></a>}</div>
   </header>
 }
 
@@ -48,8 +51,8 @@ function AppPreview() {
   </div>
 }
 
-export function MarketingHome({ logo, theme, onNavigate }: SharedProps) {
-  return <main className="site-page site-home" data-theme={theme}><SiteHeader logo={logo} onNavigate={onNavigate}/>
+export function MarketingHome({ logo, theme, onNavigate, onThemeChange, user }: SharedProps) {
+  return <main className="site-page site-home" data-theme={theme}><SiteHeader logo={logo} theme={theme} onNavigate={onNavigate} onThemeChange={onThemeChange} user={user}/>
     <section className="site-hero"><div className="site-hero-copy"><span className="site-eyebrow"><i/> NOTES · IDEAS · LEARNING</span><h1>Just imagine,<br/><em>and it will do it.</em></h1><p>A playful, flexible workspace for handwritten notes, diagrams, projects, and the ideas you’re still figuring out.</p><div className="site-hero-actions"><a className="site-button site-button-primary" href="/?page=dashboard" onClick={routeLink('dashboard',onNavigate)}>Open your dashboard <span>→</span></a><a className="site-button site-button-quiet" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer">Explore on GitHub ↗</a></div><div className="site-hero-foot"><span>Start free, no account required.</span><span>Built for learning and making.</span></div></div><div className="site-hero-art"><div className="site-orbit orbit-a"/><div className="site-orbit orbit-b"/><span className="hero-sticker sticker-star">✳</span><span className="hero-sticker sticker-spark">✦</span><AppPreview/><div className="hero-note-chip">A thought is a good place to start <span>↗</span></div></div></section>
     <section className="site-showcase"><div className="site-section-intro"><span className="site-eyebrow">A WORKSPACE IN MOTION</span><h2>Let the idea take shape.</h2><p>Write in your own way, then connect notes, sketches, and useful tools as you go.</p></div><AppPreview/></section>
     <section className="site-features"><div className="site-section-intro"><span className="site-eyebrow">THREE WAYS TO THINK</span><h2>From first thought to clearer picture.</h2></div><div className="site-feature-grid"><article><span className="site-feature-icon">✎</span><small>01 · CAPTURE</small><h3>Get it out of your head.</h3><p>Write, draw, add images, or save a link in a page that feels open and easy to use.</p></article><article><span className="site-feature-icon">⌘</span><small>02 · CONNECT</small><h3>See how it fits together.</h3><p>Use shapes, tags, notebooks, project pages, and simulators to bring related ideas together.</p></article><article><span className="site-feature-icon">↗</span><small>03 · KEEP MOVING</small><h3>Take your work with you.</h3><p>Organize your notes and export finished work when you need to share or print it.</p></article></div></section>
@@ -59,8 +62,8 @@ export function MarketingHome({ logo, theme, onNavigate }: SharedProps) {
   </main>
 }
 
-export function ProductPage({ logo, theme, onNavigate }: SharedProps) {
-  return <main className="site-page site-content-page" data-theme={theme}><SiteHeader logo={logo} onNavigate={onNavigate}/><article className="product-story">
+export function ProductPage({ logo, theme, onNavigate, onThemeChange, user }: SharedProps) {
+  return <main className="site-page site-content-page" data-theme={theme}><SiteHeader logo={logo} theme={theme} onNavigate={onNavigate} onThemeChange={onThemeChange} user={user}/><article className="product-story">
     <header className="story-hero"><span className="site-eyebrow">A LITTLE ROOM TO THINK</span><h1>What we offer</h1><p>One workspace to collect thoughts, make visual notes, and build ideas into something you can explain.</p></header>
     <section id="what-we-offer" className="story-section story-offer"><div><span className="site-eyebrow">01 · THE TOOLKIT</span><h2>What we offer</h2><p>OzooNotes brings a flexible note canvas together with projects and learning tools. Write with a pen or brush, arrange shapes and images, use multiple pages, and export your work. Keep notes organized with notebooks and tags. Explore separate simulators for graphs, code, electronics, and calculus.</p><p>Use the dashboard as a guest for local notes, or sign in when you want an account-based feature such as cloud storage and sharing.</p></div><div className="story-card-stack"><div className="story-mini-card"><span>✎</span><b>Notes &amp; boards</b><small>Write, draw, arrange, export</small></div><div className="story-mini-card"><span>⌘</span><b>Projects</b><small>Build a story around your work</small></div><div className="story-mini-card"><span>ƒ</span><b>Simulators</b><small>Explore equations, code, circuits</small></div></div></section>
     <section id="our-goal" className="story-section story-goal"><div className="story-number">02</div><div><span className="site-eyebrow">WHY WE’RE BUILDING IT</span><h2>Our goal</h2><p>Students should have a calm place to take notes, collect sources, and make hard topics easier to see. Teachers should be able to prepare visual lessons and explain ideas on a board. Over time, we want those tools to make it easier for teachers to teach, share useful learning material, and earn from their work—while students can learn from it in the same space.</p><p>We’re building toward that goal gradually, with practical tools first and room for the community to shape what comes next.</p></div></section>
@@ -72,9 +75,9 @@ export function ProductPage({ logo, theme, onNavigate }: SharedProps) {
 const normalFeatures = ['Free, no sign-in required', 'Up to 5 note documents', 'Infinite board saved in this browser', '2 launches per simulator each day', 'Basic notebooks and tags', 'A small set of templates', 'One shared document when signed in', 'Local saving and standard exports']
 const proFeatures = ['Unlimited note documents and simulators', 'All built-in templates · custom templates planned', 'More organization and study management', 'Cloud backup for your work', 'Share notes with view or edit access', 'Comments, collaboration, timer, and recording', 'Export to PDF and document formats', 'For students, teachers, and small teams']
 
-export function PricingPage({ logo, theme, onNavigate }: SharedProps) {
+export function PricingPage({ logo, theme, onNavigate, onThemeChange, user }: SharedProps) {
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
-  return <main className="site-page site-content-page" data-theme={theme}><SiteHeader logo={logo} onNavigate={onNavigate}/><div className="pricing-wrap">
+  return <main className="site-page site-content-page" data-theme={theme}><SiteHeader logo={logo} theme={theme} onNavigate={onNavigate} onThemeChange={onThemeChange} user={user}/><div className="pricing-wrap">
     <header className="pricing-hero"><span className="site-eyebrow">SIMPLE, STUDENT-FRIENDLY PLANS</span><h1>Choose your room to grow.</h1><p>Start with the free workspace. Move to Fun Plan when you need more space and cloud features.</p><div className="billing-toggle" role="group" aria-label="Billing period"><button className={billing==='monthly'?'selected':''} onClick={()=>setBilling('monthly')}>Monthly</button><button className={billing==='yearly'?'selected':''} onClick={()=>setBilling('yearly')}>Yearly <span>Save a little</span></button></div></header>
     <section className="pricing-cards"><article className="pricing-card"><div className="pricing-card-top"><span className="plan-pill">NORMAL PLAN</span><span className="pricing-spark">✳</span></div><h2>Free</h2><p className="price-caption">For everyday notes and learning.</p><div className="plan-price"><strong>$0</strong><span>forever</span></div><a className="site-button site-button-quiet" href="/?page=dashboard" onClick={routeLink('dashboard',onNavigate)}>Use Normal Plan <span>→</span></a><ul>{normalFeatures.map((feature)=><li key={feature}><i>✓</i>{feature}</li>)}</ul></article><article className="pricing-card pricing-card-pro"><div className="pricing-card-top"><span className="plan-pill">FUN PLAN · PRO PREVIEW</span><span className="pricing-spark">✦</span></div><h2>More room to grow.</h2><p className="price-caption">For bigger projects, cloud access, and shared work.</p><div className="plan-price"><strong>{billing==='monthly'?'$5.99':'$59.99'}</strong><span>/{billing==='monthly'?'month':'year'}</span></div>{billing==='yearly'&&<small className="price-monthly-note">About $5.00 per month, billed yearly.</small>}<button className="site-button site-button-primary pro-coming" type="button" disabled>Pro billing is coming soon</button><ul>{proFeatures.map((feature)=><li key={feature}><i>✓</i>{feature}</li>)}</ul></article></section>
     <section className="pricing-cost-note"><span className="site-eyebrow">HOW THIS PREVIEW PRICE IS ESTIMATED</span><h2>Keep it affordable and cover the basics.</h2><p>The current estimate starts at about <b>$5/month for Railway Hobby</b>, plus roughly <b>$20/year for the .com renewal</b>. That is around $6.67/month in fixed hosting and domain costs before usage above the plan, payment fees, taxes, or profit. The suggested $5.99 monthly / $59.99 yearly price assumes those shared costs are spread across several Fun Plan members. We should confirm it against the actual Railway bill before enabling checkout.</p><small>Costs change over time. <a href="https://docs.railway.com/pricing" target="_blank" rel="noreferrer">Railway pricing</a> · <a href="https://www.namecheap.com/support/knowledgebase/article.aspx/10840/2201/com-price-change-november-1-2026/" target="_blank" rel="noreferrer">Namecheap .com renewal update</a></small></section>
@@ -84,7 +87,7 @@ export function PricingPage({ logo, theme, onNavigate }: SharedProps) {
 
 export type AdminAccount = { id: number; username: string; email?: string | null; plan: 'normal' | 'pro'; createdAt: string; cloudBoards: number }
 
-export function AdminPage({ logo, theme, onNavigate, users, totals, loading, error, onRefresh, onChangePlan }: SharedProps & {
+export function AdminPage({ logo, theme, onNavigate, onThemeChange, user, users, totals, loading, error, onRefresh, onChangePlan }: SharedProps & {
   users: AdminAccount[]
   totals: { users: number; proUsers: number }
   loading: boolean
@@ -92,7 +95,7 @@ export function AdminPage({ logo, theme, onNavigate, users, totals, loading, err
   onRefresh: () => void
   onChangePlan: (id: number, plan: 'normal' | 'pro') => void
 }) {
-  return <main className="site-page site-content-page admin-page" data-theme={theme}><SiteHeader logo={logo} onNavigate={onNavigate}/><section className="admin-wrap">
+  return <main className="site-page site-content-page admin-page" data-theme={theme}><SiteHeader logo={logo} theme={theme} onNavigate={onNavigate} onThemeChange={onThemeChange} user={user}/><section className="admin-wrap">
     <div className="admin-heading"><div><span className="site-eyebrow">PRIVATE ACCOUNT TOOLS</span><h1>Admin dashboard</h1><p>Review accounts and manage plan access.</p></div><button className="site-button site-button-quiet" onClick={onRefresh}>↻ Refresh</button></div>
     <div className="admin-stat-grid"><article><small>Registered accounts</small><strong>{totals.users}</strong></article><article><small>Fun Plan access</small><strong>{totals.proUsers}</strong></article><article><small>Admin tools</small><strong>Protected</strong></article></div>
     {error && <div className="admin-message" role="alert">{error}</div>}{loading ? <div className="admin-empty">Loading account list…</div> : users.length ? <div className="admin-table-wrap"><table><thead><tr><th>Account</th><th>Joined</th><th>Cloud boards</th><th>Plan access</th></tr></thead><tbody>{users.map((user)=><tr key={user.id}><td><b>{user.username}</b><small>{user.email || 'No email on file'}</small></td><td>{new Date(user.createdAt).toLocaleDateString()}</td><td>{user.cloudBoards}</td><td><select aria-label={`Plan for ${user.username}`} value={user.plan} onChange={(event)=>onChangePlan(user.id,event.target.value as 'normal'|'pro')}><option value="normal">Normal · Free</option><option value="pro">Fun Plan · Pro</option></select></td></tr>)}</tbody></table></div> : <div className="admin-empty">{error ? 'Admin data is unavailable.' : 'No accounts found.'}</div>}

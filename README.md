@@ -57,6 +57,10 @@ Students can save their study field, education level, and degree name in their b
 - Use **Active** and **Favorites**, plus the PARA views for **Projects**, **Areas**, **Resources**, and **Archives**.
 - Jot quick thoughts in a scratchpad, then move useful ideas into a notebook.
 
+## 🔒 Cloud data protection
+
+The hosted site uses HTTPS for network traffic. When `OZOO_DATA_ENCRYPTION_KEY` is configured on the API server, cloud board contents and comments are encrypted in SQLite with AES-256-GCM. The server decrypts them for authorized users, so this protects the database file at rest but is not end-to-end encryption. Keep the key in Railway Variables and retain a secure backup: losing or changing it without migrating the data makes encrypted content unreadable. The optional board passphrase remains available for client-side encryption. Local browser saves and account or sharing metadata are not covered by server-side encryption.
+
 ## 📁 Give every project its own workspace
 
 Open **Projects** from the home-page header to create a dedicated space for each project. Keep research, drafts, plans, and progress together in an editable project document.
