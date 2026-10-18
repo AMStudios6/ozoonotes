@@ -247,6 +247,9 @@ const boardRole = (boardId, userId) => {
   return role ? { board, role, canDownload: Boolean(access?.can_download) } : null
 }
 const shapeBoard = (row) => ({ id: row.id, ownerId: row.owner_id, ownerName: db.prepare('SELECT username FROM users WHERE id = ?').get(row.owner_id)?.username, folderId: row.folder_id, name: row.name, state: JSON.parse(decryptAtRest(row.state_json)), updatedAt: row.updated_at })
+const normalizeBoardName = (name) => String(name ?? '').trim().normalize('NFKC').toLowerCase()
+const boardNameConflict = (ownerId, name, exceptId = null) => db.prepare('SELECT id,name FROM boards WHERE owner_id=?').all(ownerId)
+  .some((board) => board.id !== exceptId && normalizeBoardName(board.name) === normalizeBoardName(name))
 
 async function handler(req, res) {
   const origin = req.headers.origin
@@ -575,6 +578,7 @@ async function handler(req, res) {
       const { name, folderId, state } = await readBody(req)
       const cleanName = String(name ?? '').trim().slice(0, 120)
       if (!cleanName || !state || typeof state !== 'object') return sendJson(res, 400, { error: 'Board name and board data are required.' })
+      if (boardNameConflict(user.id, cleanName)) return sendJson(res, 409, { error: 'A file with this name already exists. Choose a different name.' })
       const ownedBoardCount = db.prepare('SELECT COUNT(*) AS count FROM boards WHERE owner_id=?').get(user.id).count
       if (user.plan !== 'pro' && ownedBoardCount >= 1) return sendJson(res, 403, { error: 'Normal accounts can keep one cloud board for collaboration. Your other boards remain saved locally.' })
       if (folderId && !db.prepare('SELECT id FROM folders WHERE id=? AND owner_id=?').get(folderId, user.id)) return sendJson(res, 400, { error: 'That folder does not exist.' })
@@ -606,8 +610,11 @@ async function handler(req, res) {
         if (permission.role === 'view') return sendJson(res, 403, { error: 'This board is read-only for your account.' })
         const { name, folderId, state } = await readBody(req)
         if (!state || typeof state !== 'object') return sendJson(res, 400, { error: 'Board data is required.' })
+        const cleanName = String(name ?? permission.board.name).trim().slice(0, 120)
+        if (!cleanName) return sendJson(res, 400, { error: 'Board name is required.' })
+        if (boardNameConflict(permission.board.owner_id, cleanName, id)) return sendJson(res, 409, { error: 'A file with this name already exists. Choose a different name.' })
         if (folderId && !db.prepare('SELECT id FROM folders WHERE id=? AND owner_id=?').get(folderId, permission.board.owner_id)) return sendJson(res, 400, { error: 'That folder does not exist for this board owner.' })
-        db.prepare('UPDATE boards SET name=?,folder_id=?,state_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(String(name ?? permission.board.name).slice(0, 120), folderId || null, encryptAtRest(JSON.stringify(state)), id)
+        db.prepare('UPDATE boards SET name=?,folder_id=?,state_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(cleanName, folderId || null, encryptAtRest(JSON.stringify(state)), id)
         notifyBoard(id, 'board-updated')
         return sendJson(res, 200, { board: shapeBoard(db.prepare('SELECT * FROM boards WHERE id=?').get(id)) })
       }
