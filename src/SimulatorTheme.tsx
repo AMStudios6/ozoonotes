@@ -11,7 +11,7 @@ function readTheme(): SimulatorTheme {
   try {
     const saved = localStorage.getItem('ozoo:color-theme') as SimulatorTheme | null
     return simulatorThemes.some((theme) => theme.id === saved) ? saved! : 'purple'
-  } catch { return 'forest' }
+  } catch { return 'purple' }
 }
 
 export function useSimulatorTheme(): [SimulatorTheme, (theme: SimulatorTheme) => void] {
