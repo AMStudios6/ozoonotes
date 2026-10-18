@@ -2936,6 +2936,22 @@ function App() {
     setNewNotebookName('')
   }
   const addScratchItem = () => { const text = scratchText.trim(); if (!text) return; setScratchItems((items) => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, done: false }, ...items]); setScratchText('') }
+  const isBoardNameTaken = (candidate: string, exceptName?: string) => {
+    const normalized = normalizeBoardName(candidate)
+    if (!normalized) return false
+    const isExcepted = (name: string) => exceptName !== undefined && normalizeBoardName(name) === normalizeBoardName(exceptName)
+    if (boards.some((board) => !isExcepted(board.name) && normalizeBoardName(board.name) === normalized)) return true
+    if (recentFiles.some((name) => !isExcepted(name) && normalizeBoardName(name) === normalized)) return true
+    if (cloudBoards.some((board) => !isExcepted(board.name) && normalizeBoardName(board.name) === normalized)) return true
+    try {
+      const prefix = 'doomnotes:'
+      return Object.keys(localStorage).some((key) => {
+        if (!key.startsWith(prefix) || key === 'doomnotes:cloud-board-ids') return false
+        const storedName = key.slice(prefix.length)
+        return !isExcepted(storedName) && normalizeBoardName(storedName) === normalized
+      })
+    } catch { return false }
+  }
   const createBoard = () => {
     const isInfinite = draftSize === 'Infinite'
     const name = draftName.trim() || `File ${nextFileNumber}`
@@ -2945,7 +2961,7 @@ function App() {
       setShowNewFileDialog(false)
       return
     }
-    if (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name)) || recentFiles.some((file) => normalizeBoardName(file) === normalizeBoardName(name)) || localStorage.getItem(`doomnotes:${name}`) !== null) {
+    if (isBoardNameTaken(name)) {
       setDraftNameError('A file with this name already exists. Choose a different name.')
       return
     }
@@ -2978,7 +2994,7 @@ function App() {
     if (!renameTarget) return
     const nextName = renameDraft.trim()
     if (!nextName) { setRenameError('Enter a file name.'); return }
-    if (boards.some((board) => board.name !== renameTarget && normalizeBoardName(board.name) === normalizeBoardName(nextName)) || recentFiles.some((name) => name !== renameTarget && normalizeBoardName(name) === normalizeBoardName(nextName)) || (localStorage.getItem(`doomnotes:${nextName}`) !== null && normalizeBoardName(nextName) !== normalizeBoardName(renameTarget))) {
+    if (isBoardNameTaken(nextName, renameTarget)) {
       setRenameError('A file with this name already exists. Choose another name.')
       return
     }
