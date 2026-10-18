@@ -33,7 +33,7 @@ type CloudBoard = { id: number; name: string; folderId: number | null; state: Bo
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
 type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
-type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; cornerRadius?: number; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle }
+type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; cornerRadius?: number; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle; smoothing?: number; strokeCap?: 'round' | 'square' }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
@@ -436,7 +436,7 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
     context.strokeStyle = drawing.color
     context.fillStyle = drawing.color
     context.lineWidth = drawing.width
-    context.lineCap = drawing.drawingStyle === 'calligraphy' ? 'square' : 'round'
+    context.lineCap = drawing.strokeCap ?? (drawing.drawingStyle === 'calligraphy' ? 'square' : 'round')
     context.lineJoin = 'round'
     context.setLineDash(drawing.drawingStyle === 'dashed' ? [drawing.width * 2.5, drawing.width * 1.8] : drawing.drawingStyle === 'dotted' ? [drawing.width * .15, drawing.width * 1.8] : [])
     if (drawing.drawingStyle === 'calligraphy') context.lineWidth *= 1.7
@@ -461,10 +461,14 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       context.moveTo(first.x * canvas.width, first.y * canvas.height)
       if (drawing.tool === 'Line') {
         context.lineTo(last.x * canvas.width, last.y * canvas.height)
-      } else if (drawing.drawingStyle === 'handwriting' && drawing.points.length > 2) {
+      } else if ((drawing.smoothing ?? (drawing.drawingStyle === 'handwriting' ? 65 : 0)) > 0 && drawing.points.length > 2) {
+        const smoothing = Math.max(0, Math.min(100, drawing.smoothing ?? (drawing.drawingStyle === 'handwriting' ? 65 : 0))) / 100
         for (let index = 1; index < drawing.points.length - 1; index++) {
           const point = drawing.points[index], next = drawing.points[index + 1]
-          context.quadraticCurveTo(point.x * canvas.width, point.y * canvas.height, (point.x + next.x) * canvas.width / 2, (point.y + next.y) * canvas.height / 2)
+          const blend = smoothing * 0.5
+          const endX = point.x * (1 - blend) + next.x * blend
+          const endY = point.y * (1 - blend) + next.y * blend
+          context.quadraticCurveTo(point.x * canvas.width, point.y * canvas.height, endX * canvas.width, endY * canvas.height)
         }
         const lastPoint = drawing.points[drawing.points.length - 1]
         context.lineTo(lastPoint.x * canvas.width, lastPoint.y * canvas.height)
@@ -929,9 +933,18 @@ function App() {
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
   const [activeColor, setActiveColor] = useState(penColors[0])
+  const [hexColorDraft, setHexColorDraft] = useState(penColors[0])
+  const [recentStrokeColors, setRecentStrokeColors] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ozoo:recent-stroke-colors') ?? '[]')
+      return Array.isArray(saved) ? saved.filter((color): color is string => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)).slice(0, 6) : []
+    } catch { return [] }
+  })
   const [showSettingsPanel, setShowSettingsPanel] = useState(true)
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [drawingStyle, setDrawingStyle] = useState<DrawingStyle>('solid')
+  const [strokeSmoothness, setStrokeSmoothness] = useState(45)
+  const [strokeCap, setStrokeCap] = useState<'round' | 'square'>('round')
   const [opacity, setOpacity] = useState(100)
   const [pageBackground, setPageBackground] = useState(initialWorkspace.pageBackground)
   const [pageSize, setPageSize] = useState<PageSize>(initialWorkspace.pageSize)
@@ -1108,6 +1121,7 @@ function App() {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   }, [projectsPageOpen, graphSimulatorOpen, circuitSimulatorOpen, calculusSimulatorOpen, codeSimulatorMode])
   useEffect(() => { localStorage.setItem('ozoo:color-theme', colorTheme) }, [colorTheme])
+  useEffect(() => { try { localStorage.setItem('ozoo:recent-stroke-colors', JSON.stringify(recentStrokeColors)) } catch { /* Recent color shortcuts are optional. */ } }, [recentStrokeColors])
   useEffect(() => {
     const syncSimulatorTheme = (event: Event) => { const next = (event as CustomEvent<ColorTheme>).detail; if (colorThemes.some((theme) => theme.id === next)) setColorTheme(next) }
     window.addEventListener('ozoo:color-theme-change', syncSimulatorTheme)
@@ -1914,6 +1928,7 @@ function App() {
       opacity,
       points: [point],
       ...(strokeTool !== 'Eraser' ? { layer: 'writing' as const, drawingStyle } : {}),
+      ...(inkTools.includes(strokeTool) ? { smoothing: strokeSmoothness, strokeCap } : {}),
       ...(strokeTool === 'Shape' ? { shapeKind, cornerRadius: shapeCornerRadius } : {}),
     }
     activeStroke.current = stroke
@@ -2239,10 +2254,11 @@ function App() {
       if (stroke.tool === 'Text') return `<text x="${first.x * width}" y="${first.y * height}" fill="${escapeXml(stroke.color)}" opacity="${alpha}" font-size="${Math.max(8, stroke.width * 5)}" font-family="sans-serif">${escapeXml(stroke.text ?? '')}</text>`
       const points = stroke.tool === 'Shape' && stroke.points.length > 1 ? shapeGeometry(stroke.shapeKind ?? 'Rectangle', first, last, stroke.cornerRadius).points : stroke.points
       const pointString = points.map((point) => `${point.x * width},${point.y * height}`).join(' ')
-      const handwriting = stroke.drawingStyle === 'handwriting' && points.length > 2 && stroke.tool !== 'Shape'
-      const pathData = handwriting ? `M ${points[0].x * width} ${points[0].y * height} ${points.slice(1, -1).map((point, index) => { const next = points[index + 2]; return `Q ${point.x * width} ${point.y * height} ${(point.x + next.x) * width / 2} ${(point.y + next.y) * height / 2}` }).join(' ')} L ${last.x * width} ${last.y * height}` : ''
+      const smoothing = Math.max(0, Math.min(100, stroke.smoothing ?? (stroke.drawingStyle === 'handwriting' ? 65 : 0))) / 100
+      const handwriting = smoothing > 0 && points.length > 2 && stroke.tool !== 'Shape'
+      const pathData = handwriting ? `M ${points[0].x * width} ${points[0].y * height} ${points.slice(1, -1).map((point, index) => { const next = points[index + 2], blend = smoothing * .5, endX = point.x * (1 - blend) + next.x * blend, endY = point.y * (1 - blend) + next.y * blend; return `Q ${point.x * width} ${point.y * height} ${endX * width} ${endY * height}` }).join(' ')} L ${last.x * width} ${last.y * height}` : ''
       const dash = stroke.drawingStyle === 'dashed' ? ` stroke-dasharray="${stroke.width * 2.5} ${stroke.width * 1.8}"` : stroke.drawingStyle === 'dotted' ? ` stroke-dasharray="${stroke.width * .15} ${stroke.width * 1.8}"` : ''
-      const cap = stroke.drawingStyle === 'calligraphy' ? 'square' : 'round'
+      const cap = stroke.strokeCap ?? (stroke.drawingStyle === 'calligraphy' ? 'square' : 'round')
       const widthScale = stroke.drawingStyle === 'calligraphy' ? 1.7 : 1
       const tag = stroke.tool === 'Shape' && stroke.shapeKind !== 'Arrow' ? 'polygon' : handwriting ? 'path' : 'polyline'
       return handwriting ? `<path d="${pathData}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>` : `<${tag} points="${pointString}" fill="none" stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width * widthScale}" stroke-linecap="${cap}" stroke-linejoin="round"${dash} opacity="${alpha}"/>`
@@ -2611,7 +2627,7 @@ function App() {
           continue
         }
         commands.push(`${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} RG`)
-        commands.push('1 J', '1 j')
+        commands.push(stroke.strokeCap === 'square' ? '2 J' : '1 J', '1 j')
         commands.push(`${(stroke.width * pageWidth / logicalWidth).toFixed(2)} w`)
         if (stroke.tool === 'Shape') {
           const last = stroke.points[stroke.points.length - 1]
@@ -3316,11 +3332,12 @@ function App() {
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
                     {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
             {inkTools.includes(activeTool) && <><div className="settings-group"><label className="settings-heading" htmlFor="drawing-tool-choice">Brush & pen tool</label><select id="drawing-tool-choice" className="drawing-style-select" value={activeTool} onChange={(event) => { const tool = event.target.value as Tool; setActiveTool(tool); lastDrawingTool.current = tool }}><option value="Brush">Brush</option><option value="Pen">Pen</option><option value="Pencil">Pencil</option><option value="Marker">Marker</option><option value="Highlighter">Highlighter</option></select></div><div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div></>}
-            {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor === color} className={`selection-color ${activeColor === color ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); changeSelection({ color }) }} />)}</div></div>}
+            {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor.toLowerCase() === color.toLowerCase()} className={`selection-color ${activeColor.toLowerCase() === color.toLowerCase() ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); setHexColorDraft(color); changeSelection({ color }) }} />)}</div>{recentStrokeColors.length > 0 && <div className="stroke-recent-colors"><span>Recent custom colors</span>{recentStrokeColors.map((color) => <button key={color} type="button" aria-label={`Recent stroke color ${color}`} title={color} className={`selection-color ${activeColor.toLowerCase() === color.toLowerCase() ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); setHexColorDraft(color); changeSelection({ color }) }} />)}</div>}<div className="stroke-hex-controls"><input aria-label="Stroke color hex code" value={hexColorDraft} maxLength={7} spellCheck={false} placeholder="#8b5cf6" onChange={(event) => { const value = event.target.value.startsWith('#') ? event.target.value : `#${event.target.value}`; setHexColorDraft(value); if (/^#[0-9a-f]{6}$/i.test(value)) { setActiveColor(value); changeSelection({ color: value }) } }} onBlur={() => { if (/^#[0-9a-f]{6}$/i.test(hexColorDraft)) setRecentStrokeColors((colors) => [hexColorDraft.toLowerCase(), ...colors.filter((color) => color.toLowerCase() !== hexColorDraft.toLowerCase())].slice(0, 6)); else setHexColorDraft(activeColor) }} /><input type="color" aria-label="Choose a custom stroke color" value={/^#[0-9a-f]{6}$/i.test(hexColorDraft) ? hexColorDraft : activeColor} onChange={(event) => { const color = event.target.value; setHexColorDraft(color); setActiveColor(color); changeSelection({ color }); setRecentStrokeColors((colors) => [color, ...colors.filter((item) => item.toLowerCase() !== color.toLowerCase())].slice(0, 6)) }} /></div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
             <div className="selection-actions" aria-label="Object ordering and selection actions"><button title="Duplicate" aria-label="Duplicate" disabled={!selectedIndices.length} onClick={duplicateSelection}><Icon name="duplicate" size={16} /></button><button title="Send backward" aria-label="Send backward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('back')}><Icon name="layer" size={16} /></button><button title="Bring forward" aria-label="Bring forward" disabled={!selectedIndices.length} onClick={() => moveSelectionLayer('front')}><Icon name="layer" size={16} /></button><button title="Delete" aria-label="Delete" disabled={!selectedIndices.length} onClick={deleteSelection}><Icon name="delete" size={16} /></button></div>
             {activeTool === 'Shape' && <div className="settings-group"><div className="settings-heading">Shape</div><div className="shape-options">{(['Rectangle', 'Ellipse', 'Triangle', 'Diamond', 'Arrow'] as ShapeKind[]).map((kind) => <button key={kind} className={`shape-option ${shapeKind === kind ? 'selected' : ''}`} aria-pressed={shapeKind === kind} onClick={() => setShapeKind(kind)}>{kind}</button>)}</div>{shapeKind !== 'Ellipse' && shapeKind !== 'Arrow' && <div className="shape-rounding"><label className="settings-heading" htmlFor="shape-rounding">Corner rounding <span>{shapeCornerRadius === 0 ? 'Sharp' : `${shapeCornerRadius}%`}</span></label><input id="shape-rounding" type="range" min="0" max="30" step="1" value={shapeCornerRadius} onChange={(event) => { const radius = Number(event.target.value); setShapeCornerRadius(radius); changeSelection({ cornerRadius: radius }) }} /><div className="opacity-labels"><span>Sharp</span><span>Rounded</span></div></div>}</div>}
+            {inkTools.includes(activeTool) && <><div className="settings-group"><label className="settings-heading" htmlFor="stroke-smoothing">Smoothing <span>{strokeSmoothness}%</span></label><input id="stroke-smoothing" type="range" min="0" max="100" step="5" value={strokeSmoothness} onChange={(event) => { const smoothing = Number(event.target.value); setStrokeSmoothness(smoothing); changeSelection({ smoothing }) }} /><div className="opacity-labels"><span>Precise</span><span>Smooth</span></div></div><div className="settings-group"><span className="settings-heading">Stroke ends</span><div className="stroke-cap-options"><button type="button" aria-pressed={strokeCap === 'round'} className={strokeCap === 'round' ? 'selected' : ''} onClick={() => { setStrokeCap('round'); changeSelection({ strokeCap: 'round' }) }}><i className="cap-round" />Rounded</button><button type="button" aria-pressed={strokeCap === 'square'} className={strokeCap === 'square' ? 'selected' : ''} onClick={() => { setStrokeCap('square'); changeSelection({ strokeCap: 'square' }) }}><i className="cap-square" />Square</button></div></div></>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-opacity">Opacity</label><input id="stroke-opacity" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /><div className="opacity-labels"><span>{opacity === 0 ? 0 : opacity}</span><span>100</span></div></div>
           </aside>}
 
