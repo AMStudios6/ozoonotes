@@ -3068,6 +3068,9 @@ function App() {
             <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
             <nav className="landing-nav" aria-label="Main navigation">
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
+              <a href="#landing-tools">Features</a>
+              <a href="#landing-use-cases">Use cases</a>
+              <a href="#landing-how">How it works</a>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
@@ -3112,7 +3115,7 @@ function App() {
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
                 <h1>Think through ideas.<br /><span>See the whole picture.</span></h1>
-                <p className="hero-description">Bring handwriting, code examples, diagrams, graphs, and plans onto one flexible page. Start with a student or teacher template, then make it your own.</p>
+                <p className="hero-description">Bring handwritten notes, diagrams, graphs, code, and project plans together. Start with a ready-made page, build an idea visually, then keep everything organized in one workspace.</p>
                 <div className="landing-cta-row">
                   <button className="hero-new-file" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Start a new board <Icon name="next" size={17} /></button>
                   <button className="landing-open-file" onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={17} /> Open a file</button>
@@ -3155,7 +3158,26 @@ function App() {
                 <article className="landing-feature"><span className="feature-icon feature-draw"><Icon name="pen" /></span><h3>Draw and arrange</h3><p>Use the brush, pen, shapes, text, lines, and eraser. Move and organize what you create.</p></article>
                 <article className="landing-feature"><span className="feature-icon feature-graph"><Icon name="graph" /></span><h3>Put ideas on a graph</h3><p>Plot equations or enter points, then add the graph to your board.</p></article>
                 <article className="landing-feature"><span className="feature-icon feature-pages"><ThemeIcon source={downloadPng} size={23} /></span><h3>Keep it portable</h3><p>Work across pages, import images, and export as PDF, PNG, or SVG.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-library"><Icon name="notes" /></span><h3>Find ideas again</h3><p>Group boards into notebooks, add tags, and search across titles and topics.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-projects"><Icon name="duplicate" /></span><h3>Build a project story</h3><p>Combine rich text, images, videos, links, and OzooNotes boards in a project page.</p></article>
+                <article className="landing-feature"><span className="feature-icon feature-code"><span aria-hidden="true">&lt;/&gt;</span></span><h3>Explore STEM and code</h3><p>Plot equations, work through calculus, simulate circuits, or write and run code.</p></article>
               </div>
+            </section>
+            <section className="landing-use-cases" id="landing-use-cases" aria-labelledby="landing-use-cases-title">
+              <div className="landing-section-heading"><span>ONE WORKSPACE, MANY WAYS TO THINK</span><h2 id="landing-use-cases-title">Make space for the work you do.</h2><p>Choose a starting point, then shape the page around the way you learn, teach, or plan.</p></div>
+              <div className="landing-use-grid">
+                <article className="landing-use-card landing-use-study"><span className="landing-use-icon"><Icon name="study" /></span><small>FOR STUDY</small><h3>Turn class notes into clear ideas.</h3><p>Sketch a concept, add explanations, and keep revision pages grouped by subject.</p><button type="button" onClick={() => { setLandingAudience('student'); setLandingTemplate('Cornell notes'); document.getElementById('audience-starters')?.scrollIntoView({ behavior: 'smooth' }) }}>Explore student starters <Icon name="next" size={14} /></button></article>
+                <article className="landing-use-card landing-use-teach"><span className="landing-use-icon"><Icon name="lesson" /></span><small>FOR TEACHING</small><h3>Make lessons easier to follow.</h3><p>Prepare visual explanations, class activities, and pages you can present or export.</p><button type="button" onClick={() => { setLandingAudience('teacher'); setLandingTemplate('Lesson plan'); document.getElementById('audience-starters')?.scrollIntoView({ behavior: 'smooth' }) }}>Explore teacher starters <Icon name="next" size={14} /></button></article>
+                <article className="landing-use-card landing-use-stem"><span className="landing-use-icon"><Icon name="graph" /></span><small>FOR STEM & IDEAS</small><h3>See the pattern behind the problem.</h3><p>Move from a formula or circuit to a visual result, then keep your notes beside it.</p><button type="button" onClick={launchGraphSimulator}>Open graph simulator <Icon name="next" size={14} /></button></article>
+              </div>
+            </section>
+            <section className="landing-how" id="landing-how" aria-labelledby="landing-how-title">
+              <div className="landing-how-copy"><span className="landing-section-eyebrow">A SIMPLE PLACE TO BEGIN</span><h2 id="landing-how-title">From first thought to finished page.</h2><p>OzooNotes gives you a flexible canvas and a few useful ways to keep your work moving.</p><button className="hero-new-file" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Start a new board <Icon name="next" size={17} /></button></div>
+              <ol className="landing-how-steps">
+                <li><span>01</span><div><strong>Pick a starting point</strong><p>Choose a student or teacher workspace, paper size, and starter template.</p></div></li>
+                <li><span>02</span><div><strong>Build it your way</strong><p>Write, draw, add media, plot an equation, or bring your ideas into a project.</p></div></li>
+                <li><span>03</span><div><strong>Keep it easy to find</strong><p>Organize with notebooks and tags, then export or share when you need to.</p></div></li>
+              </ol>
             </section>
             <section className="landing-files" id="landing-files">
               <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><button className="landing-new-small" onClick={() => addBoard()}>＋ New board</button></div>
