@@ -1317,3 +1317,44 @@
 .profile-password-section { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); }
 .profile-password-section h3 { margin: 0 0 10px; font-size: 14px; }
 .profile-editor-dialog .dialog-label input:disabled { opacity: .72; cursor: not-allowed; }
+
+
+/* Dashboard entry stays close to the brand on both the signed-in home and sign-in screen. */
+.landing-dashboard-link,
+.auth-dashboard-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  font-size: 11px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
+}
+.landing-dashboard-link:hover,
+.auth-dashboard-link:hover,
+.landing-dashboard-link:focus-visible,
+.auth-dashboard-link:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+.landing-dashboard-link:active,
+.auth-dashboard-link:active { transform: translateY(1px); }
+.auth-dashboard-link { margin-left: 18px; margin-right: auto; }
+@media (max-width: 680px) {
+  .auth-topbar { flex-wrap: wrap; column-gap: 10px; }
+  .auth-dashboard-link { margin-left: 4px; }
+}
+@media (max-width: 420px) {
+  .auth-brand img { width: 100px; }
+  .auth-dashboard-link { min-height: 31px; padding-inline: 9px; font-size: 10px; }
+  .auth-theme-picker { margin-left: auto; }
+}
