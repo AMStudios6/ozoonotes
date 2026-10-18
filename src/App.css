@@ -163,7 +163,35 @@
 .tool-status {position:absolute;right:25px;top:70px;color:var(--muted);font-size:11px;opacity:.85;display:flex;align-items:center;gap:7px}.status-dot{width:6px;height:6px;border-radius:50%;background:#70c998}.autosave-saving .status-dot{background:#d99c3d}.autosave-error .status-dot{background:#e65353}
 .board-menu-wrap {position:absolute;z-index:5;top:20px;left:22px}
 .menu-trigger {width:38px;height:38px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);font-size:17px;cursor:pointer}.menu-trigger:hover{border-color:var(--accent);color:var(--accent)}
-.board-menu {position:absolute;top:47px;left:0;width:220px;max-height:min(60vh,520px);max-height:min(60dvh,520px);overflow-y:auto;overscroll-behavior:contain;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--panel);box-shadow:0 14px 35px #0005;scrollbar-width:thin;scrollbar-color:var(--accent) transparent}
+.board-menu {position:absolute;top:47px;left:0;width:min(310px,calc(100vw - 28px));max-height:min(76vh,680px);max-height:min(76dvh,680px);overflow-y:auto;overscroll-behavior:contain;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 14px 35px #0005;scrollbar-width:thin;scrollbar-color:var(--accent) transparent}
+.board-menu-group{padding:0 2px}
+.board-menu-group .menu-title{margin:0;padding:9px 9px 5px;color:var(--muted);font-size:10px}
+.board-menu-group>button,.board-menu-group>a,.board-menu-expand>button{width:100%;display:flex;align-items:center;gap:11px;padding:9px;border:0;border-radius:7px;background:transparent;color:var(--accent);text-align:left;font-size:15px;cursor:pointer;text-decoration:none}
+.board-menu-group>button:hover,.board-menu-group>a:hover,.board-menu-expand>button:hover{background:var(--panel-raised)}
+.board-menu-group>button:disabled{opacity:.42;cursor:not-allowed}
+.board-menu-group>button span,.board-menu-group>a span,.board-menu-expand>button span{flex:1;color:var(--ink);font-size:12px}
+.board-menu-group kbd,.command-palette-list kbd,.menu-search-results kbd{flex:none;padding:2px 6px;border:1px solid var(--line);border-radius:5px;background:var(--workspace);color:var(--muted);font-family:inherit;font-size:10px}
+.board-menu-expand{border-radius:7px}
+.board-menu-expand summary{padding:9px;color:var(--muted);font-size:12px;cursor:pointer;list-style:none}
+.board-menu-expand summary::-webkit-details-marker{display:none}
+.board-menu-expand summary::after{content:'›';float:right;color:var(--muted)}
+.board-menu-expand[open] summary::after{content:'⌄'}
+.board-menu-expand>button{padding-left:15px}
+.board-menu-group .menu-option{padding:8px 9px}
+.board-menu-group .ruler-unit-option{padding:8px 9px}
+.board-menu-group.menu-footer-links{display:flex;align-items:center;gap:4px}
+.board-menu-group.menu-footer-links>a,.board-menu-group.menu-footer-links>button{flex:1}
+.command-palette-overlay{align-items:flex-start;padding-top:12vh}
+.command-palette-dialog{width:min(500px,calc(100vw - 28px));max-height:76dvh;overflow:auto}
+.command-palette-input{width:100%;margin:8px 0 10px;padding:12px 13px;border:1px solid var(--line);border-radius:9px;background:var(--workspace);color:var(--ink);font:inherit}
+.command-palette-list{display:grid;gap:3px}
+.command-palette-list button,.menu-search-results button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:0;border-radius:7px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
+.command-palette-list button:hover,.menu-search-results button:hover{background:var(--panel-raised)}
+.menu-search-dialog{max-height:80dvh;overflow:auto}
+.menu-search-results{display:grid;gap:3px;max-height:38vh;overflow:auto;margin:12px 0 0;padding:0;list-style:none}
+.menu-search-results li{min-width:0}
+.menu-search-results button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:12px}
+.menu-search-results kbd{white-space:nowrap}
 .menu-title {padding:5px 7px 9px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .menu-option {display:flex;align-items:center;gap:9px;padding:9px 7px;border-radius:6px;color:var(--ink);font-size:12px;cursor:pointer}.menu-option:hover,.board-menu>button:hover,.board-menu>a:hover{background:var(--panel-raised)}
 .menu-option input {accent-color:var(--accent)}.menu-divider{height:1px;margin:6px 0;background:var(--line)}
