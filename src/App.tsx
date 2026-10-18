@@ -2118,25 +2118,44 @@ function App() {
     if (lastSnapshot === undefined) return
     if (lastSnapshot === snapshot) return
     setCloudSyncStatus('syncing')
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const encrypted = isEncryptedBoardState(remote.state)
-          const key = cloudKeys.current[id]
-          if (encrypted && !key) throw new Error('Unlock this encrypted note before syncing changes.')
-          const savedState = encrypted && key ? await encryptBoardState(snapshotState, key) : snapshotState
-          await apiRequest(`/api/boards/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ name: board.name, folderId: remote.folderId, state: savedState }),
-          })
-          cloudSyncedSnapshots.current[id] = snapshot
-          setCloudSyncStatus('synced')
-        } catch {
-          setCloudSyncStatus('error')
-        }
-      })()
-    }, 850)
-    return () => window.clearTimeout(timer)
+    const writeCloudSnapshot = async (keepalive: boolean) => {
+      try {
+        const encrypted = isEncryptedBoardState(remote.state)
+        const key = cloudKeys.current[id]
+        if (encrypted && !key) throw new Error('Unlock this encrypted note before syncing changes.')
+        const savedState = encrypted && key ? await encryptBoardState(snapshotState, key) : snapshotState
+        const response = await fetch(`${API_BASE}/api/boards/${id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          keepalive,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: board.name, folderId: remote.folderId, state: savedState }),
+        })
+        if (!response.ok) throw new Error(`Cloud sync failed (${response.status}).`)
+        cloudSyncedSnapshots.current[id] = snapshot
+        setCloudSyncStatus('synced')
+      } catch {
+        setCloudSyncStatus('error')
+      }
+    }
+    const timer = window.setTimeout(() => { void writeCloudSnapshot(false) }, 850)
+    const flushCloudBeforeLeaving = () => {
+      window.clearTimeout(timer)
+      void writeCloudSnapshot(true)
+    }
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        window.clearTimeout(timer)
+        void writeCloudSnapshot(false)
+      }
+    }
+    window.addEventListener('pagehide', flushCloudBeforeLeaving)
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', flushCloudBeforeLeaving)
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+    }
   }, [cloudUser, cloudBoardIds, cloudBoards, activeBoard, boards, page, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
 
   const getBoardDocument = () => ({ format: 'doomnotes', version: 1, ...boards[activeBoard], name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
