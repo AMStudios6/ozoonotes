@@ -1,0 +1,339 @@
+/* Shared viewport and fluid-layout safeguards for phones, tablets, and desktops. */
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+img,
+video,
+iframe,
+svg {
+  max-width: 100%;
+}
+
+.app,
+.window,
+.site-page,
+.roadmap-studio,
+.project-studio,
+.student-space,
+.graph-workspace,
+.studio-workspace,
+.cpp-workspace,
+.calculus-workspace,
+.circuit-workspace {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.window,
+.site-page,
+.roadmap-studio,
+.project-studio,
+.graph-workspace,
+.studio-workspace,
+.cpp-workspace,
+.calculus-workspace,
+.circuit-workspace {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+.window-top,
+.landing-topbar,
+.site-header,
+.roadmap-topbar,
+.project-topbar,
+.studio-topbar,
+.cpp-topbar,
+.calculus-topbar,
+.circuit-topbar {
+  min-width: 0;
+}
+
+.landing-nav,
+.site-nav,
+.file-tabs,
+.graph-expression-toolbar,
+.studio-code-tabs,
+.cpp-code-tabs {
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.dialog-overlay,
+.auth-overlay,
+.profile-overlay,
+.new-file-overlay {
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+:is(.dialog, .new-file-dialog, .profile-editor-dialog, .command-palette-dialog, .study-dialog, .project-dialog, .project-export-dialog) {
+  width: min(100%, 760px);
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 1600px) {
+  .landing-page,
+  .site-hero,
+  .site-feature-grid,
+  .site-teaser-grid,
+  .pricing-wrap,
+  .product-story,
+  .contact-wrap {
+    max-width: 1500px;
+  }
+}
+
+@media (max-width: 900px) {
+  .site-header {
+    padding-inline: clamp(12px, 3vw, 24px);
+    gap: 10px;
+  }
+
+  .site-nav {
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .student-space-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .circuit-layout {
+    grid-template-columns: minmax(145px, 190px) minmax(0, 1fr);
+  }
+
+  .studio-panels,
+  .cpp-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .window-top {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    padding-block: 4px;
+  }
+
+  .file-tabs {
+    flex: 1 1 45%;
+    max-width: 100%;
+  }
+
+  .window-top .brand-mark {
+    max-width: 30vw;
+    object-fit: contain;
+  }
+
+  .landing-topbar,
+  .site-header {
+    padding-inline: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .landing-nav,
+  .site-nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scroll-snap-type: x proximity;
+  }
+
+  .landing-nav > *,
+  .site-nav > * {
+    scroll-snap-align: start;
+  }
+
+  .site-hero,
+  .site-showcase,
+  .site-features,
+  .site-plan-teaser,
+  .site-last-cta {
+    width: 100%;
+    padding-inline: clamp(14px, 5vw, 24px);
+  }
+
+  .site-hero-art {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .site-preview {
+    transform: none;
+  }
+
+  .preview-body {
+    min-width: 0;
+  }
+
+  .roadmap-main,
+  .project-main {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .roadmap-detail-head,
+  .roadmap-list-heading,
+  .project-format-toolbar,
+  .project-document-head {
+    flex-wrap: wrap;
+  }
+
+  .roadmap-map-canvas {
+    min-height: clamp(240px, 55dvh, 420px);
+  }
+
+  .student-space-layout {
+    overflow: visible;
+  }
+
+  .study-items-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+  }
+
+  .studio-panels,
+  .cpp-panels {
+    width: calc(100% - 24px);
+    min-width: 0;
+  }
+
+  .studio-panel-head,
+  .cpp-panel-head {
+    min-width: 0;
+    gap: 8px;
+    padding-inline: 9px;
+  }
+
+  .studio-panel-head > div:last-child,
+  .cpp-panel-head > div:last-child {
+    gap: 6px;
+    font-size: 9px;
+  }
+
+  .graph-expression-panel {
+    min-width: 0;
+  }
+
+  .graph-formula-row {
+    min-width: 0;
+  }
+
+  .calculus-card,
+  .circuit-inspector {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 400px) {
+  .site-header-actions {
+    gap: 4px;
+  }
+
+  .site-theme-picker select {
+    max-width: 78px;
+  }
+
+  .site-nav {
+    gap: 12px;
+  }
+
+  .landing-actions,
+  .library-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-actions > *,
+  .library-controls > * {
+    min-width: 0;
+  }
+
+  .bottom-controls {
+    left: max(6px, env(safe-area-inset-left));
+    right: max(6px, env(safe-area-inset-right));
+  }
+
+  .bottom-right-controls {
+    max-width: calc(100vw - 92px);
+  }
+
+  .page-navigation {
+    gap: 2px;
+    padding-inline: 2px;
+  }
+
+  .page-navigation > span {
+    font-size: 9px;
+  }
+
+  .roadmap-map-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-height: 560px) and (min-width: 681px) {
+  .board-area {
+    height: auto;
+    min-height: calc(100dvh - 54px);
+  }
+
+  .stroke-panel {
+    max-height: calc(100dvh - 115px);
+  }
+
+  .profile-dropdown,
+  .board-menu {
+    max-height: calc(100dvh - 75px);
+  }
+}
+
+@media (max-width: 680px) and (max-height: 520px) {
+  .board-area {
+    height: auto;
+    min-height: calc(100dvh - 50px);
+  }
+
+  .workspace {
+    min-height: 300px;
+  }
+
+  .graph-simulator-page {
+    min-height: 100dvh;
+    grid-template-rows: 50px minmax(130px, 1fr) minmax(165px, 42dvh);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .site-hero {
+    min-height: auto;
+    padding-block: 28px;
+  }
+
+  .site-hero-art {
+    min-height: 260px;
+  }
+
+  .board-menu,
+  .stroke-panel,
+  .more-features-panel,
+  .profile-dropdown {
+    max-height: calc(100dvh - 72px);
+  }
+}
+
