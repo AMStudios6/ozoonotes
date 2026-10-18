@@ -28,6 +28,12 @@ if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN g
 if (!userColumns.includes('github_id')) db.exec('ALTER TABLE users ADD COLUMN github_id TEXT')
 if (!userColumns.includes('email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT COLLATE NOCASE')
 if (!userColumns.includes('email_verified_at')) db.exec('ALTER TABLE users ADD COLUMN email_verified_at INTEGER')
+if (!userColumns.includes('display_name')) db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
+if (!userColumns.includes('avatar_data')) db.exec('ALTER TABLE users ADD COLUMN avatar_data TEXT')
+if (!userColumns.includes('password_enabled')) {
+  db.exec('ALTER TABLE users ADD COLUMN password_enabled INTEGER NOT NULL DEFAULT 1')
+  db.exec('UPDATE users SET password_enabled=0 WHERE google_sub IS NOT NULL OR github_id IS NOT NULL')
+}
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
@@ -122,7 +128,7 @@ const sessionUser = (req) => {
   if (!sessionId) return null
   const hash = sessionTokenHash(sessionId)
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
-  return db.prepare('SELECT users.id, users.username FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now()) ?? null
+  return db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now()) ?? null
 }
 const notifyBoard = (boardId, type) => {
   for (const client of eventClients.get(boardId) ?? []) client.write(`event: ${type}\ndata: {}\n\n`)
@@ -191,7 +197,7 @@ async function handler(req, res) {
         while (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) username = `${emailPrefix.slice(0, 23)}_${randomBytes(3).toString('hex')}`
         const salt = randomBytes(16).toString('hex')
         const hash = randomBytes(64).toString('hex')
-        const result = db.prepare('INSERT INTO users(username,salt,password_hash,google_sub) VALUES(?,?,?,?)').run(username, salt, hash, profile.sub)
+        const result = db.prepare('INSERT INTO users(username,salt,password_hash,google_sub,display_name,password_enabled) VALUES(?,?,?,?,?,0)').run(username, salt, hash, profile.sub, String(profile.name ?? username).trim().slice(0, 60))
         user = { id: Number(result.lastInsertRowid), username }
       }
       const sessionId = createSession(user.id)
@@ -233,7 +239,7 @@ async function handler(req, res) {
         while (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) username = `${loginPrefix.slice(0, 23)}_${randomBytes(3).toString('hex')}`
         const salt = randomBytes(16).toString('hex')
         const hash = randomBytes(64).toString('hex')
-        const result = db.prepare('INSERT INTO users(username,salt,password_hash,github_id) VALUES(?,?,?,?)').run(username, salt, hash, githubId)
+        const result = db.prepare('INSERT INTO users(username,salt,password_hash,github_id,display_name,password_enabled) VALUES(?,?,?,?,?,0)').run(username, salt, hash, githubId, String(profile.name ?? username).trim().slice(0, 60))
         user = { id: Number(result.lastInsertRowid), username }
       }
       const sessionId = createSession(user.id)
@@ -286,7 +292,7 @@ async function handler(req, res) {
       }
       const salt = randomBytes(16).toString('hex')
       const hash = scryptSync(password, salt, 64).toString('hex')
-      db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(salt, hash, record.user_id)
+      db.prepare('UPDATE users SET salt=?,password_hash=?,password_enabled=1 WHERE id=?').run(salt, hash, record.user_id)
       db.prepare("DELETE FROM auth_tokens WHERE user_id=? AND purpose='reset-password'").run(record.user_id)
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(record.user_id)
       return sendJson(res, 200, { ok: true, message: 'Password updated. Sign in with your new password.' }, { 'Set-Cookie': `${cookieName}=; ${cookieFlags}; Max-Age=0` })
@@ -319,7 +325,7 @@ async function handler(req, res) {
       if (user.email && !user.email_verified_at) return sendJson(res, 403, { error: 'Verify your email before signing in.', code: 'EMAIL_NOT_VERIFIED' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
-      return sendJson(res, 200, { user: { id: user.id, username: user.username } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
+      return sendJson(res, 200, { user: db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword FROM users WHERE id=?').get(user.id) }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/logout' && method === 'POST') {
       const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
@@ -346,6 +352,31 @@ async function handler(req, res) {
     const user = sessionUser(req)
     if (route === '/api/me' && method === 'GET') return user ? sendJson(res, 200, { user }) : sendJson(res, 200, { user: null })
     if (!user) return sendJson(res, 401, { error: 'Sign in to use cloud features.' })
+    if (route === '/api/me/profile' && method === 'PUT') {
+      const { displayName, avatar } = await readBody(req, 2 * 1024 * 1024)
+      const cleanName = String(displayName ?? '').trim()
+      if (!cleanName || cleanName.length > 60) return sendJson(res, 400, { error: 'Choose a display name from 1 to 60 characters.' })
+      if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
+      db.prepare('UPDATE users SET display_name=?,avatar_data=? WHERE id=?').run(cleanName, avatar || null, user.id)
+      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword FROM users WHERE id=?').get(user.id)
+      return sendJson(res, 200, { user: updated })
+    }
+    if (route === '/api/me/password' && method === 'POST') {
+      const { currentPassword, newPassword } = await readBody(req, 10_000)
+      if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 256) return sendJson(res, 400, { error: 'Use a new password between 12 and 256 characters.' })
+      const stored = db.prepare('SELECT salt,password_hash,password_enabled FROM users WHERE id=?').get(user.id)
+      if (!stored.password_enabled) return sendJson(res, 400, { error: 'This account uses Google or GitHub sign-in. Manage its password with that provider.' })
+      if (typeof currentPassword !== 'string') return sendJson(res, 400, { error: 'Enter your current password.' })
+      const candidate = scryptSync(currentPassword, stored.salt, 64)
+      if (!timingSafeEqual(candidate, Buffer.from(stored.password_hash, 'hex'))) return sendJson(res, 401, { error: 'Your current password is incorrect.' })
+      const salt = randomBytes(16).toString('hex')
+      const hash = scryptSync(newPassword, salt, 64).toString('hex')
+      const sessionCookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
+      const currentSessionHash = sessionCookie ? sessionTokenHash(sessionCookie.slice(cookieName.length + 1)) : ''
+      db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(salt, hash, user.id)
+      db.prepare('DELETE FROM sessions WHERE user_id=? AND token_hash<>?').run(user.id, currentSessionHash)
+      return sendJson(res, 200, { ok: true })
+    }
 
     if (route === '/api/folders' && method === 'GET') return sendJson(res, 200, { folders: db.prepare('SELECT id,name FROM folders WHERE owner_id = ? ORDER BY name').all(user.id) })
     if (route === '/api/folders' && method === 'POST') {
