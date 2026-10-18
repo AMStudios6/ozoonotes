@@ -796,3 +796,18 @@
   .landing-nav { gap: 4px; }
   .landing-nav a { padding: 7px 8px; font-size: 10px; }
 }
+
+
+/* Extra brush and pen controls inspired by the reference palette. */
+.stroke-recent-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 9px 0 0; }
+.stroke-recent-colors > span { flex-basis: 100%; color: var(--muted); font-size: 10px; }
+.stroke-hex-controls { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 7px; margin-top: 10px; }
+.stroke-hex-controls input[type="text"] { width: 100%; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--workspace); color: var(--ink); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
+.stroke-hex-controls input[type="text"]:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 22%, transparent); }
+.stroke-hex-controls input[type="color"] { width: 34px; height: 32px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--workspace); cursor: pointer; }
+.stroke-cap-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.stroke-cap-options button { min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--workspace); color: var(--muted); font-size: 10px; cursor: pointer; }
+.stroke-cap-options button:hover, .stroke-cap-options button.selected { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: var(--accent-soft); color: var(--accent); }
+.stroke-cap-options i { display: block; width: 13px; height: 5px; background: currentColor; }
+.stroke-cap-options .cap-round { border-radius: 999px; }
+.stroke-cap-options .cap-square { border-radius: 0; }
