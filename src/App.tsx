@@ -959,9 +959,6 @@ function App() {
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
   const cloudSyncedSnapshots = useRef<Record<number, string>>({})
-  const cloudHydratedBoards = useRef<Set<number>>(new Set())
-  const cloudHydratingBoards = useRef<Set<number>>(new Set())
-  const [cloudHydrationBusyId, setCloudHydrationBusyId] = useState<number | null>(null)
   const [cloudFolders, setCloudFolders] = useState<{ id: number; name: string }[]>([])
   const [folderName, setFolderName] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
@@ -1056,7 +1053,7 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   useEffect(() => {
@@ -1720,7 +1717,7 @@ function App() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, selectionBox ?? undefined, hiddenLayers)
-  }, [strokes, orientation, canvasWidth, canvasHeight, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
+  }, [strokes, orientation, pageSize, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
@@ -2934,8 +2931,7 @@ function App() {
   const activeCloudId = activeBoardName ? cloudBoardIds[activeBoardName] : undefined
   const activeRemoteBoard = activeCloudId ? cloudBoards.find((board) => board.id === activeCloudId) : undefined
   const activeRemoteEncrypted = Boolean(activeRemoteBoard && isEncryptedBoardState(activeRemoteBoard.state))
-  const activeCloudHydrating = Boolean(activeCloudId && cloudHydrationBusyId === activeCloudId)
-  const canEditActiveBoard = !activeCloudHydrating && (!activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.role === 'edit')
+  const canEditActiveBoard = !activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.role === 'edit'
   const activeCanDownload = !activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.canDownload === true
   const cloudSaveDialog = cloudSaveOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCloudSaveOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-save-title"><button className="dialog-close" aria-label="Close cloud save options" onClick={() => setCloudSaveOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">SAVE TO YOUR SERVER</p><h2 id="cloud-save-title">Protect this board?</h2><form onSubmit={submitCloudSave}><label className="encryption-choice"><input type="checkbox" checked={cloudSaveEncrypted} disabled={activeRemoteEncrypted} onChange={(event) => setCloudSaveEncrypted(event.target.checked)} /><span><strong>Encrypt board in this browser</strong><small>Your server stores encrypted drawing data. Board name, comments, and sharing settings remain visible to the server.</small></span></label>{cloudSaveEncrypted && <><label className="dialog-label">Encryption passphrase<input required minLength={12} type="password" autoComplete="new-password" value={cloudSavePassphrase} onChange={(event) => setCloudSavePassphrase(event.target.value)} placeholder="At least 12 characters" /></label>{!activeRemoteEncrypted && <label className="dialog-label">Confirm passphrase<input required minLength={12} type="password" autoComplete="new-password" value={cloudSaveConfirmation} onChange={(event) => setCloudSaveConfirmation(event.target.value)} /></label>}<p className="encryption-note">Keep this passphrase safe and share it with collaborators yourself. OzooNotes cannot recover it.</p></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}<footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setCloudSaveOpen(false)}>Cancel</button><button className="dialog-create">Save board</button></footer></form></section></div>
 
