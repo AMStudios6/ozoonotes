@@ -1826,7 +1826,7 @@ function App() {
   }
   const eraserCanTarget = (stroke: Stroke, index: number) => !hiddenLayers.includes(strokeLayer(stroke)) && (!selectedIndices.length || selectedIndices.includes(index))
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!canEditActiveBoard && activeTool !== 'Hand') return
+    if (!canEditActiveBoard && activeTool !== 'Hand' && activeTool !== 'Select') return
     setDrawingToolsOpen(false)
     const point = pointFromEvent(event)
     const hardwareEraser = event.pointerType === 'pen' && (event.button === 5 || (event.buttons & 32) === 32)
@@ -1848,6 +1848,7 @@ function App() {
       const bounds = selectionBoundsFor(strokes, selectedIndices, canvas.width, canvas.height)
       const handle = bounds ? hitResizeHandle(bounds, point, canvas.width, canvas.height) : null
       if (bounds && handle && selectedIndices.length) {
+        if (!canEditActiveBoard) return
         event.currentTarget.setPointerCapture(event.pointerId)
         const originals = selectedIndices.map((index) => strokes[index])
         activeResize.current = { indices: [...selectedIndices], start: point, originals, preview: originals, bounds, handle }
@@ -1864,7 +1865,7 @@ function App() {
       setSelectionBox(null)
       const next = event.shiftKey ? (selectedIndices.includes(hit) ? selectedIndices.filter((index) => index !== hit) : [...selectedIndices, hit]) : (selectedIndices.includes(hit) ? selectedIndices : [hit])
       setSelectedIndices(next)
-      if (!next.includes(hit)) return
+      if (!next.includes(hit) || !canEditActiveBoard) return
       event.currentTarget.setPointerCapture(event.pointerId)
       const originals = next.map((index) => strokes[index])
       activeMove.current = { indices: next, start: point, originals, preview: originals }
@@ -1892,7 +1893,7 @@ function App() {
     }
   }
   const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!canEditActiveBoard && !activePan.current) return
+    if (!canEditActiveBoard && !activePan.current && activeTool !== 'Select') return
     const pan = activePan.current
     if (pan) {
       const dx = event.clientX - pan.startClient.x
