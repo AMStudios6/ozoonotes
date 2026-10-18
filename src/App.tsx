@@ -1994,11 +1994,17 @@ function App() {
     return () => window.removeEventListener('paste', handlePaste)
   }, [pageKey])
 
-  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
+  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement> | ReactMouseEvent<HTMLCanvasElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - bounds.left) / bounds.width + (infinitePage ? cameraOffset.x : 0), y: (event.clientY - bounds.top) / bounds.height + (infinitePage ? cameraOffset.y : 0) }
   }
   const eraserCanTarget = (stroke: Stroke, index: number) => !hiddenLayers.includes(strokeLayer(stroke)) && (!selectedIndices.length || selectedIndices.includes(index))
+  const openTextEditorAt = (point: Point) => {
+    if (!canEditActiveBoard) return
+    lastTextPoint.current = point
+    cancelTextRef.current = false
+    setTextEditor({ point, value: '' })
+  }
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!canEditActiveBoard && activeTool !== 'Hand' && activeTool !== 'Select') return
     setDrawingToolsOpen(false)
@@ -2012,9 +2018,7 @@ function App() {
       return
     }
     if (!hardwareEraser && activeTool === 'Text') {
-      lastTextPoint.current = point
-      cancelTextRef.current = false
-      setTextEditor({ point, value: '' })
+      openTextEditorAt(point)
       return
     }
     if (!hardwareEraser && activeTool === 'Select') {
@@ -3547,7 +3551,7 @@ function App() {
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark, colorTheme), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
               {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here… (Enter to finish, Shift+Enter for a new line)" title="Press Enter to add text, or Shift+Enter to start a new line" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.blur() } }} />}
-              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
+              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onClick={(event) => { if (activeTool === 'Text' && !textEditor) { setDrawingToolsOpen(false); openTextEditorAt(pointFromEvent(event)) } }} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
               {indexView && indexPageCount > 0 && <section className="title-index-page" aria-label={`Contents index page ${indexPage} of ${indexPageCount}`}><div className="title-index-kicker">CONTENTS · {boards[activeBoard].name}</div><h1>Page index</h1><p>Choose a title to jump to that page.</p><ol>{(boards[activeBoard].titles ?? []).slice((indexPage - 1) * 20, indexPage * 20).map((item) => <li key={item.id}><button type="button" onClick={() => { setPage(item.page); setIndexView(false) }}><span>{item.title}</span><i /><b>Page {item.page}</b></button></li>)}</ol><small>Contents page {indexPage} of {indexPageCount} · your notes start on page 1</small></section>}
             </div>
           </div>
