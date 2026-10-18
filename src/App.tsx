@@ -26,7 +26,7 @@ type LayerName = 'writing' | 'text' | 'images'
 type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
-type CloudUser = { id: number; username: string }
+type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
 type CloudBoard = { id: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; ownerName?: string }
@@ -913,6 +913,11 @@ function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [cloudBoardIds, setCloudBoardIds] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem('doomnotes:cloud-board-ids') ?? '{}') as Record<string, number>)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileDisplayName, setProfileDisplayName] = useState('')
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null)
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState('')
+  const [profileNewPassword, setProfileNewPassword] = useState('')
   const profileMenuRef = useRef<HTMLDetailsElement>(null)
   const [studentProfileSummary, setStudentProfileSummary] = useState<{ field?: string; otherField?: string; stage?: string; otherStage?: string; degree?: string } | null>(() => { try { return JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null') } catch { return null } })
   const [passwordResetToken, setPasswordResetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_password') ?? sessionStorage.getItem('ozoo:password-reset-token') ?? '')
@@ -993,7 +998,7 @@ function App() {
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:')).map((key) => key.slice('doomnotes:'.length)))
+  const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:')).filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   useEffect(() => {
     const openShortcuts = () => setShortcutsOpen(true)
     window.addEventListener('ozoo:open-shortcuts', openShortcuts)
@@ -1558,6 +1563,57 @@ function App() {
     localStorage.removeItem('doomnotes:cloud-board-ids')
     setAccountOpen(false)
     setCloudMessage('Signed out.')
+  }
+
+  const openProfileEditor = () => {
+    if (!cloudUser) return
+    setProfileDisplayName(cloudUser.displayName || cloudUser.username)
+    setProfileAvatar(cloudUser.avatar ?? null)
+    setProfileCurrentPassword('')
+    setProfileNewPassword('')
+    setCloudMessage('')
+    profileMenuRef.current?.removeAttribute('open')
+    setProfileOpen(true)
+  }
+
+  const chooseProfilePhoto = async (file?: File) => {
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setCloudMessage('Choose a PNG, JPEG, or WebP image under 8 MB.')
+      return
+    }
+    try {
+      const bitmap = await createImageBitmap(file)
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Could not process that image.')
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      bitmap.close()
+      setProfileAvatar(canvas.toDataURL('image/webp', 0.84))
+      setCloudMessage('')
+    } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not load that image.') }
+  }
+
+  const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    try {
+      const { user } = await apiRequest<{ user: CloudUser }>('/api/me/profile', { method: 'PUT', body: JSON.stringify({ displayName: profileDisplayName, avatar: profileAvatar }) })
+      setCloudUser(user)
+      setCloudMessage('Profile updated.')
+    } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not update your profile.') }
+  }
+
+  const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    try {
+      await apiRequest('/api/me/password', { method: 'POST', body: JSON.stringify({ currentPassword: profileCurrentPassword, newPassword: profileNewPassword }) })
+      setProfileCurrentPassword('')
+      setProfileNewPassword('')
+      setCloudMessage('Password updated. Other signed-in sessions were signed out.')
+    } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not update your password.') }
   }
 
   useEffect(() => {
@@ -2717,6 +2773,8 @@ function App() {
     <footer className="dialog-actions"><button className="dialog-create" onClick={() => setShortcutsOpen(false)}>Done</button></footer>
   </section></div>
 
+  const profileDialog = profileOpen && cloudUser && <div className="new-file-overlay profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileOpen(false) }}><section className="new-file-dialog compact-dialog profile-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button className="dialog-close" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">YOUR ACCOUNT</p><h2 id="profile-editor-title">Edit profile</h2><form onSubmit={(event) => { void saveProfile(event) }}><div className="profile-photo-row">{profileAvatar ? <img className="profile-photo-preview" src={profileAvatar} alt="Profile preview" /> : <span className="profile-photo-preview profile-photo-fallback">{(profileDisplayName || cloudUser.username).slice(0, 1).toUpperCase()}</span>}<div><label className="dialog-create profile-upload">Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseProfilePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} /></label><button className="text-button profile-remove-photo" type="button" disabled={!profileAvatar} onClick={() => setProfileAvatar(null)}>Remove photo</button><small>PNG, JPEG, or WebP. Resized to 512 × 512.</small></div></div><label className="dialog-label">Display name<input required maxLength={60} value={profileDisplayName} onChange={(event) => setProfileDisplayName(event.target.value)} /></label><label className="dialog-label">Username<input value={cloudUser.username} disabled /><small>This stays your sign-in and sharing name.</small></label><button className="dialog-create full-button">Save profile</button></form><div className="profile-password-section"><h3>Change password</h3>{cloudUser.hasPassword ? <form onSubmit={(event) => { void changePassword(event) }}><label className="dialog-label">Current password<input required type="password" autoComplete="current-password" value={profileCurrentPassword} onChange={(event) => setProfileCurrentPassword(event.target.value)} /></label><label className="dialog-label">New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={profileNewPassword} onChange={(event) => setProfileNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="dialog-create full-button">Update password</button></form> : <p className="empty-hint">This account signs in with Google or GitHub. Change its password with that provider.</p>}</div>{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
+
   const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES ACCOUNT</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}>{authMode === 'register' && <label className="dialog-label">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}<label className="dialog-label">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete={authMode === 'register' ? 'username' : 'username'} value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>{authMode === 'register' && <p className="auth-account-note">Your email is used for sign-in. Email verification and password recovery are not enabled yet.</p>}<button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
   const shareDialog = shareOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShareOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="Close sharing" onClick={() => setShareOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">ACCESS MANAGEMENT</p><h2 id="share-title">Share “{boards[activeBoard]?.name}”</h2><form className="share-form" onSubmit={(event) => { void inviteToBoard(event) }}><label className="dialog-label">Username<input required value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} placeholder="Their OzooNotes username" /></label><label className="dialog-label">Permission<select value={shareRole} onChange={(event) => setShareRole(event.target.value as 'view' | 'edit')}><option value="view">View only</option><option value="edit">Can edit</option></select></label><button className="dialog-create">Grant access</button></form><h3 className="small-heading">People with access</h3>{shareList.length ? <ul className="access-list">{shareList.map((entry) => <li key={entry.username}><span>{entry.username}<small>{entry.role === 'view' ? 'View only' : 'Can edit'}</small></span><button onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/share`, { method: 'DELETE', body: JSON.stringify({ username: entry.username }) }).then(() => setShareList((current) => current.filter((item) => item.username !== entry.username))).catch((error) => setCloudMessage(error.message)) }}>Remove</button></li>)}</ul> : <p className="empty-hint">No one else has access yet.</p>}<h3 className="small-heading">Share with a team</h3>{teams.length ? <><form className="share-form" onSubmit={(event) => { void grantTeamBoardAccess(event) }}><label className="dialog-label">Team<select value={shareTeamId ?? ''} onChange={(event) => setShareTeamId(Number(event.target.value) || null)}><option value="">Choose a team</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label><label className="dialog-label">Permission<select value={shareTeamRole} onChange={(event) => setShareTeamRole(event.target.value as 'view' | 'edit')}><option value="view">View only</option><option value="edit">Can edit</option></select></label><button className="dialog-create">Grant</button></form>{shareTeams.map((team) => <p className="team-access-row" key={team.id}>{team.name}: {team.role}<button onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/teams`, { method: 'DELETE', body: JSON.stringify({ teamId: team.id }) }).then(() => setShareTeams((current) => current.filter((item) => item.id !== team.id))) }}>Remove</button></p>)}</> : <p className="empty-hint">Create a team to grant access to a group.</p>}<div className="menu-divider" /><button className="dialog-create full-button" onClick={() => { void createPublicLink() }}>Create read-only link</button>{publicLink && <><div className="public-link-value">{publicLink}</div><button className="text-button" onClick={() => { const id = cloudBoardIds[boards[activeBoard].name]; void apiRequest(`/api/boards/${id}/public-link`, { method: 'DELETE', body: '{}' }).then(() => { setPublicLink(''); setCloudMessage('Read-only links revoked.') }).catch((error) => setCloudMessage(error.message)) }}>Revoke read-only links</button></>}{cloudMessage && <p className="cloud-message">{cloudMessage}</p>}</section></div>
@@ -2866,14 +2924,14 @@ function App() {
             <div className="landing-top-actions">
               {!localOnly && (cloudUser ? <details ref={profileMenuRef} className="profile-menu" onToggle={(event) => { if (event.currentTarget.open) { try { setStudentProfileSummary(JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null')) } catch { setStudentProfileSummary(null) } } }}>
                 <summary className="profile-menu-trigger" aria-label={`Open profile menu for ${cloudUser.username}`}>
-                  <span className="profile-avatar" aria-hidden="true">{cloudUser.username.trim().slice(0, 1).toUpperCase() || 'O'}</span>
+                  {cloudUser.avatar ? <img className="profile-avatar profile-avatar-photo" src={cloudUser.avatar} alt="" /> : <span className="profile-avatar" aria-hidden="true">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase() || 'O'}</span>}
                   <span className="profile-trigger-copy"><strong>{cloudUser.username}</strong><small>Profile</small></span>
                   <Icon name="chevronDown" size={12} />
                 </summary>
                 <div className="profile-dropdown">
                   <div className="profile-dropdown-top">
-                    <span className="profile-avatar profile-avatar-large" aria-hidden="true">{cloudUser.username.trim().slice(0, 1).toUpperCase() || 'O'}</span>
-                    <span className="profile-identity"><small>Signed in to OzooNotes</small><strong>{cloudUser.username}</strong><span className="profile-status"><i /> Account active</span></span>
+                    {cloudUser.avatar ? <img className="profile-avatar profile-avatar-large profile-avatar-photo" src={cloudUser.avatar} alt="" /> : <span className="profile-avatar profile-avatar-large" aria-hidden="true">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase() || 'O'}</span>}
+                    <span className="profile-identity"><small>Signed in to OzooNotes</small><strong>{cloudUser.displayName || cloudUser.username}</strong><small>@{cloudUser.username}</small><span className="profile-status"><i /> Account active</span></span>
                   </div>
                   <div className="profile-stat-grid">
                     <div className="profile-stat"><strong>{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).length}</strong><span>Device files</span></div>
@@ -2885,6 +2943,7 @@ function App() {
                     {landingAudience === 'student' && studentProfileSummary && <div className="profile-study-summary"><span>Study profile</span><strong>{studentProfileSummary.field === 'Other' ? (studentProfileSummary.otherField || 'Other') : (studentProfileSummary.field || 'Student')}</strong><small>{studentProfileSummary.stage === 'Other' ? (studentProfileSummary.otherStage || 'Study level not set') : (studentProfileSummary.stage || 'Study level not set')}{studentProfileSummary.degree ? ` · ${studentProfileSummary.degree}` : ''}</small></div>}
                   </div>
                   <div className="profile-menu-actions">
+                    <button type="button" className="profile-edit-action" onClick={openProfileEditor}><Icon name="settings" size={15} /> Edit profile</button>
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="notes" size={15} /> My files</button>
                     {landingAudience === 'student' && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="study" size={15} /> Study space</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setProjectsPageOpen(true) }}><Icon name="duplicate" size={15} /> Projects</button>
@@ -2979,6 +3038,7 @@ function App() {
       {shortcutsDialog}
         {shortcutsDialog}
         {!localOnly && accountDialog}
+      {!localOnly && profileDialog}
       </main>
     )
   }
