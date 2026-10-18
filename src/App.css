@@ -811,3 +811,4 @@
 .stroke-cap-options i { display: block; width: 13px; height: 5px; background: currentColor; }
 .stroke-cap-options .cap-round { border-radius: 999px; }
 .stroke-cap-options .cap-square { border-radius: 0; }
+.presentation-mode{padding:0!important}.presentation-mode .window{width:100vw;height:100dvh;min-height:100dvh;border:0;border-radius:0}.presentation-mode .window-top,.presentation-mode .board-menu-wrap,.presentation-mode .quick-actions,.presentation-mode .toolbar,.presentation-mode .color-palette,.presentation-mode .stroke-panel,.presentation-mode .page-navigation,.presentation-mode .bottom-controls,.presentation-mode .tool-status{display:none!important}.presentation-mode .board-area{height:100dvh;min-height:100dvh;padding:0}.presentation-mode .workspace{min-height:100dvh;margin:0;padding:0;overflow:auto}

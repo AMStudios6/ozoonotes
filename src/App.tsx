@@ -13,7 +13,7 @@ import ProjectStudio from './ProjectsPage'
 import RoadmapsPage from './RoadmapsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
-import { AdminPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
+import { AdminPage, ContactPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -733,7 +733,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
   return 'home'
 }
 
@@ -914,7 +914,7 @@ function App() {
   const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -934,7 +934,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -1072,6 +1072,7 @@ function App() {
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [presentationMode, setPresentationMode] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   const [findOpen, setFindOpen] = useState(false)
@@ -1101,7 +1102,7 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
-  const [autoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
@@ -1114,6 +1115,11 @@ function App() {
     window.addEventListener('ozoo:open-shortcuts', openShortcuts)
     return () => window.removeEventListener('ozoo:open-shortcuts', openShortcuts)
   }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && presentationMode) setPresentationMode(false) }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [presentationMode])
   useEffect(() => {
     if (!timerRunning) return
     const interval = window.setInterval(() => setTimerSeconds((seconds) => {
@@ -1812,6 +1818,44 @@ function App() {
   }, [strokes, orientation, pageSize, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
+  useEffect(() => {
+    if (!boards.length) return
+    setAutoSaveStatus('saving')
+    const timer = window.setTimeout(() => {
+      try {
+        const names = [...new Set(boards.map((board) => board.name).filter(Boolean))]
+        boards.forEach((board, boardIndex) => {
+          const existing = (() => { try { return JSON.parse(localStorage.getItem(`doomnotes:${board.name}`) ?? '{}') as Record<string, unknown> } catch { return {} } })()
+          const pageStrokes = Array.from({ length: board.pages }, (_, pageIndex) => strokesByPage[`${boardIndex}:${pageIndex + 1}`] ?? [])
+          const saved = {
+            ...existing,
+            name: board.name,
+            pages: board.pages,
+            pageSize: board.pageSize,
+            infinite: board.infinite,
+            orientation: board.orientation,
+            pageOrientations: board.pageOrientations,
+            pageBackground: boardIndex === activeBoard ? pageBackground : board.pageBackground,
+            notebook: board.notebook ?? 'Inbox',
+            tags: board.tags ?? [],
+            titles: board.titles ?? [],
+            hiddenLayers: board.hiddenLayers ?? [],
+            gridEnabled: boardIndex === activeBoard ? gridEnabled : Boolean(existing.gridEnabled),
+            showScale: boardIndex === activeBoard ? showScale : Boolean(existing.showScale),
+            pageStrokes,
+            savedAt: new Date().toISOString(),
+          }
+          localStorage.setItem(`doomnotes:${board.name}`, JSON.stringify(saved))
+        })
+        localStorage.setItem(openWorkspaceStorageKey, JSON.stringify({ names, activeBoard, page: Math.max(1, page), savedAt: new Date().toISOString() }))
+        setRecentFiles((current) => [...new Set([...names, ...current])])
+        setAutoSaveStatus('saved')
+      } catch {
+        setAutoSaveStatus('error')
+      }
+    }, 650)
+    return () => window.clearTimeout(timer)
+  }, [boards, strokesByPage, activeBoard, page, pageBackground, gridEnabled, showScale])
 
   useEffect(() => { setSelectedIndices([]); refreshHistoryState(pageKey) }, [pageKey])
   useEffect(() => { const active = boards[activeBoard]; if (active) setOrientation(active.pageOrientations?.[page - 1] ?? active.orientation ?? 'portrait') }, [activeBoard, page, boards])
@@ -3217,6 +3261,7 @@ function App() {
   if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
   if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
@@ -3353,13 +3398,15 @@ function App() {
               </div>
               <form className="notebook-create" onSubmit={(event) => { event.preventDefault(); createNotebook() }}><input aria-label="New notebook name" placeholder="Create a notebook…" value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} /><button className="landing-new-small" type="submit">＋ Add notebook</button><small>Notebooks group related files; add several tags separated by commas.</small></form>
               
-              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-rename" onClick={() => openRenameDialog(name)}>Rename file</button><div className="library-file-meta"><label>Notebook<select aria-label={`Notebook for ${name}`} value={meta.notebook ?? 'Inbox'} onChange={(event) => saveFileOrganization(name, event.target.value, (meta.tags ?? []).join(', '))}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label>Tags<input aria-label={`Tags for ${name}`} defaultValue={(meta.tags ?? []).join(', ')} placeholder="ideas, article, #active…" onBlur={(event) => saveFileOrganization(name, meta.notebook ?? 'Inbox', event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
+              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const noteText = ((meta as { pageStrokes?: { text?: string }[][] }).pageStrokes ?? []).flat().map((stroke) => stroke.text ?? '').join(' '); const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')} ${noteText}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-rename" onClick={() => openRenameDialog(name)}>Rename file</button><div className="library-file-meta"><label>Notebook<select aria-label={`Notebook for ${name}`} value={meta.notebook ?? 'Inbox'} onChange={(event) => saveFileOrganization(name, event.target.value, (meta.tags ?? []).join(', '))}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label>Tags<input aria-label={`Tags for ${name}`} defaultValue={(meta.tags ?? []).join(', ')} placeholder="ideas, article, #active…" onBlur={(event) => saveFileOrganization(name, meta.notebook ?? 'Inbox', event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
 <footer className="landing-footer">
             <div className="landing-brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div>
             <span>Don’t Doomscroll, just OzooNotes</span>
             <div className="landing-footer-socials">
+              <a className="landing-footer-contact" href="/?page=contact" onClick={(event) => { event.preventDefault(); navigatePage('contact') }}>Contact</a>
+              <a className="landing-footer-feedback" href="https://github.com/AMStudios6/ozoonotes/issues/new" target="_blank" rel="noreferrer">Feedback</a>
               <a className="landing-footer-instagram" href="https://www.instagram.com/ozoonotes/" target="_blank" rel="noreferrer" aria-label="OzooNotes on Instagram" title="OzooNotes on Instagram">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="17.5" cy="6.5" r="1.25" fill="currentColor" /></svg>
               </a>
@@ -3380,7 +3427,7 @@ function App() {
   }
 
   return (
-    <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
+    <main className={`app ${dark ? 'dark' : 'light'} ${presentationMode ? 'presentation-mode' : ''}`} data-theme={colorTheme}>
       <div className="window">
         <header className="window-top">
           <nav className="file-tabs" aria-label="Whiteboard files">
@@ -3440,6 +3487,7 @@ function App() {
                 <button onClick={() => { setMenuOpen(false); openTitleDialog() }}><Icon name="notes" size={17} /> <span>Add a page title</span></button>
                 <label className="menu-option"><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /> Show grid</label>
                 <label className="menu-option"><input type="checkbox" disabled={infinitePage} checked={showScale && !infinitePage} onChange={(event) => setShowScale(event.target.checked)} /> Show page scale</label>
+                <button onClick={() => { setPresentationMode((active) => !active); setMenuOpen(false) }}><Icon name="next" size={17} /> <span>Presentation mode</span><kbd>Esc to exit</kbd></button>
                 {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
                 <button disabled={!canEditActiveBoard || !strokes.length} onClick={() => { if (!window.confirm('Clear everything on this page? You can undo this action.')) return; editCurrentPage(() => []); setSelectedIndices([]); setMenuOpen(false) }}><Icon name="delete" size={17} /> <span>Clear this page</span></button>
               </section>
