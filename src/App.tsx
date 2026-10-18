@@ -391,6 +391,38 @@ function hitTestObject(stroke: Stroke, point: Point, canvasWidth: number, canvas
 }
 
 function strokeLayer(stroke: Stroke): LayerName { return stroke.layer ?? (stroke.tool === 'Text' ? 'text' : stroke.tool === 'Image' ? 'images' : 'writing') }
+type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+type SelectionBounds = { left: number; top: number; right: number; bottom: number }
+type ResizeSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[]; bounds: SelectionBounds; handle: ResizeHandle }
+function selectionBoundsFor(drawings: Stroke[], selected: number[], width: number, height: number): SelectionBounds | null {
+  const visible = selected.map((index) => drawings[index]).filter((stroke): stroke is Stroke => !!stroke?.points.length)
+  if (!visible.length) return null
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+  for (const stroke of visible) {
+    const xs = stroke.points.map((point) => point.x * width)
+    const ys = stroke.points.map((point) => point.y * height)
+    left = Math.min(left, ...xs); top = Math.min(top, ...ys)
+    right = Math.max(right, ...xs); bottom = Math.max(bottom, ...ys)
+    if (stroke.tool === 'Text') {
+      right = Math.max(right, xs[0] + Math.max(32, (stroke.text?.length ?? 1) * stroke.width * 2.7))
+      bottom = Math.max(bottom, ys[0] + Math.max(26, stroke.width * 5))
+    }
+  }
+  const padding = 10
+  return { left: (left - padding) / width, top: (top - padding) / height, right: (right + padding) / width, bottom: (bottom + padding) / height }
+}
+function selectionHandles(bounds: SelectionBounds): { id: ResizeHandle; x: number; y: number }[] {
+  const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2
+  return [
+    { id: 'nw', x: bounds.left, y: bounds.top }, { id: 'n', x: cx, y: bounds.top }, { id: 'ne', x: bounds.right, y: bounds.top },
+    { id: 'e', x: bounds.right, y: cy }, { id: 'se', x: bounds.right, y: bounds.bottom }, { id: 's', x: cx, y: bounds.bottom },
+    { id: 'sw', x: bounds.left, y: bounds.bottom }, { id: 'w', x: bounds.left, y: cy },
+  ]
+}
+function hitResizeHandle(bounds: SelectionBounds, point: Point, width: number, height: number): ResizeHandle | null {
+  const x = point.x * width, y = point.y * height
+  return selectionHandles(bounds).find((handle) => Math.hypot(x - handle.x * width, y - handle.y * height) <= 14)?.id ?? null
+}
 function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected: number[] = [], erasePreview: number[] = [], eraserPoint?: Point, eraserRadius = 0, cameraOffset: Point = { x: 0, y: 0 }, selectionBox?: SelectionBox, hiddenLayers: LayerName[] = []) {
   const context = canvas.getContext('2d')
   if (!context) return
@@ -458,6 +490,24 @@ function renderDrawings(canvas: HTMLCanvasElement, drawings: Stroke[], selected:
       const boxWidth = Math.max(...xs) - Math.min(...xs) + textWidth + padding * 2
       const boxHeight = Math.max(...ys) - Math.min(...ys) + textHeight + padding * 2
       context.strokeRect(boxX, boxY, boxWidth, boxHeight)
+      context.restore()
+    }
+  }
+  if (selected.length) {
+    const bounds = selectionBoundsFor(drawings, selected, canvas.width, canvas.height)
+    if (bounds) {
+      context.save()
+      context.globalAlpha = 1
+      context.strokeStyle = '#a977eb'
+      context.fillStyle = '#ffffff'
+      context.lineWidth = 1.5
+      context.setLineDash([])
+      context.strokeRect(bounds.left * canvas.width, bounds.top * canvas.height, (bounds.right - bounds.left) * canvas.width, (bounds.bottom - bounds.top) * canvas.height)
+      for (const handle of selectionHandles(bounds)) {
+        const x = handle.x * canvas.width, y = handle.y * canvas.height
+        context.fillRect(x - 5, y - 5, 10, 10)
+        context.strokeRect(x - 5, y - 5, 10, 10)
+      }
       context.restore()
     }
   }
@@ -1079,6 +1129,7 @@ function App() {
   const lastTextPoint = useRef<Point>({ x: 0.3, y: 0.3 })
   const activeStroke = useRef<Stroke | null>(null)
   const activeMove = useRef<MoveSession | null>(null)
+  const activeResize = useRef<ResizeSession | null>(null)
   const activeMarquee = useRef<{ start: Point; additive: boolean; baseSelection: number[] } | null>(null)
   const selectionClipboard = useRef<{ strokes: Stroke[]; camera: Point; infinite: boolean } | null>(null)
   const cancelTextRef = useRef(false)
@@ -1661,7 +1712,7 @@ function App() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) renderDrawings(canvas, strokes, selectedIndices, activeTool === 'Eraser' ? erasePreviewIndices : [], activeTool === 'Eraser' ? eraserHover ?? undefined : undefined, activeTool === 'Eraser' ? 44 : 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, selectionBox ?? undefined, hiddenLayers)
-  }, [strokes, orientation, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
+  }, [strokes, orientation, canvasWidth, canvasHeight, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
 
@@ -1791,6 +1842,14 @@ function App() {
     }
     if (!hardwareEraser && activeTool === 'Select') {
       const canvas = event.currentTarget
+      const bounds = selectionBoundsFor(strokes, selectedIndices, canvas.width, canvas.height)
+      const handle = bounds ? hitResizeHandle(bounds, point, canvas.width, canvas.height) : null
+      if (bounds && handle && selectedIndices.length) {
+        event.currentTarget.setPointerCapture(event.pointerId)
+        const originals = selectedIndices.map((index) => strokes[index])
+        activeResize.current = { indices: [...selectedIndices], start: point, originals, preview: originals, bounds, handle }
+        return
+      }
       const hit = strokes.map((stroke, strokeIndex) => ({ stroke, strokeIndex })).reverse().find(({ stroke }) => !hiddenLayers.includes(strokeLayer(stroke)) && hitTestObject(stroke, point, canvas.width, canvas.height))?.strokeIndex
       if (hit === undefined) {
         if (!event.shiftKey) setSelectedIndices([])
@@ -1845,6 +1904,45 @@ function App() {
     const point = pointFromEvent(event)
     if (activeMarquee.current) {
       setSelectionBox({ start: activeMarquee.current.start, current: point })
+      return
+    }
+    if (activeResize.current) {
+      const resize = activeResize.current
+      const b = resize.bounds
+      const movesX = ['nw', 'ne', 'e', 'se', 'sw', 'w'].includes(resize.handle)
+      const movesY = ['nw', 'n', 'ne', 'se', 's', 'sw'].includes(resize.handle)
+      const anchorX = resize.handle.includes('w') ? b.right : b.left
+      const anchorY = resize.handle.includes('n') ? b.bottom : b.top
+      const initialX = resize.handle.includes('w') ? b.left : b.right
+      const initialY = resize.handle.includes('n') ? b.top : b.bottom
+      const targetX = movesX ? point.x : initialX
+      const targetY = movesY ? point.y : initialY
+      let scaleX = movesX ? (targetX - anchorX) / (initialX - anchorX) : 1
+      let scaleY = movesY ? (targetY - anchorY) / (initialY - anchorY) : 1
+      const clampPagePoint = (value: number) => infinitePage ? value : Math.max(0, Math.min(1, value))
+      const boundedX = clampPagePoint(targetX), boundedY = clampPagePoint(targetY)
+      if (movesX) scaleX = (boundedX - anchorX) / (initialX - anchorX)
+      if (movesY) scaleY = (boundedY - anchorY) / (initialY - anchorY)
+      scaleX = Math.max(0.04, Math.min(20, scaleX))
+      scaleY = Math.max(0.04, Math.min(20, scaleY))
+      if (event.shiftKey && movesX && movesY) {
+        const uniformScale = Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY
+        scaleX = uniformScale
+        scaleY = uniformScale
+      }
+      const strokeScale = Math.sqrt(Math.abs(scaleX * scaleY))
+      resize.preview = resize.originals.map((original) => ({
+        ...original,
+        points: original.points.map((item) => ({
+          x: anchorX + (item.x - anchorX) * scaleX,
+          y: anchorY + (item.y - anchorY) * scaleY,
+        })),
+        width: original.width * strokeScale,
+        ...(original.cornerRadius !== undefined ? { cornerRadius: original.cornerRadius * strokeScale } : {}),
+      }))
+      const updated = [...strokes]
+      resize.indices.forEach((index, offset) => { updated[index] = resize.preview[offset] })
+      renderDrawings(event.currentTarget, updated, resize.indices, [], undefined, 0, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
       return
     }
     if (activeMove.current) {
@@ -2389,6 +2487,16 @@ function App() {
         }).filter((index) => index >= 0)
         setSelectedIndices(marquee.additive ? Array.from(new Set([...marquee.baseSelection, ...contained])) : contained)
       }
+      return
+    }
+    const resize = activeResize.current
+    activeResize.current = null
+    if (resize) {
+      editCurrentPage((current) => {
+        const pageStrokes = [...current]
+        resize.indices.forEach((index, offset) => { pageStrokes[index] = resize.preview[offset] })
+        return pageStrokes
+      })
       return
     }
     const move = activeMove.current
