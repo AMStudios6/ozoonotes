@@ -2840,12 +2840,30 @@ function App() {
     setShowNewFileDialog(true)
   }
   const openInfiniteBoard = () => {
+    const openBoardIndex = boards.findIndex((board) => board.infinite)
+    if (openBoardIndex >= 0) {
+      activateBoard(openBoardIndex)
+      navigatePage('notes')
+      return
+    }
     const existing = recentFiles.find((name) => {
       try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') as { infinite?: boolean }).infinite === true }
       catch { return false }
     })
     if (existing) { openSavedFile(existing); return }
-    addBoard('Infinite Board', 'Blank', 'Infinite')
+    let name = 'Infinite Board'
+    let suffix = 2
+    while (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name)) || recentFiles.some((file) => normalizeBoardName(file) === normalizeBoardName(name)) || localStorage.getItem(`doomnotes:${name}`) !== null) {
+      name = `Infinite Board ${suffix++}`
+    }
+    try {
+      localStorage.setItem(`doomnotes:${name}`, JSON.stringify({ name, pages: 1, pageSize: 'Infinite', infinite: true, orientation: 'landscape', pageOrientations: ['landscape'], pageBackground: 'auto', notebook: 'Inbox', tags: [], titles: [], hiddenLayers: [], gridEnabled: false, showScale: false, pageStrokes: [[]] }))
+      setRecentFiles((current) => [name, ...current.filter((file) => file !== name)])
+      openSavedFile(name)
+    } catch {
+      setSaveNotice('Could not prepare the Infinite Board in browser storage')
+      window.setTimeout(() => setSaveNotice(''), 3000)
+    }
   }
   const saveFileOrganization = (name: string, notebook: string, rawTags: string) => {
     const tags = [...new Set(rawTags.split(',').map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean))]
@@ -3210,7 +3228,7 @@ function App() {
             <a className="landing-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }} aria-label="Open dashboard">Dashboard</a>
             <nav className="landing-nav" aria-label="Main navigation">
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
-              <button type="button" onClick={openInfiniteBoard}>∞ Infinite board</button>
+              <button type="button" className="landing-nav-project" onClick={openInfiniteBoard}>∞ Infinite board</button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
@@ -3518,5 +3536,6 @@ function App() {
 }
 
 export default App
+
 
 
