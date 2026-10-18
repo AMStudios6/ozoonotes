@@ -356,7 +356,7 @@ async function handler(req, res) {
       const { displayName, avatar } = await readBody(req, 2 * 1024 * 1024)
       const cleanName = String(displayName ?? '').trim()
       if (!cleanName || cleanName.length > 60) return sendJson(res, 400, { error: 'Choose a display name from 1 to 60 characters.' })
-      if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
+      if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
       db.prepare('UPDATE users SET display_name=?,avatar_data=? WHERE id=?').run(cleanName, avatar || null, user.id)
       const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword FROM users WHERE id=?').get(user.id)
       return sendJson(res, 200, { user: updated })
