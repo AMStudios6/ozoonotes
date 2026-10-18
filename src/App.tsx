@@ -959,6 +959,9 @@ function App() {
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
   const cloudSyncedSnapshots = useRef<Record<number, string>>({})
+  const cloudHydratedBoards = useRef<Set<number>>(new Set())
+  const cloudHydratingBoards = useRef<Set<number>>(new Set())
+  const [cloudHydrationBusyId, setCloudHydrationBusyId] = useState<number | null>(null)
   const [cloudFolders, setCloudFolders] = useState<{ id: number; name: string }[]>([])
   const [folderName, setFolderName] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
@@ -2033,7 +2036,71 @@ function App() {
     const board = boards[activeBoard]
     const id = board ? cloudBoardIds[board.name] : undefined
     const remote = id ? cloudBoards.find((item) => item.id === id) : undefined
-    if (!cloudUser || !board || !id || !remote || (remote.role !== 'owner' && remote.role !== 'edit')) return
+    if (!cloudUser || !board || !id) return
+
+    if (!cloudHydratedBoards.current.has(id)) {
+      if (cloudHydratingBoards.current.has(id)) return
+      cloudHydratingBoards.current.add(id)
+      setCloudHydrationBusyId(id)
+      setCloudSyncStatus('syncing')
+      void (async () => {
+        try {
+          const { board: latest } = await apiRequest<{ board: CloudBoard }>(`/api/boards/${id}`)
+          let latestState: BoardState
+          if (isEncryptedBoardState(latest.state)) {
+            const passphrase = cloudKeys.current[id] ?? window.prompt(`Enter the encryption passphrase for “${latest.name}” to sync the latest saved changes.`)
+            if (!passphrase) throw new Error('Enter the board passphrase to load the latest shared changes.')
+            latestState = await decryptBoardState(latest.state, passphrase)
+            cloudKeys.current[id] = passphrase
+          } else latestState = latest.state
+          const localIndex = boards.findIndex((item) => cloudBoardIds[item.name] === id)
+          if (localIndex < 0) return
+          const hydratedSnapshot = {
+            pages: latestState.pages,
+            pageSize: latestState.pageSize ?? 'A4',
+            infinite: latestState.infinite ?? false,
+            orientation: latestState.orientation,
+            pageOrientations: latestState.pageOrientations,
+            pageBackground: latestState.pageBackground,
+            gridEnabled: latestState.gridEnabled ?? false,
+            showScale: latestState.showScale ?? false,
+            hiddenLayers: latestState.hiddenLayers ?? [],
+            pageStrokes: latestState.pageStrokes,
+          }
+          cloudSyncedSnapshots.current[id] = JSON.stringify(hydratedSnapshot)
+          setBoards((current) => current.map((item, index) => index === localIndex ? {
+            ...item,
+            pages: latestState.pages,
+            pageSize: latestState.pageSize ?? 'A4',
+            infinite: latestState.infinite ?? false,
+            orientation: latestState.orientation,
+            pageOrientations: latestState.pageOrientations,
+            pageBackground: latestState.pageBackground,
+            hiddenLayers: latestState.hiddenLayers ?? [],
+          } : item))
+          setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(latestState.pageStrokes.map((items, index) => [`${localIndex}:${index + 1}`, items])) }))
+          if (localIndex === activeBoard) {
+            setPageSize(latestState.pageSize ?? 'A4')
+            setInfinitePage(latestState.infinite ?? false)
+            setOrientation(latestState.pageOrientations?.[page - 1] ?? latestState.orientation)
+            setPageBackground(latestState.pageBackground)
+            setGridEnabled(latestState.gridEnabled ?? false)
+            setShowScale(latestState.showScale ?? false)
+          }
+          setCloudSyncStatus('synced')
+          cloudHydratedBoards.current.add(id)
+        } catch (error) {
+          setCloudSyncStatus('error')
+          setCloudMessage(error instanceof Error ? error.message : 'Could not sync the latest shared changes.')
+        } finally {
+          cloudHydratingBoards.current.delete(id)
+          setCloudHydrationBusyId((current) => current === id ? null : current)
+        }
+      })()
+      return
+    }
+    if (!remote || (remote.role !== 'owner' && remote.role !== 'edit')) return
+
     const snapshotState = {
       pages: board.pages,
       pageSize,
@@ -2048,10 +2115,7 @@ function App() {
     }
     const snapshot = JSON.stringify(snapshotState)
     const lastSnapshot = cloudSyncedSnapshots.current[id]
-    if (lastSnapshot === undefined) {
-      cloudSyncedSnapshots.current[id] = snapshot
-      return
-    }
+    if (lastSnapshot === undefined) return
     if (lastSnapshot === snapshot) return
     setCloudSyncStatus('syncing')
     const timer = window.setTimeout(() => {
@@ -2073,7 +2137,7 @@ function App() {
       })()
     }, 850)
     return () => window.clearTimeout(timer)
-  }, [cloudUser, cloudBoardIds, cloudBoards, activeBoard, boards, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
+  }, [cloudUser, cloudBoardIds, cloudBoards, activeBoard, boards, page, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
 
   const getBoardDocument = () => ({ format: 'doomnotes', version: 1, ...boards[activeBoard], name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
   const downloadNamedBlob = (blob: Blob, filename: string) => {
@@ -2957,7 +3021,8 @@ function App() {
   const activeCloudId = activeBoardName ? cloudBoardIds[activeBoardName] : undefined
   const activeRemoteBoard = activeCloudId ? cloudBoards.find((board) => board.id === activeCloudId) : undefined
   const activeRemoteEncrypted = Boolean(activeRemoteBoard && isEncryptedBoardState(activeRemoteBoard.state))
-  const canEditActiveBoard = !activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.role === 'edit'
+  const activeCloudHydrating = Boolean(activeCloudId && cloudHydrationBusyId === activeCloudId)
+  const canEditActiveBoard = !activeCloudHydrating && (!activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.role === 'edit')
   const activeCanDownload = !activeRemoteBoard || activeRemoteBoard.role === 'owner' || activeRemoteBoard.canDownload === true
   const cloudSaveDialog = cloudSaveOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCloudSaveOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-save-title"><button className="dialog-close" aria-label="Close cloud save options" onClick={() => setCloudSaveOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">SAVE TO YOUR SERVER</p><h2 id="cloud-save-title">Protect this board?</h2><form onSubmit={submitCloudSave}><label className="encryption-choice"><input type="checkbox" checked={cloudSaveEncrypted} disabled={activeRemoteEncrypted} onChange={(event) => setCloudSaveEncrypted(event.target.checked)} /><span><strong>Encrypt board in this browser</strong><small>Your server stores encrypted drawing data. Board name, comments, and sharing settings remain visible to the server.</small></span></label>{cloudSaveEncrypted && <><label className="dialog-label">Encryption passphrase<input required minLength={12} type="password" autoComplete="new-password" value={cloudSavePassphrase} onChange={(event) => setCloudSavePassphrase(event.target.value)} placeholder="At least 12 characters" /></label>{!activeRemoteEncrypted && <label className="dialog-label">Confirm passphrase<input required minLength={12} type="password" autoComplete="new-password" value={cloudSaveConfirmation} onChange={(event) => setCloudSaveConfirmation(event.target.value)} /></label>}<p className="encryption-note">Keep this passphrase safe and share it with collaborators yourself. OzooNotes cannot recover it.</p></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}<footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setCloudSaveOpen(false)}>Cancel</button><button className="dialog-create">Save board</button></footer></form></section></div>
 
