@@ -1358,3 +1358,10 @@
   .auth-dashboard-link { min-height: 31px; padding-inline: 9px; font-size: 10px; }
   .auth-theme-picker { margin-left: auto; }
 }
+
+.profile-plan-card { display:grid; gap:4px; margin-top:12px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+.profile-plan-card > span { color:var(--muted); font-size:10px; }
+.profile-plan-card strong { width:max-content; padding:4px 8px; border-radius:999px; font-size:11px; }
+.profile-plan-card small { color:var(--muted); font-size:10px; line-height:1.4; }
+.profile-plan-pro { background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
+.profile-plan-normal { background:var(--panel); color:var(--ink); }

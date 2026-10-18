@@ -3299,6 +3299,7 @@ function App() {
                     {cloudUser.avatar ? <img className="profile-avatar profile-avatar-large profile-avatar-photo" src={cloudUser.avatar} alt="" /> : <span className="profile-avatar profile-avatar-large" aria-hidden="true">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase() || 'O'}</span>}
                     <span className="profile-identity"><small>Signed in to OzooNotes</small><strong>{cloudUser.displayName || cloudUser.username}</strong><small>@{cloudUser.username}</small><span className="profile-status"><i /> Account active</span></span>
                   </div>
+                  <div className="profile-plan-card"><span>Current plan</span><strong className={cloudUser.plan === 'pro' ? 'profile-plan-pro' : 'profile-plan-normal'}>{cloudUser.plan === 'pro' ? 'Fun Plan' : 'Normal Plan'}</strong><small>{cloudUser.plan === 'pro' ? 'All Fun Plan features are enabled for this account.' : 'Free workspace plan'}</small></div>
                   <div className="profile-stat-grid">
                     <div className="profile-stat"><strong>{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).length}</strong><span>Device files</span></div>
                     <div className="profile-stat"><strong>{cloudBoards.length}</strong><span>Cloud boards</span></div>
