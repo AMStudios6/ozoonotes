@@ -16,7 +16,7 @@ import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
 type AudienceRole = 'student' | 'teacher'
-type ColorTheme = 'forest' | 'purple' | 'white-purple' | 'red-white' | 'red-black' | 'doom'
+type ColorTheme = 'purple' | 'white-purple'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
@@ -39,21 +39,17 @@ type SelectionBox = { start: Point; current: Point }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
 function themedCanvasBackground(theme: ColorTheme) {
-  return theme === 'doom' ? '#090d0a' : theme === 'red-black' ? '#130909' : '#08060d'
+  return '#08060d'
 }
 const colorThemes: { id: ColorTheme; name: string; dark: boolean }[] = [
-  { id: 'forest', name: 'Forest & Mint', dark: true },
   { id: 'purple', name: 'Purple & Black', dark: true },
   { id: 'white-purple', name: 'White & Purple', dark: false },
-  { id: 'red-white', name: 'Red & White', dark: false },
-  { id: 'red-black', name: 'Red & Black', dark: true },
-  { id: 'doom', name: 'Doom • Emerald Armor', dark: true },
 ]
-function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation: 'portrait' | 'landscape', theme: ColorTheme = 'forest'): Stroke[] {
+function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation: 'portrait' | 'landscape', theme: ColorTheme = 'purple'): Stroke[] {
   if (template === 'Blank') return []
   const dimensions = size === 'Infinite' ? [210, 297] : pageDimensionsMm[size]
   const [widthMm, heightMm] = orientation === 'landscape' ? [dimensions[1], dimensions[0]] : dimensions
-  const accent = theme === 'purple' || theme === 'white-purple' ? (theme === 'purple' ? '#bd8bff' : '#8246c1') : theme === 'red-white' ? '#c13e47' : theme === 'red-black' ? '#ff7777' : theme === 'doom' ? '#63e978' : '#73d5b2'
+  const accent = theme === 'purple' ? '#bd8bff' : '#8246c1'
   const soft = '#a3b1a7'
   const textScale = pageContentScale(size)
   const line = (x1: number, y1: number, x2: number, y2: number, color = soft, opacity = 42, width = 0.8): Stroke => ({ tool: 'Line', color, width, opacity, points: [{ x: x1 / widthMm, y: y1 / heightMm }, { x: x2 / widthMm, y: y2 / heightMm }] })
@@ -189,9 +185,6 @@ function pageBackgroundLabel(background: string) {
   return 'Page background ' + background
 }
 function gridLineColor(dark: boolean, theme: ColorTheme = 'forest') {
-  if (theme === 'red-black' || theme === 'red-white') return dark ? 'rgba(245, 92, 92, .48)' : 'rgba(194, 44, 52, .30)'
-  if (theme === 'doom') return dark ? 'rgba(92, 220, 117, .46)' : 'rgba(38, 136, 57, .30)'
-  if (theme === 'forest') return dark ? 'rgba(115, 213, 178, .46)' : 'rgba(20, 124, 97, .30)'
   return dark ? 'rgba(189, 139, 255, .48)' : 'rgba(130, 70, 193, .34)'
 }
 const inkTools: Tool[] = ['Brush', 'Pen', 'Pencil', 'Marker', 'Highlighter']
@@ -1106,7 +1099,7 @@ function App() {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialWorkspace.orientation)
   const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
     const saved = localStorage.getItem('ozoo:color-theme') as ColorTheme | null
-    return colorThemes.some((theme) => theme.id === saved) ? saved! : 'forest'
+    return colorThemes.some((theme) => theme.id === saved) ? saved! : 'purple'
   })
   const dark = colorThemes.find((theme) => theme.id === colorTheme)?.dark ?? true
   useEffect(() => {
@@ -2325,7 +2318,7 @@ function App() {
     const indexStrokes = (sheet: number): Stroke[] => {
       const rows = (board.titles ?? []).slice(sheet * 20, sheet * 20 + 20)
       const textStroke = (value: string, x: number, y: number, width: number, color = dark ? '#f3f4f6' : '#20252b'): Stroke => ({ tool: 'Text', color, width, opacity: 100, points: [{ x, y }], text: value })
-      return [textStroke('CONTENTS', .09, .09, 7, colorTheme === 'forest' ? '#39a96b' : '#8052bc'), textStroke(board.name, .09, .125, 3), ...rows.flatMap((item, row) => { const y = .19 + row * .037; return [textStroke(item.title, .10, y, 3.2), textStroke(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
+      return [textStroke('CONTENTS', .09, .09, 7, colorTheme === 'purple' ? '#bd8bff' : '#8052bc'), textStroke(board.name, .09, .125, 3), ...rows.flatMap((item, row) => { const y = .19 + row * .037; return [textStroke(item.title, .10, y, 3.2), textStroke(`Page ${item.page}`, .77, y, 2.8, colorTheme === 'forest' ? '#39a96b' : '#8052bc')] })]
     }
     const pages: { strokes: Stroke[]; label: string; pageIndex: number | null }[] = [
       ...(exportIncludeIndex && (board.titles?.length ?? 0) > 1 ? Array.from({ length: indexPageCount }, (_, i) => ({ strokes: indexStrokes(i), label: `Index ${i + 1}`, pageIndex: null })) : []),
