@@ -745,3 +745,54 @@
 
 /* Keep the charcoal wordmark legible across the dark color themes. */
 .app.dark .brand-mark { box-sizing: border-box; padding: 4px 7px; border-radius: 9px; background: #fff; }
+
+
+/* Homepage story sections: create, choose a use case, and take the next step. */
+.landing-nav a { transition: color .16s ease, background .16s ease, border-color .16s ease; }
+.landing-nav a:hover { text-decoration: none; }
+.landing-feature-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.landing-feature { min-height: 196px; }
+.feature-library, .feature-projects, .feature-code { background: color-mix(in srgb, var(--accent-soft) 62%, var(--panel)); color: var(--accent); }
+.feature-code > span { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; font-weight: 800; }
+.landing-use-cases { padding: 58px 0 64px; border-top: 1px solid var(--line); scroll-margin-top: 84px; }
+.landing-use-cases .landing-section-heading { max-width: 620px; }
+.landing-use-cases .landing-section-heading > p { max-width: 500px; margin: 13px 0 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.landing-use-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 26px; }
+.landing-use-card { position: relative; min-height: 260px; padding: 24px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.landing-use-card::after { position: absolute; top: -54px; right: -44px; width: 160px; height: 160px; border-radius: 50%; background: var(--accent-soft); opacity: .55; content: ""; pointer-events: none; }
+.landing-use-study { --use-accent: #8460e8; }
+.landing-use-teach { --use-accent: #38a879; }
+.landing-use-stem { --use-accent: #e09b37; }
+.landing-use-icon { position: relative; z-index: 1; display: grid; width: 44px; height: 44px; place-items: center; margin-bottom: 25px; border: 1px solid color-mix(in srgb, var(--use-accent) 28%, var(--line)); border-radius: 13px; background: color-mix(in srgb, var(--use-accent) 11%, var(--panel)); color: var(--use-accent); }
+.landing-use-card > small { color: var(--use-accent); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.landing-use-card h3 { max-width: 260px; margin: 9px 0 8px; color: var(--ink); font-size: 19px; line-height: 1.2; letter-spacing: -.035em; }
+.landing-use-card p { max-width: 310px; min-height: 47px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.landing-use-card button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; margin-top: 18px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.landing-use-card button:hover, .landing-use-card button:focus-visible { color: var(--accent); outline: none; }
+.landing-how { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: clamp(30px, 7vw, 90px); align-items: center; margin: 10px 0 62px; padding: clamp(26px, 5vw, 54px); border: 1px solid var(--line); border-radius: 20px; background: linear-gradient(125deg, color-mix(in srgb, var(--accent-soft) 55%, var(--panel)), var(--panel) 62%); scroll-margin-top: 84px; }
+.landing-section-eyebrow { color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .17em; }
+.landing-how-copy h2 { max-width: 390px; margin: 11px 0 12px; color: var(--ink); font-size: clamp(27px, 3.5vw, 39px); line-height: 1.05; letter-spacing: -.06em; }
+.landing-how-copy > p { max-width: 360px; color: var(--muted); font-size: 13px; line-height: 1.75; }
+.landing-how-copy .hero-new-file { margin-top: 22px; }
+.landing-how-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.landing-how-steps li { display: grid; grid-template-columns: 40px 1fr; gap: 15px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+.landing-how-steps li:first-child { padding-top: 0; }
+.landing-how-steps li:last-child { padding-bottom: 0; border-bottom: 0; }
+.landing-how-steps li > span { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; font-weight: 800; }
+.landing-how-steps strong { color: var(--ink); font-size: 13px; }
+.landing-how-steps p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+@media (max-width: 760px) {
+  .landing-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-use-grid { grid-template-columns: 1fr; }
+  .landing-use-card { min-height: 0; }
+  .landing-use-card p { min-height: 0; }
+  .landing-how { grid-template-columns: 1fr; gap: 28px; margin-bottom: 42px; }
+}
+@media (max-width: 520px) {
+  .landing-feature-grid { grid-template-columns: 1fr; }
+  .landing-use-cases { padding: 40px 0 46px; }
+  .landing-use-card { padding: 20px; }
+  .landing-how { padding: 23px 20px; border-radius: 15px; }
+  .landing-nav { gap: 4px; }
+  .landing-nav a { padding: 7px 8px; font-size: 10px; }
+}
