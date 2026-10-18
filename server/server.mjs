@@ -23,6 +23,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS team_board_access (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('view','edit')), PRIMARY KEY(team_id,board_id));
   CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 `)
+const accessColumns = db.prepare('PRAGMA table_info(board_access)').all().map((column) => column.name)
+if (!accessColumns.includes('can_download')) db.exec('ALTER TABLE board_access ADD COLUMN can_download INTEGER NOT NULL DEFAULT 0')
 const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name)
 if (!userColumns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
 if (!userColumns.includes('github_id')) db.exec('ALTER TABLE users ADD COLUMN github_id TEXT')
@@ -136,11 +138,11 @@ const notifyBoard = (boardId, type) => {
 const boardRole = (boardId, userId) => {
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(boardId)
   if (!board) return null
-  if (board.owner_id === userId) return { board, role: 'owner' }
-  const access = db.prepare('SELECT role FROM board_access WHERE board_id = ? AND user_id = ?').get(boardId, userId)
+  if (board.owner_id === userId) return { board, role: 'owner', canDownload: true }
+  const access = db.prepare('SELECT role,can_download FROM board_access WHERE board_id = ? AND user_id = ?').get(boardId, userId)
   const teamAccess = db.prepare('SELECT tba.role FROM team_board_access tba JOIN team_members tm ON tm.team_id=tba.team_id WHERE tba.board_id=? AND tm.user_id=? ORDER BY CASE tba.role WHEN \'edit\' THEN 0 ELSE 1 END LIMIT 1').get(boardId, userId)
   const role = access?.role === 'edit' || teamAccess?.role === 'edit' ? 'edit' : access?.role ?? teamAccess?.role
-  return role ? { board, role } : null
+  return role ? { board, role, canDownload: Boolean(access?.can_download) } : null
 }
 const shapeBoard = (row) => ({ id: row.id, ownerId: row.owner_id, ownerName: db.prepare('SELECT username FROM users WHERE id = ?').get(row.owner_id)?.username, folderId: row.folder_id, name: row.name, state: JSON.parse(row.state_json), updatedAt: row.updated_at })
 
@@ -388,7 +390,10 @@ async function handler(req, res) {
     }
     if (route === '/api/boards' && method === 'GET') {
       const rows = db.prepare('SELECT DISTINCT b.* FROM boards b LEFT JOIN board_access a ON a.board_id=b.id LEFT JOIN team_board_access tba ON tba.board_id=b.id LEFT JOIN team_members tm ON tm.team_id=tba.team_id WHERE b.owner_id=? OR a.user_id=? OR tm.user_id=? ORDER BY b.updated_at DESC').all(user.id, user.id, user.id)
-      return sendJson(res, 200, { boards: rows.map(shapeBoard) })
+      return sendJson(res, 200, { boards: rows.map((row) => {
+        const permission = boardRole(row.id, user.id)
+        return { ...shapeBoard(row), role: permission?.role, canDownload: permission?.canDownload ?? false }
+      }) })
     }
     if (route === '/api/boards' && method === 'POST') {
       const { name, folderId, state } = await readBody(req)
@@ -418,7 +423,7 @@ async function handler(req, res) {
       const action = boardMatch[2]
       const permission = boardRole(id, user.id)
       if (!permission) return sendJson(res, 403, { error: 'You do not have access to this board.' })
-      if (!action && method === 'GET') return sendJson(res, 200, { board: shapeBoard(permission.board), role: permission.role })
+      if (!action && method === 'GET') return sendJson(res, 200, { board: shapeBoard(permission.board), role: permission.role, canDownload: permission.canDownload ?? false })
       if (!action && method === 'PUT') {
         if (permission.role === 'view') return sendJson(res, 403, { error: 'This board is read-only for your account.' })
         const { name, folderId, state } = await readBody(req)
@@ -430,18 +435,18 @@ async function handler(req, res) {
       }
       if (action === 'share' && method === 'GET') {
         if (permission.role !== 'owner') return sendJson(res, 403, { error: 'Only the board owner can manage access.' })
-        const rows = db.prepare('SELECT u.id,u.username,a.role FROM board_access a JOIN users u ON u.id=a.user_id WHERE a.board_id=? ORDER BY u.username').all(id)
+        const rows = db.prepare('SELECT u.id,u.username,a.role,a.can_download AS canDownload FROM board_access a JOIN users u ON u.id=a.user_id WHERE a.board_id=? ORDER BY u.username').all(id)
         return sendJson(res, 200, { access: rows })
       }
       if (action === 'share' && method === 'POST') {
         if (permission.role !== 'owner') return sendJson(res, 403, { error: 'Only the board owner can manage access.' })
-        const { username, role } = await readBody(req)
+        const { username, role, canDownload = false } = await readBody(req)
         const target = db.prepare('SELECT id FROM users WHERE username=?').get(String(username ?? '').trim())
         if (!target) return sendJson(res, 404, { error: 'Create an account for that person first.' })
-        if (!['view', 'edit'].includes(role)) return sendJson(res, 400, { error: 'Choose view or edit access.' })
-        db.prepare('INSERT INTO board_access(board_id,user_id,role) VALUES(?,?,?) ON CONFLICT(board_id,user_id) DO UPDATE SET role=excluded.role').run(id, target.id, role)
+        if (!['view', 'edit'].includes(role) || typeof canDownload !== 'boolean' || (role === 'edit' && canDownload)) return sendJson(res, 400, { error: 'Choose read, edit, or download access.' })
+        db.prepare('INSERT INTO board_access(board_id,user_id,role,can_download) VALUES(?,?,?,?) ON CONFLICT(board_id,user_id) DO UPDATE SET role=excluded.role,can_download=excluded.can_download').run(id, target.id, role, canDownload ? 1 : 0)
         notifyBoard(id, 'access-updated')
-        return sendJson(res, 200, { username, role })
+        return sendJson(res, 200, { username, role, canDownload })
       }
       if (action === 'share' && method === 'DELETE') {
         if (permission.role !== 'owner') return sendJson(res, 403, { error: 'Only the board owner can manage access.' })
