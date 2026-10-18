@@ -908,6 +908,7 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [cloudBoards, setCloudBoards] = useState<CloudBoard[]>([])
   const cloudKeys = useRef<Record<number, string>>({})
+  const cloudSyncedSnapshots = useRef<Record<number, string>>({})
   const [cloudFolders, setCloudFolders] = useState<{ id: number; name: string }[]>([])
   const [folderName, setFolderName] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
@@ -998,6 +999,7 @@ function App() {
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   useEffect(() => {
     const openShortcuts = () => setShortcutsOpen(true)
@@ -1398,6 +1400,7 @@ function App() {
       const nextIds = { ...cloudBoardIds, [currentBoard.name]: result.board.id }
       if (encryptionKey) cloudKeys.current[result.board.id] = encryptionKey
       setCloudBoardIds(nextIds)
+      cloudSyncedSnapshots.current[result.board.id] = JSON.stringify(state)
       localStorage.setItem('doomnotes:cloud-board-ids', JSON.stringify(nextIds))
       setCloudMessage('Saved to your OzooNotes server.')
       setCloudSaveOpen(false)
@@ -1641,6 +1644,8 @@ function App() {
           if (!key) return
           remoteState = await decryptBoardState(remote.state, key)
         } else remoteState = remote.state
+        cloudSyncedSnapshots.current[id] = JSON.stringify(remoteState)
+        setCloudSyncStatus('synced')
         setBoards((current) => current.map((item, index) => index === localIndex ? { ...item, pages: remoteState.pages, pageSize: remoteState.pageSize ?? 'A4', infinite: remoteState.infinite ?? false, orientation: remoteState.orientation, pageOrientations: remoteState.pageOrientations, pageBackground: remoteState.pageBackground, hiddenLayers: remoteState.hiddenLayers ?? [] } : item))
         setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(remoteState.pageStrokes.map((items, index) => [`${localIndex}:${index + 1}`, items])) }))
         if (localIndex === activeBoard) {
@@ -1925,6 +1930,53 @@ function App() {
       window.removeEventListener('pagehide', saveBoard)
     }
   }, [boards, activeBoard, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
+
+  useEffect(() => {
+    const board = boards[activeBoard]
+    const id = board ? cloudBoardIds[board.name] : undefined
+    const remote = id ? cloudBoards.find((item) => item.id === id) : undefined
+    if (!cloudUser || !board || !id || !remote || (remote.role !== 'owner' && remote.role !== 'edit')) return
+    const snapshotState = {
+      pages: board.pages,
+      pageSize,
+      infinite: infinitePage,
+      orientation,
+      pageOrientations: board.pageOrientations,
+      pageBackground,
+      gridEnabled,
+      showScale,
+      hiddenLayers: board.hiddenLayers ?? [],
+      pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []),
+    }
+    const snapshot = JSON.stringify(snapshotState)
+    const lastSnapshot = cloudSyncedSnapshots.current[id]
+    if (lastSnapshot === undefined) {
+      cloudSyncedSnapshots.current[id] = snapshot
+      return
+    }
+    if (lastSnapshot === snapshot) return
+    setCloudSyncStatus('syncing')
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const encrypted = isEncryptedBoardState(remote.state)
+          const key = cloudKeys.current[id]
+          if (encrypted && !key) throw new Error('Unlock this encrypted note before syncing changes.')
+          const savedState = encrypted && key ? await encryptBoardState(snapshotState, key) : snapshotState
+          await apiRequest(`/api/boards/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ name: board.name, folderId: remote.folderId, state: savedState }),
+          })
+          cloudSyncedSnapshots.current[id] = snapshot
+          setCloudSyncStatus('synced')
+        } catch {
+          setCloudSyncStatus('error')
+        }
+      })()
+    }, 850)
+    return () => window.clearTimeout(timer)
+  }, [cloudUser, cloudBoardIds, cloudBoards, activeBoard, boards, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
+
   const getBoardDocument = () => ({ format: 'doomnotes', version: 1, ...boards[activeBoard], name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
   const downloadNamedBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob)
@@ -3176,7 +3228,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
+          <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
         </section>
       </div>
       {newFileDialog}
