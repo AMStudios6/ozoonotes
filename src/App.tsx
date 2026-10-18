@@ -10,6 +10,7 @@ import CodeSimulator from './CodeSimulator'
 import CircuitSimulator from './CircuitSimulator'
 import CalculusSimulator from './CalculusSimulator'
 import ProjectStudio from './ProjectsPage'
+import RoadmapsPage from './RoadmapsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 import { AdminPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
@@ -732,7 +733,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
   return 'home'
 }
 
@@ -913,7 +914,7 @@ function App() {
   const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -922,7 +923,7 @@ function App() {
     url.hash = anchor ? `#${anchor}` : ''
     window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
     setSitePage(nextPage)
-    if (nextPage === 'signin') sessionStorage.setItem('ozoo:after-login', 'dashboard')
+    if (nextPage === 'signin' && !sessionStorage.getItem('ozoo:after-login')) sessionStorage.setItem('ozoo:after-login', 'dashboard')
     if (nextPage === 'profile') setProfileOpen(true)
     if (anchor) window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }), 60)
     else window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -933,7 +934,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -2840,12 +2841,30 @@ function App() {
     setShowNewFileDialog(true)
   }
   const openInfiniteBoard = () => {
+    const openBoardIndex = boards.findIndex((board) => board.infinite)
+    if (openBoardIndex >= 0) {
+      activateBoard(openBoardIndex)
+      navigatePage('notes')
+      return
+    }
     const existing = recentFiles.find((name) => {
       try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') as { infinite?: boolean }).infinite === true }
       catch { return false }
     })
     if (existing) { openSavedFile(existing); return }
-    addBoard('Infinite Board', 'Blank', 'Infinite')
+    let name = 'Infinite Board'
+    let suffix = 2
+    while (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name)) || recentFiles.some((file) => normalizeBoardName(file) === normalizeBoardName(name)) || localStorage.getItem(`doomnotes:${name}`) !== null) {
+      name = `Infinite Board ${suffix++}`
+    }
+    try {
+      localStorage.setItem(`doomnotes:${name}`, JSON.stringify({ name, pages: 1, pageSize: 'Infinite', infinite: true, orientation: 'landscape', pageOrientations: ['landscape'], pageBackground: 'auto', notebook: 'Inbox', tags: [], titles: [], hiddenLayers: [], gridEnabled: false, showScale: false, pageStrokes: [[]] }))
+      setRecentFiles((current) => [name, ...current.filter((file) => file !== name)])
+      openSavedFile(name)
+    } catch {
+      setSaveNotice('Could not prepare the Infinite Board in browser storage')
+      window.setTimeout(() => setSaveNotice(''), 3000)
+    }
   }
   const saveFileOrganization = (name: string, notebook: string, rawTags: string) => {
     const tags = [...new Set(rawTags.split(',').map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean))]
@@ -3195,11 +3214,12 @@ function App() {
   if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
   if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onBack={() => setProjectsPageOpen(false)} />
 
-  if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
-  if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
-  if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
+  if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
-  if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
+  if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
 
   if (boards.length === 0 || sitePage === 'dashboard') {
     return (
@@ -3210,7 +3230,8 @@ function App() {
             <a className="landing-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }} aria-label="Open dashboard">Dashboard</a>
             <nav className="landing-nav" aria-label="Main navigation">
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
-              <button type="button" onClick={openInfiniteBoard}>∞ Infinite board</button>
+              <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')}>Road map</button>
+              <button type="button" className="landing-nav-project" onClick={openInfiniteBoard}>∞ Infinite board</button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
