@@ -1235,3 +1235,85 @@
   }
 }
 
+
+
+/* Profile editing controls */
+.profile-menu-actions .profile-edit-action {
+  margin-bottom: 4px;
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 750;
+}
+.profile-menu-actions .profile-edit-action:hover,
+.profile-menu-actions .profile-edit-action:focus-visible {
+  border-color: var(--accent);
+}
+.profile-avatar-photo {
+  overflow: hidden;
+  object-fit: cover;
+}
+.profile-overlay { z-index: 80; }
+.profile-editor-dialog {
+  width: min(500px, 100%);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+}
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--workspace);
+}
+.profile-photo-preview {
+  width: 68px;
+  height: 68px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 800;
+  object-fit: cover;
+}
+.profile-photo-row > div { display: grid; justify-items: start; gap: 4px; }
+.profile-photo-row small,
+.profile-editor-dialog .dialog-label small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.profile-upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-raised);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.profile-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.profile-remove-photo { width: auto; margin: 0; padding: 2px 0; font-size: 10px; }
+.profile-remove-photo:disabled { opacity: .45; cursor: default; }
+.profile-password-section { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); }
+.profile-password-section h3 { margin: 0 0 10px; font-size: 14px; }
+.profile-editor-dialog .dialog-label input:disabled { opacity: .72; cursor: not-allowed; }
