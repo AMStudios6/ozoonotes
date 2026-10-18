@@ -1,20 +1,16 @@
 import { useEffect, useState } from 'react'
 
-export type SimulatorTheme = 'forest' | 'purple' | 'white-purple' | 'red-white' | 'red-black' | 'doom'
+export type SimulatorTheme = 'purple' | 'white-purple'
 
 export const simulatorThemes: { id: SimulatorTheme; name: string }[] = [
-  { id: 'forest', name: 'Forest & Mint' },
   { id: 'purple', name: 'Purple & Black' },
   { id: 'white-purple', name: 'White & Purple' },
-  { id: 'red-white', name: 'Red & White' },
-  { id: 'red-black', name: 'Red & Black' },
-  { id: 'doom', name: 'Emerald Armor' },
 ]
 
 function readTheme(): SimulatorTheme {
   try {
     const saved = localStorage.getItem('ozoo:color-theme') as SimulatorTheme | null
-    return simulatorThemes.some((theme) => theme.id === saved) ? saved! : 'forest'
+    return simulatorThemes.some((theme) => theme.id === saved) ? saved! : 'purple'
   } catch { return 'forest' }
 }
 
