@@ -36,6 +36,7 @@ if (!userColumns.includes('password_enabled')) {
   db.exec('ALTER TABLE users ADD COLUMN password_enabled INTEGER NOT NULL DEFAULT 1')
   db.exec('UPDATE users SET password_enabled=0 WHERE google_sub IS NOT NULL OR github_id IS NOT NULL')
 }
+if (!userColumns.includes('plan')) db.exec("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'normal' CHECK(plan IN ('normal','pro'))")
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
@@ -58,6 +59,7 @@ const allowedOrigins = new Set([appOrigin, 'https://www.ozoonotes.com', 'http://
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && googleRedirectUri)
 const githubEnabled = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && githubRedirectUri)
 const sessionTokenHash = (token) => createHash('sha256').update(token).digest('hex')
+const adminUsernames = new Set((process.env.ADMIN_USERNAMES ?? '').split(',').map((name) => name.trim().toLowerCase()).filter(Boolean))
 const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254
 const createAuthToken = (userId, purpose, ttlMs) => {
   const token = randomBytes(32).toString('hex')
@@ -130,7 +132,8 @@ const sessionUser = (req) => {
   if (!sessionId) return null
   const hash = sessionTokenHash(sessionId)
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
-  return db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now()) ?? null
+  const user = db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword, users.plan FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now())
+  return user ? { ...user, isAdmin: adminUsernames.has(String(user.username).toLowerCase()) } : null
 }
 const notifyBoard = (boardId, type) => {
   for (const client of eventClients.get(boardId) ?? []) client.write(`event: ${type}\ndata: {}\n\n`)
@@ -327,7 +330,8 @@ async function handler(req, res) {
       if (user.email && !user.email_verified_at) return sendJson(res, 403, { error: 'Verify your email before signing in.', code: 'EMAIL_NOT_VERIFIED' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
-      return sendJson(res, 200, { user: db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword FROM users WHERE id=?').get(user.id) }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
+      const loggedInUser = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan FROM users WHERE id=?').get(user.id)
+      return sendJson(res, 200, { user: { ...loggedInUser, isAdmin: adminUsernames.has(String(loggedInUser.username).toLowerCase()) } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/logout' && method === 'POST') {
       const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
@@ -354,14 +358,31 @@ async function handler(req, res) {
     const user = sessionUser(req)
     if (route === '/api/me' && method === 'GET') return user ? sendJson(res, 200, { user }) : sendJson(res, 200, { user: null })
     if (!user) return sendJson(res, 401, { error: 'Sign in to use cloud features.' })
+    if (route.startsWith('/api/admin/')) {
+      if (!user.isAdmin) return sendJson(res, 403, { error: 'Admin access is not enabled for this account.' })
+      if (route === '/api/admin/overview' && method === 'GET') {
+        const totals = db.prepare('SELECT COUNT(*) AS users, SUM(CASE WHEN plan=\'pro\' THEN 1 ELSE 0 END) AS proUsers FROM users').get()
+        const users = db.prepare('SELECT u.id,u.username,u.email,u.plan,u.created_at AS createdAt,COUNT(DISTINCT b.id) AS cloudBoards FROM users u LEFT JOIN boards b ON b.owner_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 250').all()
+        return sendJson(res, 200, { totals: { users: Number(totals.users ?? 0), proUsers: Number(totals.proUsers ?? 0) }, users })
+      }
+      const planRoute = route.match(/^\/api\/admin\/users\/(\d+)\/plan$/)
+      if (planRoute && method === 'PATCH') {
+        const { plan } = await readBody(req, 5_000)
+        if (plan !== 'normal' && plan !== 'pro') return sendJson(res, 400, { error: 'Choose the Normal or Pro plan.' })
+        const result = db.prepare('UPDATE users SET plan=? WHERE id=?').run(plan, Number(planRoute[1]))
+        if (!result.changes) return sendJson(res, 404, { error: 'That account was not found.' })
+        return sendJson(res, 200, { ok: true, plan })
+      }
+      return sendJson(res, 404, { error: 'Admin endpoint not found.' })
+    }
     if (route === '/api/me/profile' && method === 'PUT') {
       const { displayName, avatar } = await readBody(req, 2 * 1024 * 1024)
       const cleanName = String(displayName ?? '').trim()
       if (!cleanName || cleanName.length > 60) return sendJson(res, 400, { error: 'Choose a display name from 1 to 60 characters.' })
       if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
       db.prepare('UPDATE users SET display_name=?,avatar_data=? WHERE id=?').run(cleanName, avatar || null, user.id)
-      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword FROM users WHERE id=?').get(user.id)
-      return sendJson(res, 200, { user: updated })
+      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan FROM users WHERE id=?').get(user.id)
+      return sendJson(res, 200, { user: { ...updated, isAdmin: adminUsernames.has(String(updated.username).toLowerCase()) } })
     }
     if (route === '/api/me/password' && method === 'POST') {
       const { currentPassword, newPassword } = await readBody(req, 10_000)
@@ -399,6 +420,8 @@ async function handler(req, res) {
       const { name, folderId, state } = await readBody(req)
       const cleanName = String(name ?? '').trim().slice(0, 120)
       if (!cleanName || !state || typeof state !== 'object') return sendJson(res, 400, { error: 'Board name and board data are required.' })
+      const ownedBoardCount = db.prepare('SELECT COUNT(*) AS count FROM boards WHERE owner_id=?').get(user.id).count
+      if (user.plan !== 'pro' && ownedBoardCount >= 1) return sendJson(res, 403, { error: 'Normal accounts can keep one cloud board for collaboration. Your other boards remain saved locally.' })
       if (folderId && !db.prepare('SELECT id FROM folders WHERE id=? AND owner_id=?').get(folderId, user.id)) return sendJson(res, 400, { error: 'That folder does not exist.' })
       const result = db.prepare('INSERT INTO boards(owner_id,folder_id,name,state_json) VALUES(?,?,?,?)').run(user.id, folderId || null, cleanName, JSON.stringify(state))
       const board = db.prepare('SELECT * FROM boards WHERE id=?').get(Number(result.lastInsertRowid))
@@ -444,6 +467,10 @@ async function handler(req, res) {
         const target = db.prepare('SELECT id FROM users WHERE username=?').get(String(username ?? '').trim())
         if (!target) return sendJson(res, 404, { error: 'Create an account for that person first.' })
         if (!['view', 'edit'].includes(role) || typeof canDownload !== 'boolean' || (role === 'edit' && canDownload)) return sendJson(res, 400, { error: 'Choose read, edit, or download access.' })
+        if (user.plan !== 'pro') {
+          const otherSharedBoard = db.prepare('SELECT b.id FROM boards b WHERE b.owner_id=? AND b.id<>? AND (EXISTS(SELECT 1 FROM board_access a WHERE a.board_id=b.id) OR EXISTS(SELECT 1 FROM team_board_access t WHERE t.board_id=b.id) OR EXISTS(SELECT 1 FROM public_links p WHERE p.board_id=b.id)) LIMIT 1').get(user.id, id)
+          if (otherSharedBoard) return sendJson(res, 403, { error: 'Normal accounts can collaborate on one document. Fun Plan removes this limit.' })
+        }
         db.prepare('INSERT INTO board_access(board_id,user_id,role,can_download) VALUES(?,?,?,?) ON CONFLICT(board_id,user_id) DO UPDATE SET role=excluded.role,can_download=excluded.can_download').run(id, target.id, role, canDownload ? 1 : 0)
         notifyBoard(id, 'access-updated')
         return sendJson(res, 200, { username, role, canDownload })
@@ -462,6 +489,7 @@ async function handler(req, res) {
         if (permission.role !== 'owner') return sendJson(res, 403, { error: 'Only the board owner can manage team access.' })
         const { teamId, role } = await readBody(req)
         if (!['view','edit'].includes(role) || !db.prepare('SELECT id FROM teams WHERE id=? AND owner_id=?').get(teamId, user.id)) return sendJson(res, 400, { error: 'Choose a team you own and a valid permission.' })
+        if (user.plan !== 'pro' && db.prepare('SELECT b.id FROM boards b WHERE b.owner_id=? AND b.id<>? AND (EXISTS(SELECT 1 FROM board_access a WHERE a.board_id=b.id) OR EXISTS(SELECT 1 FROM team_board_access t WHERE t.board_id=b.id) OR EXISTS(SELECT 1 FROM public_links p WHERE p.board_id=b.id)) LIMIT 1').get(user.id, id)) return sendJson(res, 403, { error: 'Normal accounts can collaborate on one document. Fun Plan removes this limit.' })
         db.prepare('INSERT INTO team_board_access(team_id,board_id,role) VALUES(?,?,?) ON CONFLICT(team_id,board_id) DO UPDATE SET role=excluded.role').run(teamId, id, role)
         notifyBoard(id, 'access-updated')
         return sendJson(res, 200, { ok: true })
@@ -474,6 +502,7 @@ async function handler(req, res) {
       }
       if (action === 'public-link' && method === 'POST') {
         if (permission.role !== 'owner') return sendJson(res, 403, { error: 'Only the board owner can create a public link.' })
+        if (user.plan !== 'pro' && db.prepare('SELECT b.id FROM boards b WHERE b.owner_id=? AND b.id<>? AND (EXISTS(SELECT 1 FROM board_access a WHERE a.board_id=b.id) OR EXISTS(SELECT 1 FROM team_board_access t WHERE t.board_id=b.id) OR EXISTS(SELECT 1 FROM public_links p WHERE p.board_id=b.id)) LIMIT 1').get(user.id, id)) return sendJson(res, 403, { error: 'Normal accounts can collaborate on one document. Fun Plan removes this limit.' })
         const token = randomBytes(24).toString('hex')
         db.prepare('INSERT INTO public_links(token,board_id) VALUES(?,?)').run(token, id)
         return sendJson(res, 201, { url: `/shared/${token}`, token })
@@ -488,6 +517,7 @@ async function handler(req, res) {
         return sendJson(res, 200, { comments: rows })
       }
       if (action === 'comments' && method === 'POST') {
+        if (user.plan !== 'pro') return sendJson(res, 403, { error: 'Comments are included in Fun Plan.' })
         const { body } = await readBody(req)
         const cleanBody = String(body ?? '').trim().slice(0, 4000)
         if (!cleanBody) return sendJson(res, 400, { error: 'Write a comment first.' })

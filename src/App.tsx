@@ -12,6 +12,7 @@ import CalculusSimulator from './CalculusSimulator'
 import ProjectStudio from './ProjectsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
+import { AdminPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
@@ -26,7 +27,7 @@ type LayerName = 'writing' | 'text' | 'images'
 type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
-type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean }
+type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; isAdmin?: boolean }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
 type CloudBoard = { id: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; canDownload?: boolean; ownerName?: string }
@@ -726,6 +727,14 @@ type RestoredWorkspace = {
   strokesByPage: Record<string, Stroke[]>
 }
 const openWorkspaceStorageKey = 'ozoo:open-workspace'
+const normalDocumentLimit = 5
+const normalSimulationsPerToolPerDay = 2
+
+function readSiteRoute(): SiteRoute {
+  const page = new URLSearchParams(window.location.search).get('page')
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  return 'home'
+}
 
 function readSavedWorkspace(): RestoredWorkspace {
   const empty: RestoredWorkspace = { boards: [], activeBoard: 0, page: 1, pageSize: 'A4', infinitePage: false, orientation: 'portrait', pageBackground: 'auto', gridEnabled: false, showScale: false, strokesByPage: {} }
@@ -901,6 +910,32 @@ function GraphSimulator({ onBack }: { onBack: () => void }) {
 function App() {
   useEffect(() => installAppContextMenu(), [])
   const localOnly = import.meta.env.VITE_LOCAL_ONLY === 'true'
+  const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
+  const navigatePage = (target: string) => {
+    const [pageTarget, anchor] = target.split('#', 2)
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const url = new URL(window.location.href)
+    url.searchParams.delete('workspace')
+    url.searchParams.delete('simulator')
+    if (nextPage === 'home') url.searchParams.delete('page')
+    else url.searchParams.set('page', nextPage)
+    url.hash = anchor ? `#${anchor}` : ''
+    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    setSitePage(nextPage)
+    if (nextPage === 'signin') sessionStorage.setItem('ozoo:after-login', 'dashboard')
+    if (nextPage === 'profile') setProfileOpen(true)
+    if (anchor) window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }), 60)
+    else window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  useEffect(() => {
+    const syncRoute = () => setSitePage(readSiteRoute())
+    window.addEventListener('popstate', syncRoute)
+    return () => window.removeEventListener('popstate', syncRoute)
+  }, [])
+  useEffect(() => {
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    document.title = titles[sitePage]
+  }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
   const [boards, setBoards] = useState<Board[]>(initialWorkspace.boards)
   const [notebooks, setNotebooks] = useState<string[]>(() => { try { const value = JSON.parse(localStorage.getItem('ozoo:notebooks') ?? '[]'); return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [] } catch { return [] } })
@@ -958,6 +993,11 @@ function App() {
   const [graphRange, setGraphRange] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 })
   const [graphError, setGraphError] = useState('')
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
+  const isProUser = cloudUser?.plan === 'pro'
+  const [adminUsers, setAdminUsers] = useState<AdminAccount[]>([])
+  const [adminTotals, setAdminTotals] = useState({ users: 0, proUsers: 0 })
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [adminError, setAdminError] = useState('')
   const [authStatus, setAuthStatus] = useState<'loading' | 'signed-out' | 'signed-in' | 'error'>('loading')
   const [googleLoginEnabled, setGoogleLoginEnabled] = useState(false)
   const [githubLoginEnabled, setGithubLoginEnabled] = useState(false)
@@ -971,7 +1011,7 @@ function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [cloudBoardIds, setCloudBoardIds] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem('doomnotes:cloud-board-ids') ?? '{}') as Record<string, number>)
   const [accountOpen, setAccountOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(() => new URLSearchParams(window.location.search).get('page') === 'profile')
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null)
   const [profileCurrentPassword, setProfileCurrentPassword] = useState('')
@@ -1063,6 +1103,11 @@ function App() {
   const [autoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
+  const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
+    if (!name || name.includes(':')) return false
+    try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? 'null') as { infinite?: boolean } | null)?.infinite !== true }
+    catch { return true }
+  }).length
   useEffect(() => {
     const openShortcuts = () => setShortcutsOpen(true)
     window.addEventListener('ozoo:open-shortcuts', openShortcuts)
@@ -1317,6 +1362,21 @@ function App() {
   }, [passwordResetToken])
 
   useEffect(() => {
+    if (authStatus !== 'signed-in') return
+    const intended = sessionStorage.getItem('ozoo:after-login')
+    if (intended) {
+      sessionStorage.removeItem('ozoo:after-login')
+      navigatePage(cloudUser?.isAdmin ? 'admin' : intended)
+      return
+    }
+    if (sitePage === 'signin') navigatePage(cloudUser?.isAdmin ? 'admin' : 'dashboard')
+  }, [authStatus, sitePage, cloudUser?.isAdmin])
+
+  useEffect(() => {
+    if (sitePage === 'profile' && authStatus === 'signed-out') navigatePage('signin')
+  }, [sitePage, authStatus])
+
+  useEffect(() => {
     const url = new URL(window.location.href)
     const verificationToken = url.searchParams.get('verify_email')
     const resetToken = url.searchParams.get('reset_password')
@@ -1387,6 +1447,29 @@ function App() {
       setCloudBoardIds(ids)
       localStorage.setItem('doomnotes:cloud-board-ids', JSON.stringify(ids))
     } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not load cloud boards.') }
+  }
+
+  const refreshAdminOverview = async () => {
+    setAdminLoading(true)
+    setAdminError('')
+    try {
+      const result = await apiRequest<{ users: AdminAccount[]; totals: { users: number; proUsers: number } }>('/api/admin/overview')
+      setAdminUsers(result.users)
+      setAdminTotals(result.totals)
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : 'Could not load admin accounts.')
+    } finally { setAdminLoading(false) }
+  }
+  useEffect(() => {
+    if (sitePage === 'admin' && authStatus === 'signed-in') void refreshAdminOverview()
+  }, [sitePage, authStatus])
+  const updateAdminPlan = async (id: number, plan: 'normal' | 'pro') => {
+    try {
+      await apiRequest(`/api/admin/users/${id}/plan`, { method: 'PATCH', body: JSON.stringify({ plan }) })
+      const previousPlan = adminUsers.find((user) => user.id === id)?.plan
+      setAdminUsers((users) => users.map((user) => user.id === id ? { ...user, plan } : user))
+      if (previousPlan !== plan) setAdminTotals((totals) => ({ ...totals, proUsers: totals.proUsers + (plan === 'pro' ? 1 : -1) }))
+    } catch (error) { setAdminError(error instanceof Error ? error.message : 'Could not update this plan.') }
   }
 
   const submitAccount = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -2044,6 +2127,7 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
   const startScreenRecording = async () => {
+    if (!isProUser) { window.alert('Screen recording is included in Fun Plan.'); return }
     setScreenRecordingError('')
     if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
       setScreenRecordingError('Screen recording is not supported in this browser. Try the latest version of Chrome or Edge.')
@@ -2120,6 +2204,7 @@ function App() {
     }
   }
   const startVoiceRecording = async () => {
+    if (!isProUser) { window.alert('Voice recording is included in Fun Plan.'); return }
     setVoiceRecordingError('')
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setVoiceRecordingError('Voice recording is not supported in this browser. Try the latest version of Chrome or Edge.')
@@ -2375,6 +2460,7 @@ function App() {
       setGridEnabled(saved.gridEnabled ?? false)
       setShowScale(saved.showScale ?? false)
       setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(saved.pageStrokes.map((strokes, index) => [`${boardIndex}:${index + 1}`, strokes])) }))
+      navigatePage('notes')
     } catch {
       setSaveNotice('This saved file could not be opened')
       window.setTimeout(() => setSaveNotice(''), 2400)
@@ -2391,6 +2477,7 @@ function App() {
       }
       const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; titles?: SectionTitle[]; hiddenLayers?: LayerName[]; pageStrokes?: Stroke[][] }
       if (documentData.format !== 'doomnotes' || documentData.version !== 1 || typeof documentData.name !== 'string' || !Number.isInteger(documentData.pages) || (documentData.pages ?? 0) < 1 || !Array.isArray(documentData.pageStrokes) || documentData.pageStrokes.length !== documentData.pages) throw new Error('That file is not a valid OzooNotes document.')
+      if (!isProUser && !(documentData.infinite ?? documentData.pageSize === 'Infinite') && countSavedDocuments() >= normalDocumentLimit) throw new Error(`The Normal plan includes up to ${normalDocumentLimit} note documents.`)
       if (documentData.pageSize !== undefined && !['Infinite', 'A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'].includes(documentData.pageSize)) throw new Error('That OzooNotes file uses an unsupported page size.')
       const boardIndex = boards.length
       const importedSize = documentData.pageSize ?? 'A4'
@@ -2411,6 +2498,7 @@ function App() {
       setShowScale(documentData.showScale ?? false)
       setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(documentData.pageStrokes!.map((pageStrokes, index) => [`${boardIndex}:${index + 1}`, pageStrokes])) }))
       setRecentFiles((files) => [documentData.name!, ...files.filter((name) => name !== documentData.name)])
+      navigatePage('notes')
       setSaveNotice(`Opened ${documentData.name}`)
       window.setTimeout(() => setSaveNotice(''), 2400)
     } catch (error) {
@@ -2674,22 +2762,42 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const consumeSimulatorUse = (tool: string) => {
+    if (isProUser) return true
+    const today = new Date().toISOString().slice(0, 10)
+    let usage: { date: string; counts: Record<string, number> } = { date: today, counts: {} }
+    try {
+      const saved = JSON.parse(localStorage.getItem('ozoo:simulator-usage') ?? 'null') as typeof usage | null
+      if (saved?.date === today && saved.counts) usage = saved
+    } catch { /* Start a fresh daily allowance when browser data cannot be read. */ }
+    if ((usage.counts[tool] ?? 0) >= normalSimulationsPerToolPerDay) {
+      window.alert(`The Normal plan includes ${normalSimulationsPerToolPerDay} ${tool} simulator launches per day. Fun Plan removes this limit.`)
+      return false
+    }
+    usage.counts[tool] = (usage.counts[tool] ?? 0) + 1
+    try { localStorage.setItem('ozoo:simulator-usage', JSON.stringify(usage)) } catch { /* Simulator access remains available if storage is full. */ }
+    return true
+  }
   const launchGraphSimulator = () => {
+    if (!consumeSimulatorUse('graph')) return
     setSimulatorMenuOpen(false)
     setGraphSimulatorOpen(true)
   }
 
   const launchCalculusSimulator = () => {
+    if (!consumeSimulatorUse('calculus')) return
     setSimulatorMenuOpen(false)
     setCalculusSimulatorOpen(true)
   }
 
   const launchCircuitSimulator = () => {
+    if (!consumeSimulatorUse('electronics')) return
     setSimulatorMenuOpen(false)
     setCircuitSimulatorOpen(true)
   }
 
   const launchCodeSimulator = (mode: 'cpp' | 'python' | 'java' | 'web') => {
+    if (!consumeSimulatorUse(mode)) return
     setSimulatorMenuOpen(false)
     setCodeSimulatorMode(mode)
   }
@@ -2718,6 +2826,11 @@ function App() {
   }
 
   const addBoard = (name?: string, template?: PageTemplate, size: PageSize = 'A4') => {
+    const savedDocuments = countSavedDocuments()
+    if (!isProUser && size !== 'Infinite' && savedDocuments >= normalDocumentLimit) {
+      window.alert(`The Normal plan includes up to ${normalDocumentLimit} note documents. Your files remain available locally; upgrade access is managed separately.`)
+      return
+    }
     setDraftName(name ?? `File ${nextFileNumber}`)
     setDraftNameError('')
     setDraftSize(size)
@@ -2725,6 +2838,14 @@ function App() {
     setDraftOrientation('portrait')
     setDraftBackground('auto')
     setShowNewFileDialog(true)
+  }
+  const openInfiniteBoard = () => {
+    const existing = recentFiles.find((name) => {
+      try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') as { infinite?: boolean }).infinite === true }
+      catch { return false }
+    })
+    if (existing) { openSavedFile(existing); return }
+    addBoard('Infinite Board', 'Blank', 'Infinite')
   }
   const saveFileOrganization = (name: string, notebook: string, rawTags: string) => {
     const tags = [...new Set(rawTags.split(',').map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean))]
@@ -2746,7 +2867,13 @@ function App() {
   const createBoard = () => {
     const isInfinite = draftSize === 'Infinite'
     const name = draftName.trim() || `File ${nextFileNumber}`
-    if (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name))) {
+    const savedDocuments = countSavedDocuments()
+    if (!isProUser && !isInfinite && savedDocuments >= normalDocumentLimit) {
+      window.alert(`The Normal plan includes up to ${normalDocumentLimit} note documents. Fun Plan is not available for purchase yet.`)
+      setShowNewFileDialog(false)
+      return
+    }
+    if (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name)) || recentFiles.some((file) => normalizeBoardName(file) === normalizeBoardName(name)) || localStorage.getItem(`doomnotes:${name}`) !== null) {
       setDraftNameError('A file with this name already exists. Choose a different name.')
       return
     }
@@ -2766,6 +2893,7 @@ function App() {
     setShowScale(false)
     setNextFileNumber(nextFileNumber + 1)
     setShowNewFileDialog(false)
+    navigatePage('notes')
   }
   const openRenameDialog = (name = boards[activeBoard]?.name) => {
     if (!name) return
@@ -2865,7 +2993,7 @@ function App() {
     setAddPageMenuOpen(false)
   }
 
-  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} aria-invalid={Boolean(draftNameError)} aria-describedby={draftNameError ? "draft-name-error" : undefined} onChange={(event) => { setDraftName(event.target.value); setDraftNameError("") }} placeholder={`File ${nextFileNumber}`} /></label>{draftNameError && <p className="field-error" id="draft-name-error" role="alert">{draftNameError}</p>}<fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option><option>Mood board</option><option>Coding notes</option></select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} aria-invalid={Boolean(draftNameError)} aria-describedby={draftNameError ? "draft-name-error" : undefined} onChange={(event) => { setDraftName(event.target.value); setDraftNameError("") }} placeholder={`File ${nextFileNumber}`} /></label>{draftNameError && <p className="field-error" id="draft-name-error" role="alert">{draftNameError}</p>}<fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option>{isProUser && <><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option><option>Mood board</option><option>Coding notes</option></>}</select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
   const renameDialog = renameTarget && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenameTarget(null) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-file-title"><button className="dialog-close" aria-label="Close rename dialog" onClick={() => setRenameTarget(null)}><Icon name="close" size={16} /></button><p className="eyebrow">FILE OPTIONS</p><h2 id="rename-file-title">Rename file</h2><form onSubmit={renameBoard}><label className="dialog-label">File name<input autoFocus required maxLength={120} value={renameDraft} onChange={(event) => { setRenameDraft(event.target.value); setRenameError('') }} /></label>{renameError && <p className="field-error" role="alert">{renameError}</p>}<footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setRenameTarget(null)}>Cancel</button><button className="dialog-create">Save name</button></footer></form></section></div>
   const titleDialog = titleDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTitleDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="section-title-heading"><button className="dialog-close" aria-label="Close section titles" onClick={() => setTitleDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">PAGE {page} SECTION</p><h2 id="section-title-heading">Add a section title</h2><p className="infinite-note">Titles appear in a separate contents page before your notes. They never take up or renumber a document page.</p><form onSubmit={(event) => { event.preventDefault(); addSectionTitle() }}><label className="dialog-label">Title for page {page}<input autoFocus maxLength={100} value={sectionTitleDraft} onChange={(event) => setSectionTitleDraft(event.target.value)} placeholder="e.g. Research links" /></label><button className="dialog-create full-button" disabled={!sectionTitleDraft.trim()}>Add title</button></form>{(boards[activeBoard].titles?.length ?? 0) > 0 && <><h3 className="small-heading">Titles in this board</h3><ul className="section-title-list">{boards[activeBoard].titles?.map((item) => <li key={item.id}><span>{item.title}<small>Page {item.page}</small></span><button type="button" aria-label={`Remove ${item.title}`} onClick={() => removeSectionTitle(item.id)}>Remove</button></li>)}</ul></>}</section></div>
   const exportDialog = exportDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title"><button className="dialog-close" aria-label="Close export options" onClick={() => setExportDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">CUSTOM EXPORT</p><h2 id="export-dialog-title">Choose pages to export</h2><label className="dialog-label">Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'pdf' | 'png' | 'svg')}><option value="pdf">PDF document</option><option value="png">PNG images</option><option value="svg">SVG images</option></select></label><label className="dialog-label">Page numbers<input value={exportPageSelection} onChange={(event) => setExportPageSelection(event.target.value)} placeholder="1, 3-5" /><small>Use commas and ranges, for example: 1, 3-5</small></label>{(boards[activeBoard].titles?.length ?? 0) > 1 && <label className="encryption-choice"><input type="checkbox" checked={exportIncludeIndex} onChange={(event) => setExportIncludeIndex(event.target.checked)} /><span><strong>Include contents index</strong><small>Add the title index before the selected note pages.</small></span></label>}{exportFormat !== 'pdf' && <p className="infinite-note">Each selected page downloads as its own {exportFormat.toUpperCase()} file.</p>}{infinitePage && exportFormat === 'pdf' && <p className="field-error">PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setExportDialogOpen(false)}>Cancel</button><button className="dialog-create" disabled={infinitePage && exportFormat === 'pdf'} onClick={() => void exportSelectedPages()}>Export</button></footer></section></div>
@@ -2929,7 +3057,7 @@ function App() {
     <footer className="dialog-actions"><button className="dialog-create" onClick={() => setShortcutsOpen(false)}>Done</button></footer>
   </section></div>
 
-  const profileDialog = profileOpen && cloudUser && <div className="new-file-overlay profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileOpen(false) }}><section className="new-file-dialog compact-dialog profile-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button className="dialog-close" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">YOUR ACCOUNT</p><h2 id="profile-editor-title">Edit profile</h2><form onSubmit={(event) => { void saveProfile(event) }}><div className="profile-photo-row">{profileAvatar ? <img className="profile-photo-preview" src={profileAvatar} alt="Profile preview" /> : <span className="profile-photo-preview profile-photo-fallback">{(profileDisplayName || cloudUser.username).slice(0, 1).toUpperCase()}</span>}<div><label className="dialog-create profile-upload">Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseProfilePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} /></label><button className="text-button profile-remove-photo" type="button" disabled={!profileAvatar} onClick={() => setProfileAvatar(null)}>Remove photo</button><small>PNG, JPEG, or WebP. Resized to 512 × 512.</small></div></div><label className="dialog-label">Display name<input required maxLength={60} value={profileDisplayName} onChange={(event) => setProfileDisplayName(event.target.value)} /></label><label className="dialog-label">Username<input value={cloudUser.username} disabled /><small>This stays your sign-in and sharing name.</small></label><button className="dialog-create full-button">Save profile</button></form><div className="profile-password-section"><h3>Change password</h3>{cloudUser.hasPassword ? <form onSubmit={(event) => { void changePassword(event) }}><label className="dialog-label">Current password<input required type="password" autoComplete="current-password" value={profileCurrentPassword} onChange={(event) => setProfileCurrentPassword(event.target.value)} /></label><label className="dialog-label">New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={profileNewPassword} onChange={(event) => setProfileNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="dialog-create full-button">Update password</button></form> : <p className="empty-hint">This account signs in with Google or GitHub. Change its password with that provider.</p>}</div>{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
+  const profileDialog = profileOpen && cloudUser && <div className="new-file-overlay profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) navigatePage('dashboard') }}><section className="new-file-dialog compact-dialog profile-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button className="dialog-close" aria-label="Close profile settings" onClick={() => navigatePage('dashboard')}><Icon name="close" size={16} /></button><p className="eyebrow">YOUR ACCOUNT</p><h2 id="profile-editor-title">Edit profile</h2><form onSubmit={(event) => { void saveProfile(event) }}><div className="profile-photo-row">{profileAvatar ? <img className="profile-photo-preview" src={profileAvatar} alt="Profile preview" /> : <span className="profile-photo-preview profile-photo-fallback">{(profileDisplayName || cloudUser.username).slice(0, 1).toUpperCase()}</span>}<div><label className="dialog-create profile-upload">Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseProfilePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} /></label><button className="text-button profile-remove-photo" type="button" disabled={!profileAvatar} onClick={() => setProfileAvatar(null)}>Remove photo</button><small>PNG, JPEG, or WebP. Resized to 512 × 512.</small></div></div><label className="dialog-label">Display name<input required maxLength={60} value={profileDisplayName} onChange={(event) => setProfileDisplayName(event.target.value)} /></label><label className="dialog-label">Username<input value={cloudUser.username} disabled /><small>This stays your sign-in and sharing name.</small></label><button className="dialog-create full-button">Save profile</button></form><div className="profile-password-section"><h3>Change password</h3>{cloudUser.hasPassword ? <form onSubmit={(event) => { void changePassword(event) }}><label className="dialog-label">Current password<input required type="password" autoComplete="current-password" value={profileCurrentPassword} onChange={(event) => setProfileCurrentPassword(event.target.value)} /></label><label className="dialog-label">New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={profileNewPassword} onChange={(event) => setProfileNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="dialog-create full-button">Update password</button></form> : <p className="empty-hint">This account signs in with Google or GitHub. Change its password with that provider.</p>}</div>{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
   const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES ACCOUNT</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}>{authMode === 'register' && <label className="dialog-label">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}<label className="dialog-label">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete={authMode === 'register' ? 'username' : 'username'} value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>{authMode === 'register' && <p className="auth-account-note">Your email is used for sign-in. Email verification and password recovery are not enabled yet.</p>}<button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
@@ -2967,7 +3095,7 @@ function App() {
     return <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="shared-board-view"><header><div className="brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div><span className="shared-readonly">Read-only link</span></header>{sharedBoard ? <><h1>{sharedBoard.name}</h1><div className={`paper shared-paper ${state?.infinite ? 'infinite' : ''}`} style={{ width: state?.infinite ? 'min(2400px, 90vw)' : undefined, aspectRatio: state?.infinite ? '1 / 1' : `${sharedMmOriented[0]} / ${sharedMmOriented[1]}`, backgroundColor: state?.infinite ? undefined : resolvePageBackground(state?.pageBackground ?? 'auto', dark, colorTheme) }}><canvas className="shared-canvas" ref={canvasRef} width={sharedWidth} height={sharedHeight} aria-label="Shared read-only whiteboard" /></div></> : <p>{cloudMessage || 'Opening shared board…'}</p>}</section></main>
   }
 
-  if (authStatus !== 'signed-in') {
+  if (sitePage === 'signin' && authStatus !== 'signed-in') {
     const gateTitle = authStatus === 'loading' ? 'Preparing your workspace…' : authStatus === 'error' ? 'Sign-in is temporarily unavailable' : 'Your notes, ready when you are'
     return (
       <main className={'app ' + (dark ? 'dark' : 'light') + ' auth-app'} data-theme={colorTheme}>
@@ -2976,7 +3104,7 @@ function App() {
             <a className="auth-brand" href="/" aria-label="OzooNotes home">
               <img src={brandLogo} alt="OzooNotes" />
             </a>
-            <a className="auth-dashboard-link" href="/" aria-label="Go to dashboard">Dashboard</a>
+            <a className="auth-dashboard-link" href="/?page=dashboard" aria-label="Go to dashboard">Dashboard</a>
             <label className="auth-theme-picker">
               <span>Theme</span>
               <select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>
@@ -3017,7 +3145,7 @@ function App() {
               <div className="auth-card-icon" aria-hidden="true"><img src={brandLogo} alt="" /></div>
               <p className="auth-card-eyebrow">YOUR PERSONAL WORKSPACE</p>
               <h2 id="auth-heading">{authMode === 'register' ? 'Create your account' : authMode === 'verify' ? 'Verify your email' : authMode === 'forgot' ? 'Reset your password' : authMode === 'reset' ? 'Choose a new password' : gateTitle}</h2>
-              <p className="auth-card-copy">{authMode === 'register' ? 'Create a free account to open your notes, projects, and simulators.' : authMode === 'verify' ? 'We’ll send a fresh one-time verification link to your inbox.' : authMode === 'forgot' ? 'Enter the email address on your account and we’ll send a reset link.' : authMode === 'reset' ? 'Choose a new password for your OzooNotes account.' : 'Sign in to open your notes, projects, and simulators.'}</p>
+              <p className="auth-card-copy">{authMode === 'register' ? 'Create an account for cloud storage, profile tools, and sharing.' : authMode === 'verify' ? 'We’ll send a fresh one-time verification link to your inbox.' : authMode === 'forgot' ? 'Enter the email address on your account and we’ll send a reset link.' : authMode === 'reset' ? 'Choose a new password for your OzooNotes account.' : 'Sign in for cloud storage, account tools, and sharing. You can use the free workspace without an account.'}</p>
 
               {authStatus === 'loading' ? (
                 <div className="auth-loading" role="status" aria-live="polite"><span className="auth-spinner" />Checking your sign-in…</div>
@@ -3067,18 +3195,22 @@ function App() {
   if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
   if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onBack={() => setProjectsPageOpen(false)} />
 
-  if (boards.length === 0) {
+  if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
+  if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
+  if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} />
+  if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
+  if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
+
+  if (boards.length === 0 || sitePage === 'dashboard') {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
-        <section className="landing-window">
+        <section className={`landing-window ${sitePage === 'dashboard' ? 'dashboard-window' : ''}`}>
           <header className="landing-topbar">
-            <a className="landing-brand" href="/" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
-            <a className="landing-dashboard-link" href="/" aria-label="Open dashboard">Dashboard</a>
+            <a className="landing-brand" href="/?page=home" onClick={(event) => { event.preventDefault(); navigatePage('home') }} aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
+            <a className="landing-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }} aria-label="Open dashboard">Dashboard</a>
             <nav className="landing-nav" aria-label="Main navigation">
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
-              <a href="#landing-tools">Features</a>
-              <a href="#landing-use-cases">Use cases</a>
-              <a href="#landing-how">How it works</a>
+              <button type="button" onClick={openInfiniteBoard}>∞ Infinite board</button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
@@ -3106,7 +3238,8 @@ function App() {
                     {landingAudience === 'student' && studentProfileSummary && <div className="profile-study-summary"><span>Study profile</span><strong>{studentProfileSummary.field === 'Other' ? (studentProfileSummary.otherField || 'Other') : (studentProfileSummary.field || 'Student')}</strong><small>{studentProfileSummary.stage === 'Other' ? (studentProfileSummary.otherStage || 'Study level not set') : (studentProfileSummary.stage || 'Study level not set')}{studentProfileSummary.degree ? ` · ${studentProfileSummary.degree}` : ''}</small></div>}
                   </div>
                   <div className="profile-menu-actions">
-                    <button type="button" className="profile-edit-action" onClick={openProfileEditor}><Icon name="settings" size={15} /> Edit profile</button>
+                    <button type="button" className="profile-edit-action" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); openProfileEditor(); navigatePage('profile') }}><Icon name="settings" size={15} /> Edit profile</button>
+                    {cloudUser.isAdmin && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); navigatePage('admin') }}><Icon name="settings" size={15} /> Admin dashboard</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="notes" size={15} /> My files</button>
                     {landingAudience === 'student' && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="study" size={15} /> Study space</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setProjectsPageOpen(true) }}><Icon name="duplicate" size={15} /> Projects</button>
@@ -3114,7 +3247,7 @@ function App() {
                     <button type="button" className="profile-signout" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); void logout() }}><Icon name="close" size={15} /> Sign out</button>
                   </div>
                 </div>
-              </details> : <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> Sign in</button>)}
+              </details> : <button className="account-button" onClick={() => navigatePage('signin')}><Icon name="cloud" size={16} /> Sign in</button>)}
               <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             </div>
           </header>
@@ -3249,7 +3382,7 @@ function App() {
               <div className="more-feature-section theme-feature"><span className="more-feature-label">APPEARANCE</span><label className="theme-toggle theme-picker"><span>Color theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>{!localOnly && <button className="account-button feature-account" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}</div>
               <div className="more-feature-section screen-recording-section"><span className="more-feature-label">SCREEN RECORDING</span><p className="screen-recording-hint">Capture a screen, window, or tab. The video downloads to your device as a WebM file.</p>{screenRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${screenRecordingState}`} /><strong>{screenRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(screenRecordingSeconds / 60)).padStart(2, '0')}:{String(screenRecordingSeconds % 60).padStart(2, '0')}</time></div>}{screenRecordingError && <p className="screen-recording-error" role="alert">{screenRecordingError}</p>}<div className="screen-recording-actions">{screenRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startScreenRecording() }}><span className="recording-button-dot" /> Record screen</button> : <><button onClick={toggleScreenRecordingPause}>{screenRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopScreenRecording}>Stop & save</button></>}</div></div>
 <div className="more-feature-section voice-recording-section"><span className="more-feature-label">VOICE RECORDING</span><p className="screen-recording-hint">Record spoken notes from your microphone. The audio downloads to your device.</p>{voiceRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${voiceRecordingState}`} /><strong>{voiceRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(voiceRecordingSeconds / 60)).padStart(2, '0')}:{String(voiceRecordingSeconds % 60).padStart(2, '0')}</time></div>}{voiceRecordingError && <p className="screen-recording-error" role="alert">{voiceRecordingError}</p>}<div className="screen-recording-actions">{voiceRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startVoiceRecording() }}><span className="recording-button-dot" /> Record voice</button> : <><button onClick={toggleVoiceRecordingPause}>{voiceRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopVoiceRecording}>Stop & save</button></>}</div></div>
-              <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
+              <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (!isProUser) { window.alert('The focus timer is included in Fun Plan.'); return }; if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
             </section>}
           </div>
         </header>
@@ -3274,7 +3407,7 @@ function App() {
                 <section className="board-menu-group" aria-label="Collaboration">
                   <p className="menu-title">Collaboration</p>
                   <button onClick={() => { setMenuOpen(false); void openShareManager() }}><Icon name="share" size={17} /> <span>Live collaboration…</span></button>
-                  <button onClick={() => { setMenuOpen(false); if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this note to the cloud first.') } }}><Icon name="notes" size={17} /> <span>Comments…</span></button>
+                  <button onClick={() => { setMenuOpen(false); if (!isProUser) { window.alert('Comments are included in Fun Plan.'); return }; if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this note to the cloud first.') } }}><Icon name="notes" size={17} /> <span>Comments…</span></button>
                   <details className="board-menu-expand"><summary>Team tools</summary><button onClick={() => { setMenuOpen(false); if (!cloudUser) setAccountOpen(true); else { setTeamOpen(true); void apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams').then(({ teams: result }) => setTeams(result)).catch((error) => setCloudMessage(error.message)) } }}><Icon name="diagram" size={17} /> <span>Manage teams…</span></button></details>
                 </section>
               </>}
