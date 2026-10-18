@@ -1027,6 +1027,11 @@ function App() {
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findResults, setFindResults] = useState<{ page: number; index: number; text: string }[]>([])
   const [moreFeaturesOpen, setMoreFeaturesOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
@@ -1778,6 +1783,37 @@ function App() {
     return () => window.removeEventListener('keydown', handleHistoryShortcut)
   }, [pageKey, selectedIndices, strokes, infinitePage, cameraOffset.x, cameraOffset.y, boards.length, sharedToken])
 
+  useEffect(() => {
+    const handleWorkspaceShortcuts = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || sharedToken) return
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      const key = event.key.toLowerCase()
+      if (key === 'o') {
+        event.preventDefault()
+        setMenuOpen(false)
+        documentInputRef.current?.click()
+      } else if (key === 'f') {
+        event.preventDefault()
+        setFindQuery('')
+        setFindResults([])
+        setFindOpen(true)
+      } else if (key === 'e' && event.shiftKey) {
+        event.preventDefault()
+        setMenuOpen(false)
+        setExportPageSelection(`1-${boards[activeBoard].pages}`)
+        setExportIncludeIndex(true)
+        setExportDialogOpen(true)
+      } else if (key === '/') {
+        event.preventDefault()
+        setCommandQuery('')
+        setCommandPaletteOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleWorkspaceShortcuts)
+    return () => window.removeEventListener('keydown', handleWorkspaceShortcuts)
+  }, [activeBoard, boards, sharedToken])
+
   const commitText = () => {
     const editor = textEditor
     if (editor?.value.trim()) {
@@ -1992,173 +2028,6 @@ function App() {
       renderDrawings(event.currentTarget, strokes, selectedIndices, candidates, point, eraser.width, infinitePage ? cameraOffset : { x: 0, y: 0 }, undefined, hiddenLayers)
     }
   }
-  const saveCurrentFile = () => {
-    const payload = { ...boards[activeBoard], name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
-    localStorage.setItem(`doomnotes:${boards[activeBoard].name}`, JSON.stringify(payload))
-    setRecentFiles((files) => [boards[activeBoard].name, ...files.filter((name) => name !== boards[activeBoard].name)])
-    setSaveNotice('Saved in this browser')
-    window.setTimeout(() => setSaveNotice(''), 2400)
-    setMenuOpen(false)
-  }
-  useEffect(() => {
-    try {
-      localStorage.setItem(openWorkspaceStorageKey, JSON.stringify({ names: boards.map((board) => board.name), activeBoard, page }))
-    } catch { /* Keep the current workspace usable if browser storage is unavailable. */ }
-  }, [boards, activeBoard, page])
-
-  useEffect(() => { setPanOffset({ x: 0, y: 0 }) }, [activeBoard, page])
-  useEffect(() => {
-    try { localStorage.setItem('ozoo:infinite-camera', JSON.stringify(infiniteCameraByPage)) } catch { /* Keep panning usable when storage is unavailable. */ }
-  }, [infiniteCameraByPage])
-
-  useEffect(() => {
-    const board = boards[activeBoard]
-    if (!board) { setAutoSaveStatus('idle'); return }
-    setAutoSaveStatus('saving')
-    const saveBoard = () => {
-      const payload = { ...board, name: board.name, pages: board.pages, pageSize, infinite: board.infinite ?? infinitePage, orientation: board.orientation ?? orientation, pageOrientations: board.pageOrientations, pageBackground: board.pageBackground ?? pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) }
-      try {
-        localStorage.setItem(`doomnotes:${board.name}`, JSON.stringify(payload))
-        setRecentFiles((files) => [board.name, ...files.filter((name) => name !== board.name)])
-        setAutoSaveStatus('saved')
-      } catch {
-        setAutoSaveStatus('error')
-      }
-    }
-    const timer = window.setTimeout(saveBoard, 650)
-    window.addEventListener('pagehide', saveBoard)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('pagehide', saveBoard)
-    }
-  }, [boards, activeBoard, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
-
-  useEffect(() => {
-    const board = boards[activeBoard]
-    const id = board ? cloudBoardIds[board.name] : undefined
-    const remote = id ? cloudBoards.find((item) => item.id === id) : undefined
-    if (!cloudUser || !board || !id) return
-
-    if (!cloudHydratedBoards.current.has(id)) {
-      if (cloudHydratingBoards.current.has(id)) return
-      cloudHydratingBoards.current.add(id)
-      setCloudHydrationBusyId(id)
-      setCloudSyncStatus('syncing')
-      void (async () => {
-        try {
-          const { board: latest } = await apiRequest<{ board: CloudBoard }>(`/api/boards/${id}`)
-          let latestState: BoardState
-          if (isEncryptedBoardState(latest.state)) {
-            const passphrase = cloudKeys.current[id] ?? window.prompt(`Enter the encryption passphrase for “${latest.name}” to sync the latest saved changes.`)
-            if (!passphrase) throw new Error('Enter the board passphrase to load the latest shared changes.')
-            latestState = await decryptBoardState(latest.state, passphrase)
-            cloudKeys.current[id] = passphrase
-          } else latestState = latest.state
-          const localIndex = boards.findIndex((item) => cloudBoardIds[item.name] === id)
-          if (localIndex < 0) return
-          const hydratedSnapshot = {
-            pages: latestState.pages,
-            pageSize: latestState.pageSize ?? 'A4',
-            infinite: latestState.infinite ?? false,
-            orientation: latestState.orientation,
-            pageOrientations: latestState.pageOrientations,
-            pageBackground: latestState.pageBackground,
-            gridEnabled: latestState.gridEnabled ?? false,
-            showScale: latestState.showScale ?? false,
-            hiddenLayers: latestState.hiddenLayers ?? [],
-            pageStrokes: latestState.pageStrokes,
-          }
-          cloudSyncedSnapshots.current[id] = JSON.stringify(hydratedSnapshot)
-          setBoards((current) => current.map((item, index) => index === localIndex ? {
-            ...item,
-            pages: latestState.pages,
-            pageSize: latestState.pageSize ?? 'A4',
-            infinite: latestState.infinite ?? false,
-            orientation: latestState.orientation,
-            pageOrientations: latestState.pageOrientations,
-            pageBackground: latestState.pageBackground,
-            hiddenLayers: latestState.hiddenLayers ?? [],
-          } : item))
-          setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(latestState.pageStrokes.map((items, index) => [`${localIndex}:${index + 1}`, items])) }))
-          if (localIndex === activeBoard) {
-            setPageSize(latestState.pageSize ?? 'A4')
-            setInfinitePage(latestState.infinite ?? false)
-            setOrientation(latestState.pageOrientations?.[page - 1] ?? latestState.orientation)
-            setPageBackground(latestState.pageBackground)
-            setGridEnabled(latestState.gridEnabled ?? false)
-            setShowScale(latestState.showScale ?? false)
-          }
-          setCloudSyncStatus('synced')
-          cloudHydratedBoards.current.add(id)
-        } catch (error) {
-          setCloudSyncStatus('error')
-          setCloudMessage(error instanceof Error ? error.message : 'Could not sync the latest shared changes.')
-        } finally {
-          cloudHydratingBoards.current.delete(id)
-          setCloudHydrationBusyId((current) => current === id ? null : current)
-        }
-      })()
-      return
-    }
-    if (!remote || (remote.role !== 'owner' && remote.role !== 'edit')) return
-
-    const snapshotState = {
-      pages: board.pages,
-      pageSize,
-      infinite: infinitePage,
-      orientation,
-      pageOrientations: board.pageOrientations,
-      pageBackground,
-      gridEnabled,
-      showScale,
-      hiddenLayers: board.hiddenLayers ?? [],
-      pageStrokes: Array.from({ length: board.pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []),
-    }
-    const snapshot = JSON.stringify(snapshotState)
-    const lastSnapshot = cloudSyncedSnapshots.current[id]
-    if (lastSnapshot === undefined) return
-    if (lastSnapshot === snapshot) return
-    setCloudSyncStatus('syncing')
-    const writeCloudSnapshot = async (keepalive: boolean) => {
-      try {
-        const encrypted = isEncryptedBoardState(remote.state)
-        const key = cloudKeys.current[id]
-        if (encrypted && !key) throw new Error('Unlock this encrypted note before syncing changes.')
-        const savedState = encrypted && key ? await encryptBoardState(snapshotState, key) : snapshotState
-        const response = await fetch(`${API_BASE}/api/boards/${id}`, {
-          method: 'PUT',
-          credentials: 'include',
-          keepalive,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: board.name, folderId: remote.folderId, state: savedState }),
-        })
-        if (!response.ok) throw new Error(`Cloud sync failed (${response.status}).`)
-        cloudSyncedSnapshots.current[id] = snapshot
-        setCloudSyncStatus('synced')
-      } catch {
-        setCloudSyncStatus('error')
-      }
-    }
-    const timer = window.setTimeout(() => { void writeCloudSnapshot(false) }, 850)
-    const flushCloudBeforeLeaving = () => {
-      window.clearTimeout(timer)
-      void writeCloudSnapshot(true)
-    }
-    const flushWhenHidden = () => {
-      if (document.visibilityState === 'hidden') {
-        window.clearTimeout(timer)
-        void writeCloudSnapshot(false)
-      }
-    }
-    window.addEventListener('pagehide', flushCloudBeforeLeaving)
-    document.addEventListener('visibilitychange', flushWhenHidden)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('pagehide', flushCloudBeforeLeaving)
-      document.removeEventListener('visibilitychange', flushWhenHidden)
-    }
-  }, [cloudUser, cloudBoardIds, cloudBoards, activeBoard, boards, page, pageSize, infinitePage, orientation, pageBackground, gridEnabled, showScale, strokesByPage])
-
   const getBoardDocument = () => ({ format: 'doomnotes', version: 1, ...boards[activeBoard], name: boards[activeBoard].name, pages: boards[activeBoard].pages, pageSize, infinite: infinitePage, orientation, pageOrientations: boards[activeBoard].pageOrientations, pageBackground, gridEnabled, showScale, pageStrokes: Array.from({ length: boards[activeBoard].pages }, (_, index) => strokesByPage[`${activeBoard}:${index + 1}`] ?? []) })
   const downloadNamedBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob)
@@ -2383,17 +2252,6 @@ function App() {
     }).join('')
     const cameraGroup = infinitePage ? `<g transform="translate(${-camera.x * width} ${-camera.y * height})">${paths}</g>` : paths
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${gridLines.join('')}${cameraGroup}</svg>`
-  }
-  const exportDrawing = async (format: 'png' | 'svg') => {
-    const pageStrokes = (strokesByPage[pageKey] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke)))
-    if (format === 'png') {
-      const output = await renderPageCanvas(pageStrokes)
-      output.toBlob((blob) => { if (blob) downloadBlob(blob, 'png') }, 'image/png')
-    } else {
-      const background = infinitePage ? (dark ? themedCanvasBackground(colorTheme) : '#ffffff') : resolvePageBackground(pageBackground, dark, colorTheme)
-      downloadBlob(new Blob([svgForPage(pageStrokes, canvasWidth, canvasHeight, background, infinitePage ? cameraOffset : { x: 0, y: 0 })], { type: 'image/svg+xml;charset=utf-8' }), 'svg')
-    }
-    setMenuOpen(false)
   }
   const copyPageForNotion = async () => {
     const output = await renderPageCanvas((strokesByPage[pageKey] ?? []).filter((stroke) => !hiddenLayers.includes(strokeLayer(stroke))))
@@ -3007,11 +2865,46 @@ function App() {
 
   const quickStartDialog = quickStartOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickStartOpen(false) }}><section className="new-file-dialog compact-dialog quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title"><button className="dialog-close" aria-label="Close Quick Start guide" onClick={() => setQuickStartOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES BASICS</p><h2 id="quick-start-title">Quick Start Guide</h2><ol className="quick-start-steps"><li><span>1</span><div><strong>Start with a board</strong><p>Choose <b>Start a new board</b>, or open an OzooNotes file you already have.</p></div></li><li><span>2</span><div><strong>Draw and create</strong><p>Pick a pen from the drawing tools. Use the shape, text, image, or graph tools to add more to your page.</p></div></li><li><span>3</span><div><strong>Select and move objects</strong><p>Choose Select. Drag over empty space to select several objects, or Shift-click to add or remove an object. Drag a selected object to move the group. Ctrl+A selects everything on the current page.</p></div></li><li><span>4</span><div><strong>Move around and add pages</strong><p>Use the Hand tool to pan across an infinite board. For regular boards, add a page and choose portrait or landscape; each page keeps its own orientation.</p></div></li><li><span>5</span><div><strong>Keep a copy of your work</strong><p>Your boards save in this browser on this device. Choose <b>Save OzooNotes file</b> to download a portable copy. You can also export pages as PNG or SVG, or regular boards as PDF.</p></div></li></ol><footer className="dialog-actions"><button className="dialog-create" onClick={() => setQuickStartOpen(false)}>Got it</button></footer></section></div>
 
+  const searchNoteText = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const query = findQuery.trim().toLocaleLowerCase()
+    const results = query ? Array.from({ length: boards[activeBoard].pages }, (_, pageIndex) => {
+      const pageNumber = pageIndex + 1
+      return (strokesByPage[`${activeBoard}:${pageNumber}`] ?? []).flatMap((stroke, index) => stroke.tool === 'Text' && stroke.text?.toLocaleLowerCase().includes(query) ? [{ page: pageNumber, index, text: stroke.text }] : [])
+    }).flat() : []
+    setFindResults(results)
+  }
+  const jumpToFindResult = (result: { page: number; index: number }) => {
+    setPage(result.page)
+    setIndexView(false)
+    setSelectedIndices([result.index])
+    setFindOpen(false)
+  }
+  const commandActions: { label: string; keys?: string; run: () => void }[] = [
+    { label: 'Open a note file', keys: 'Ctrl O', run: () => documentInputRef.current?.click() },
+    { label: 'Save a copy', run: () => saveBoardToFile() },
+    { label: 'Export pages', keys: 'Ctrl Shift E', run: () => { setExportPageSelection(`1-${boards[activeBoard].pages}`); setExportIncludeIndex(true); setExportDialogOpen(true) } },
+    { label: 'Save to cloud', run: () => { if (!localOnly) openCloudSaveDialog() } },
+    { label: 'Live collaboration', run: () => { if (!localOnly) void openShareManager() } },
+    { label: 'Find text in notes', keys: 'Ctrl F', run: () => { setFindQuery(''); setFindResults([]); setFindOpen(true) } },
+    { label: 'Rename note', run: () => openRenameDialog() },
+    { label: 'Add a page title', run: () => openTitleDialog() },
+    { label: 'Show or hide grid', run: () => setGridEnabled((value) => !value) },
+    { label: 'Keyboard shortcuts', run: () => setShortcutsOpen(true) },
+    { label: 'Quick Start guide', run: () => setQuickStartOpen(true) },
+  ].filter((command) => !localOnly || !['Save to cloud', 'Live collaboration'].includes(command.label))
+  const filteredCommands = commandActions.filter((command) => command.label.toLocaleLowerCase().includes(commandQuery.trim().toLocaleLowerCase()))
+  const findDialog = findOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFindOpen(false) }}><section className="new-file-dialog compact-dialog menu-search-dialog" role="dialog" aria-modal="true" aria-labelledby="find-note-title"><button className="dialog-close" aria-label="Close note search" onClick={() => setFindOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">SEARCH THIS NOTE</p><h2 id="find-note-title">Find text in notes</h2><form onSubmit={searchNoteText}><label className="dialog-label">Text to find<input autoFocus value={findQuery} onChange={(event) => setFindQuery(event.target.value)} placeholder="Search typed text on every page" /></label><button className="dialog-create full-button" type="submit">Find</button></form>{findResults.length > 0 ? <ul className="menu-search-results">{findResults.map((result) => <li key={`${result.page}:${result.index}`}><button onClick={() => jumpToFindResult(result)}><span>{result.text}</span><kbd>Page {result.page}</kbd></button></li>)}</ul> : findQuery.trim() && <p className="empty-hint">No matching text found. Handwriting and text inside images are not searched.</p>}</section></div>
+  const commandPaletteDialog = commandPaletteOpen && <div className="new-file-overlay command-palette-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommandPaletteOpen(false) }}><section className="new-file-dialog command-palette-dialog" role="dialog" aria-modal="true" aria-labelledby="command-palette-title"><button className="dialog-close" aria-label="Close command palette" onClick={() => setCommandPaletteOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">QUICK ACTIONS</p><h2 id="command-palette-title">Command palette</h2><input autoFocus aria-label="Search commands" className="command-palette-input" value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search actions…" />{filteredCommands.length ? <div className="command-palette-list">{filteredCommands.map((command) => <button key={command.label} onClick={() => { setCommandPaletteOpen(false); command.run() }}><span>{command.label}</span>{command.keys && <kbd>{command.keys}</kbd>}</button>)}</div> : <p className="empty-hint">No commands match that search.</p>}</section></div>
   const shortcutsDialog = shortcutsOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShortcutsOpen(false) }}><section className="new-file-dialog shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
     <button className="dialog-close" aria-label="Close keyboard shortcuts" onClick={() => setShortcutsOpen(false)}><Icon name="close" size={16} /></button>
     <p className="eyebrow">QUICK REFERENCE</p><h2 id="shortcuts-title">Keyboard shortcuts</h2>
     <p className="shortcuts-intro">Use these shortcuts while the canvas is active. Text fields keep their usual editing shortcuts.</p>
     <div className="shortcuts-section"><h3>Editing</h3>
+      <div className="shortcut-row"><span>Open a note file</span><kbd>Ctrl / ⌘</kbd><kbd>O</kbd></div>
+      <div className="shortcut-row"><span>Find typed text in notes</span><kbd>Ctrl / ⌘</kbd><kbd>F</kbd></div>
+      <div className="shortcut-row"><span>Export pages</span><kbd>Ctrl / ⌘</kbd><kbd>Shift</kbd><kbd>E</kbd></div>
+      <div className="shortcut-row"><span>Open command palette</span><kbd>Ctrl / ⌘</kbd><kbd>/</kbd></div>
       <div className="shortcut-row"><span>Undo</span><kbd>Ctrl / ⌘</kbd><kbd>Z</kbd></div>
       <div className="shortcut-row"><span>Redo</span><kbd>Ctrl / ⌘</kbd><kbd>Y</kbd><i>or</i><kbd>Ctrl / ⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd></div>
       <div className="shortcut-row"><span>Select everything on this page</span><kbd>Ctrl / ⌘</kbd><kbd>A</kbd></div>
@@ -3334,34 +3227,52 @@ function App() {
         <section className="board-area">
           <div className="board-menu-wrap">
             <button className="menu-trigger" aria-label="Open drawing menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /></button>
-            {menuOpen && <div className="board-menu">
-              <p className="menu-title">Page options</p>
-              <button onClick={() => { setQuickStartOpen(true); setMenuOpen(false) }}><ThemeIcon source={notesPng} size={18} /> <span>Quick Start Guide</span></button>
-              <button onClick={() => { setShortcutsOpen(true); setMenuOpen(false) }}><Icon name="settings" size={17} /> <span>Keyboard shortcuts</span></button>
-              <label className="menu-option"><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /> Unlock grid on page</label>
-              <label className="menu-option"><input type="checkbox" disabled={infinitePage} checked={showScale && !infinitePage} onChange={(event) => setShowScale(event.target.checked)} /> Scale on page</label>
-              {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
-              <div className="menu-divider" />
-              <button onClick={() => { setLibraryName(''); setLibraryOpen(true); setMenuOpen(false) }}><Icon name="layer" size={17} /> <span>Libraries</span></button>
-              <button onClick={() => { setMenuOpen(false); openRenameDialog() }}><Icon name="text" size={17} /> <span>Rename this file…</span></button>
-              <button onClick={openExportDialog}><ThemeIcon source={downloadPng} size={18} /> <span>Export pages…</span></button>
-              <button onClick={openTitleDialog}><Icon name="notes" size={17} /> <span>Add section title to page {page}</span></button>
-              <button onClick={() => { void exportDrawing('png') }}><Icon name="image" size={17} /> <span>Export this page as PNG</span></button>
-              <button onClick={() => { void exportDrawing('svg') }}><Icon name="shape" size={17} /> <span>Export this page as SVG</span></button>
-              <button onClick={() => { void copyPageForNotion() }}><Icon name="notes" size={17} /> <span>Copy page for Notion</span></button>
-              <button onClick={exportObsidianNote}><Icon name="notes" size={17} /> <span>Export for Obsidian</span></button>
-              <button onClick={saveCurrentFile}><Icon name="duplicate" size={17} /> <span>Save</span></button>
-              <button onClick={saveBoardToFile}><ThemeIcon source={downloadPng} size={18} /> <span>Save OzooNotes file</span></button>
-              <button onClick={() => documentInputRef.current?.click()}><ThemeIcon source={folderPng} size={18} /> <span>Open OzooNotes file</span></button>
-              <a className="board-menu-github" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer"><Icon name="share" size={17} /> <span>See how it works on GitHub</span></a>
+            {menuOpen && <div className="board-menu" aria-label="Note menu">
+              <section className="board-menu-group" aria-label="File">
+                <p className="menu-title">File</p>
+                <button onClick={() => { documentInputRef.current?.click(); setMenuOpen(false) }}><ThemeIcon source={folderPng} size={18} /> <span>Open a note file</span><kbd>Ctrl O</kbd></button>
+                <button onClick={saveBoardToFile}><ThemeIcon source={downloadPng} size={18} /> <span>Save a copy</span></button>
+                <button onClick={openExportDialog}><ThemeIcon source={downloadPng} size={18} /> <span>Export…</span><kbd>Ctrl Shift E</kbd></button>
+                <details className="board-menu-expand"><summary>Special export options</summary>
+                  <button onClick={() => { void copyPageForNotion() }}><Icon name="notes" size={17} /> <span>Copy page for Notion</span></button>
+                  <button onClick={() => { exportObsidianNote(); setMenuOpen(false) }}><Icon name="notes" size={17} /> <span>Export for Obsidian</span></button>
+                </details>
+                {!localOnly && <button onClick={() => { setMenuOpen(false); openCloudSaveDialog() }}><Icon name="cloud" size={17} /> <span>Save to cloud</span></button>}
+              </section>
               {!localOnly && <>
-              <button onClick={openCloudSaveDialog}><Icon name="cloud" size={17} /> <span>Save to server</span></button>
-              <button onClick={() => { void openShareManager() }}><Icon name="share" size={17} /> <span>Access and read-only links</span></button>
-              <button onClick={() => { if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this board to your server first.') } }}><Icon name="notes" size={17} /> <span>Comments</span></button>
-              <button onClick={() => { if (!cloudUser) setAccountOpen(true); else { setTeamOpen(true); void apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams').then(({ teams: result }) => setTeams(result)).catch((error) => setCloudMessage(error.message)) } }}><Icon name="diagram" size={17} /> <span>Team management</span></button>
-              {saveNotice && <div className="save-notice">{saveNotice}</div>}
-              {cloudMessage && <div className="save-notice">{cloudMessage}</div>}
+                <div className="menu-divider" />
+                <section className="board-menu-group" aria-label="Collaboration">
+                  <p className="menu-title">Collaboration</p>
+                  <button onClick={() => { setMenuOpen(false); void openShareManager() }}><Icon name="share" size={17} /> <span>Live collaboration…</span></button>
+                  <button onClick={() => { setMenuOpen(false); if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this note to the cloud first.') } }}><Icon name="notes" size={17} /> <span>Comments…</span></button>
+                  <details className="board-menu-expand"><summary>Team tools</summary><button onClick={() => { setMenuOpen(false); if (!cloudUser) setAccountOpen(true); else { setTeamOpen(true); void apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams').then(({ teams: result }) => setTeams(result)).catch((error) => setCloudMessage(error.message)) } }}><Icon name="diagram" size={17} /> <span>Manage teams…</span></button></details>
+                </section>
               </>}
+              <div className="menu-divider" />
+              <section className="board-menu-group" aria-label="Page and canvas">
+                <p className="menu-title">Page & canvas</p>
+                <button onClick={() => { setMenuOpen(false); openRenameDialog() }}><Icon name="text" size={17} /> <span>Rename note…</span></button>
+                <button onClick={() => { setLibraryName(''); setLibraryOpen(true); setMenuOpen(false) }}><Icon name="layer" size={17} /> <span>Libraries…</span></button>
+                <button onClick={() => { setMenuOpen(false); openTitleDialog() }}><Icon name="notes" size={17} /> <span>Add a page title</span></button>
+                <label className="menu-option"><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /> Show grid</label>
+                <label className="menu-option"><input type="checkbox" disabled={infinitePage} checked={showScale && !infinitePage} onChange={(event) => setShowScale(event.target.checked)} /> Show page scale</label>
+                {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
+                <button disabled={!canEditActiveBoard || !strokes.length} onClick={() => { if (!window.confirm('Clear everything on this page? You can undo this action.')) return; editCurrentPage(() => []); setSelectedIndices([]); setMenuOpen(false) }}><Icon name="delete" size={17} /> <span>Clear this page</span></button>
+              </section>
+              <div className="menu-divider" />
+              <section className="board-menu-group" aria-label="Find and help">
+                <p className="menu-title">Find & help</p>
+                <button onClick={() => { setFindQuery(''); setFindOpen(true); setMenuOpen(false) }}><Icon name="notes" size={17} /> <span>Find text in notes</span><kbd>Ctrl F</kbd></button>
+                <button onClick={() => { setCommandQuery(''); setCommandPaletteOpen(true); setMenuOpen(false) }}><Icon name="shape" size={17} /> <span>Command palette</span><kbd>Ctrl /</kbd></button>
+                <button onClick={() => { setQuickStartOpen(true); setMenuOpen(false) }}><ThemeIcon source={notesPng} size={18} /> <span>Quick Start guide</span></button>
+                <button onClick={() => { setShortcutsOpen(true); setMenuOpen(false) }}><Icon name="settings" size={17} /> <span>Keyboard shortcuts</span></button>
+              </section>
+              <div className="menu-divider" />
+              <section className="board-menu-group menu-footer-links" aria-label="About">
+                <a className="board-menu-github" href="https://github.com/AMStudios6/ozoonotes" target="_blank" rel="noreferrer"><Icon name="share" size={17} /> <span>GitHub</span></a>
+                {!localOnly && !cloudUser && <button onClick={() => { setAccountOpen(true); setMenuOpen(false) }}><Icon name="share" size={17} /> <span>Sign in or create account</span></button>}
+              </section>
+              {(saveNotice || cloudMessage) && <div className="save-notice">{saveNotice || cloudMessage}</div>}
             </div>}
           </div>
           <div className="quick-actions" aria-label="Selection actions">
@@ -3436,6 +3347,8 @@ function App() {
       {graphDialog}
       {titleDialog}
       {exportDialog}
+      {findDialog}
+      {commandPaletteDialog}
     </main>
   )
 }
