@@ -2970,6 +2970,7 @@ function App() {
             <a className="auth-brand" href="/" aria-label="OzooNotes home">
               <img src={brandLogo} alt="OzooNotes" />
             </a>
+            <a className="auth-dashboard-link" href="/" aria-label="Go to dashboard">Dashboard</a>
             <label className="auth-theme-picker">
               <span>Theme</span>
               <select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>
@@ -3065,7 +3066,8 @@ function App() {
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
         <section className="landing-window">
           <header className="landing-topbar">
-            <a className="landing-brand" href="#" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
+            <a className="landing-brand" href="/" aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
+            <a className="landing-dashboard-link" href="/" aria-label="Open dashboard">Dashboard</a>
             <nav className="landing-nav" aria-label="Main navigation">
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
               <a href="#landing-tools">Features</a>
