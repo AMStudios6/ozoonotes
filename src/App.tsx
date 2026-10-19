@@ -1104,6 +1104,7 @@ function App() {
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveError, setAutoSaveError] = useState('')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
@@ -1827,10 +1828,11 @@ function App() {
   useEffect(() => {
     if (!boards.length) return
     setAutoSaveStatus('saving')
-    const timer = window.setTimeout(() => {
+    setAutoSaveError('')
+    const persist = () => {
       try {
         const names = [...new Set(boards.map((board) => board.name).filter(Boolean))]
-        boards.forEach((board, boardIndex) => {
+        const snapshots = boards.map((board, boardIndex) => {
           const existing = (() => { try { return JSON.parse(localStorage.getItem(`doomnotes:${board.name}`) ?? '{}') as Record<string, unknown> } catch { return {} } })()
           const pageStrokes = Array.from({ length: board.pages }, (_, pageIndex) => strokesByPage[`${boardIndex}:${pageIndex + 1}`] ?? [])
           const saved = {
@@ -1851,16 +1853,36 @@ function App() {
             pageStrokes,
             savedAt: new Date().toISOString(),
           }
-          localStorage.setItem(`doomnotes:${board.name}`, JSON.stringify(saved))
+          return { name: board.name, value: JSON.stringify(saved) }
         })
-        localStorage.setItem(openWorkspaceStorageKey, JSON.stringify({ names, activeBoard, page: Math.max(1, page), savedAt: new Date().toISOString() }))
+        const workspaceSnapshot = JSON.stringify({ names, activeBoard, page: Math.max(1, page), savedAt: new Date().toISOString() })
+        const prioritizedSnapshots = [...snapshots].sort((a, b) => Number(b.name === boards[activeBoard]?.name) - Number(a.name === boards[activeBoard]?.name))
+        prioritizedSnapshots.forEach(({ name, value }) => localStorage.setItem(`doomnotes:${name}`, value))
+        localStorage.setItem(openWorkspaceStorageKey, workspaceSnapshot)
         setRecentFiles((current) => [...new Set([...names, ...current])])
         setAutoSaveStatus('saved')
-      } catch {
+        setAutoSaveError('')
+      } catch (error) {
         setAutoSaveStatus('error')
+        const quotaExceeded = error instanceof DOMException && (error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014)
+        setAutoSaveError(quotaExceeded
+          ? 'Browser storage is full. Export a backup, then remove large images or unused files before continuing.'
+          : error instanceof Error ? error.message : 'The browser could not write this note to local storage.')
       }
-    }, 650)
-    return () => window.clearTimeout(timer)
+    }
+    const timer = window.setTimeout(persist, 650)
+    const flushPendingSave = () => {
+      window.clearTimeout(timer)
+      persist()
+    }
+    const flushWhenHidden = () => { if (document.visibilityState === 'hidden') flushPendingSave() }
+    window.addEventListener('pagehide', flushPendingSave)
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', flushPendingSave)
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+    }
   }, [boards, strokesByPage, activeBoard, page, pageBackground, gridEnabled, showScale])
 
   useEffect(() => { setSelectedIndices([]); refreshHistoryState(pageKey) }, [pageKey])
@@ -3592,7 +3614,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
+          <div className={`tool-status autosave-${autoSaveStatus}`} role="status" title={autoSaveError || undefined} aria-label={autoSaveError ? `Auto-save error: ${autoSaveError}` : undefined}><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · hover for details' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
         </section>
       </div>
       {newFileDialog}
