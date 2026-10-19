@@ -278,7 +278,16 @@ function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
   const abD = cross(a, b, d)
   const cdA = cross(c, d, a)
   const cdB = cross(c, d, b)
-  return abC * abD <= 0 && cdA * cdB <= 0
+  const epsilon = 1e-7
+  const onSegment = (start: Point, point: Point, end: Point) =>
+    point.x >= Math.min(start.x, end.x) - epsilon && point.x <= Math.max(start.x, end.x) + epsilon &&
+    point.y >= Math.min(start.y, end.y) - epsilon && point.y <= Math.max(start.y, end.y) + epsilon
+  if (((abC > epsilon && abD < -epsilon) || (abC < -epsilon && abD > epsilon)) &&
+      ((cdA > epsilon && cdB < -epsilon) || (cdA < -epsilon && cdB > epsilon))) return true
+  return (Math.abs(abC) <= epsilon && onSegment(a, c, b)) ||
+    (Math.abs(abD) <= epsilon && onSegment(a, d, b)) ||
+    (Math.abs(cdA) <= epsilon && onSegment(c, a, d)) ||
+    (Math.abs(cdB) <= epsilon && onSegment(c, b, d))
 }
 
 function shapeGeometry(kind: ShapeKind, first: Point, last: Point, cornerRadius = 0) {
@@ -3482,6 +3491,7 @@ function App() {
           <nav className="file-tabs" aria-label="Whiteboard files">
             {boards.map((board, index) => <div key={board.name} className={`file-tab ${index === activeBoard ? 'selected' : ''}`}>
               <button className="tab-open" title="Double-click to rename" onClick={() => activateBoard(index)} onDoubleClick={() => openRenameDialog(board.name)}>{board.name}</button>
+              <button className="tab-rename" aria-label={`Rename ${board.name}`} title={`Rename ${board.name}`} onClick={(event) => { event.stopPropagation(); openRenameDialog(board.name) }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.9L19 8.3a2.1 2.1 0 0 0-3-3L5.2 16.1 4 20Z" /></svg></button>
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}><Icon name="close" size={13} /></button>
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
