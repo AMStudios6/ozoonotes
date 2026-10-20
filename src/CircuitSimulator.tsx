@@ -480,12 +480,19 @@ function transientRange(values: number[]) {
   if (Math.abs(max - min) < 1e-12) return { min: min - 1e-9, max: max + 1e-9 }
   return { min, max }
 }
-function transientPlotPath(values: number[], yTop: number, yBottom: number) {
+function transientPlotPath(values: number[], yTop: number, yBottom: number, direction?: 'forward' | 'reverse') {
   if (!values.length) return ''
   const stride = Math.max(1, Math.ceil(values.length / 600))
   const sampled = values.filter((_, index) => index % stride === 0 || index === values.length - 1)
   const { min, max } = transientRange(sampled), span = max - min || 1
-  return sampled.map((value, index) => `${index ? 'L' : 'M'} ${60 + index * (900 / Math.max(1, sampled.length - 1))} ${yBottom - ((value - min) / span) * (yBottom - yTop)}`).join(' ')
+  let drawing = false
+  return sampled.map((value, index) => {
+    const visible = !direction || (direction === 'forward' ? value >= 0 : value < 0)
+    if (!visible) { drawing = false; return '' }
+    const command = drawing ? 'L' : 'M'
+    drawing = true
+    return `${command} ${60 + index * (900 / Math.max(1, sampled.length - 1))} ${yBottom - ((value - min) / span) * (yBottom - yTop)}`
+  }).filter(Boolean).join(' ')
 }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
@@ -571,6 +578,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [transient, setTransient] = useState<TransientResult | null>(null)
   const [transientDurationMs, setTransientDurationMs] = useState(100)
   const [transientSteps, setTransientSteps] = useState(500)
+  const [diodeTimeWindow, setDiodeTimeWindow] = useState<'full' | 'quarter' | 'tenth'>('full')
   const [scopeActive, setScopeActive] = useState(false)
   const [scopeProbe, setScopeProbe] = useState<'a' | 'b' | null>(null)
   const [scopePins, setScopePins] = useState<{ a: string | null; b: string | null }>({ a: null, b: null })
@@ -596,8 +604,12 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const selected = circuit.parts.find((part) => part.id === selectedPart)
   const selectedReading = selected ? simulation?.readings.find((reading) => reading.id === selected.id) : undefined
   const diodeWaveform = selected?.kind === 'diode' ? transient ?? simulation?.timeDomain : undefined
-  const diodeVoltage = diodeWaveform?.partVoltages[selected!.id] ?? []
-  const diodeCurrent = diodeWaveform?.partCurrents[selected!.id] ?? []
+  const diodeSampleCount = diodeWaveform?.times.length ?? 0
+  const diodeWindowFraction = diodeTimeWindow === 'tenth' ? .1 : diodeTimeWindow === 'quarter' ? .25 : 1
+  const diodeStartIndex = Math.max(0, diodeSampleCount - Math.max(2, Math.ceil(diodeSampleCount * diodeWindowFraction)))
+  const diodeTimes = diodeWaveform?.times.slice(diodeStartIndex) ?? []
+  const diodeVoltage = diodeWaveform?.partVoltages[selected!.id]?.slice(diodeStartIndex) ?? []
+  const diodeCurrent = diodeWaveform?.partCurrents[selected!.id]?.slice(diodeStartIndex) ?? []
   const diodePower = diodeVoltage.map((voltage, index) => voltage * (diodeCurrent[index] ?? 0))
   const selectedIds = selectedParts.length ? selectedParts : selectedPart ? [selectedPart] : []
   const metricColumns = Number(options.showVoltage) + Number(options.showCurrent) + Number(options.showPower)
@@ -1176,16 +1188,22 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         {circuitChecks && <section className="circuit-check-panel" aria-label="Circuit health check"><header><div><strong>Circuit health check</strong><small>{circuitChecks.filter((item) => item.level === 'error').length} errors · {circuitChecks.filter((item) => item.level === 'warning').length} warnings</small></div><button onClick={() => setCircuitChecks(null)} aria-label="Close circuit checks">×</button></header><ul>{circuitChecks.map((check, index) => <li className={'check-' + check.level} key={index}><span>{check.level === 'error' ? '!' : check.level === 'warning' ? '△' : '✓'}</span><div><strong>{check.title}</strong><small>{check.detail}</small></div></li>)}</ul></section>}
         {transient && <section className="transient-panel" aria-label="Transient circuit response"><header><div><strong>Time-domain response</strong><small>{transient.message}</small></div><button onClick={()=>setTransient(null)} aria-label="Close transient graph">×</button></header><div className="transient-settings"><label>Duration (ms)<input type="number" min="0.001" max="10000" step="any" value={transientDurationMs} onChange={(event)=>setTransientDurationMs(Number(event.target.value))}/></label><label>Time steps<input type="number" min="40" max="1600" step="20" value={transientSteps} onChange={(event)=>setTransientSteps(Number(event.target.value))}/></label><button onClick={runTransientSimulation}>Run again</button></div><svg viewBox="0 0 1000 220" role="img" aria-label="Transient voltage and current versus time"><path className="scope-grid" d="M52 15H968M52 60H968M52 105H968M52 150H968M52 195H968M52 15V195M235 15V195M418 15V195M602 15V195M785 15V195M968 15V195"/>{selected && transient.partVoltages[selected.id] && <><path className="scope-voltage" d={transientTracePath(transient.partVoltages[selected.id],18,105)}/><path className="scope-current" d={transientTracePath(transient.partCurrents[selected.id]??[],110,195)}/><text x="8" y="25">V</text><text x="8" y="118">A</text></>}{!selected && <>{scopePins.a && transient.nodeVoltages[scopePins.a] && <path className="scope-voltage" d={transientTracePath(transient.nodeVoltages[scopePins.a],18,195)}/>}{scopePins.b && transient.nodeVoltages[scopePins.b] && <path className="scope-current" d={transientTracePath(transient.nodeVoltages[scopePins.b],18,195)}/>}</>}<text x="52" y="215">0 ms</text><text x="900" y="215">{fmt(transient.times.at(-1)??0,'s')}</text></svg><footer>{selected ? `${selected.label}: voltage (yellow) and current (green).` : 'Oscilloscope channels A (yellow) and B (green), measured against ground.'} This educational transient solver uses a backward Euler approximation.</footer></section>}
         {selected?.kind === 'diode' && diodeWaveform && <section className="diode-waveform-panel" aria-label={`${selected.label} voltage, current, and power waveforms`}>
-          <header><div><strong>{selected.label} · diode waveforms</strong><small>Time-domain readings for the selected diode</small></div><span>{diodeWaveform.times.length} samples</span></header>
-          <svg viewBox="0 0 1000 270" role="img" aria-label="Diode voltage, current, and power versus time">
-            <path className="scope-grid" d="M60 18H960M60 88H960M60 100H960M60 170H960M60 182H960M60 252H960M60 18V252M285 18V252M510 18V252M735 18V252M960 18V252"/>
+          <header><div><strong>{selected.label} · diode waveforms</strong><small>Voltage, current direction, and instantaneous power</small></div><span>{diodeTimes.length.toLocaleString()} samples</span></header>
+          <div className="diode-waveform-controls"><label>Time range<select aria-label="Diode waveform time range" value={diodeTimeWindow} onChange={(event) => setDiodeTimeWindow(event.target.value as 'full' | 'quarter' | 'tenth')}><option value="full">Full simulation</option><option value="quarter">Latest 25%</option><option value="tenth">Latest 10%</option></select></label><div className="diode-waveform-legend"><span><i className="scope-key-voltage"/>Voltage</span><span><i className="scope-key-current"/>Forward current</span><span><i className="scope-key-reverse"/>Reverse / recovery current</span><span><i className="scope-key-power"/>Power</span></div></div>
+          <svg viewBox="0 0 1000 310" role="img" aria-label="Diode voltage, forward and reverse current, and power versus time">
+            <path className="scope-grid" d="M70 18H960M70 88H960M70 100H960M70 170H960M70 182H960M70 252H960M70 18V252M292.5 18V252M515 18V252M737.5 18V252M960 18V252"/>
             {[{ name: 'Voltage', unit: 'V', values: diodeVoltage, top: 22, bottom: 82, className: 'scope-voltage' }, { name: 'Current', unit: 'A', values: diodeCurrent, top: 104, bottom: 164, className: 'scope-current' }, { name: 'Power', unit: 'W', values: diodePower, top: 186, bottom: 246, className: 'scope-power' }].map((plot) => {
-              const range = transientRange(plot.values)
-              return <g key={plot.name}><path className={plot.className} d={transientPlotPath(plot.values, plot.top, plot.bottom)}/><text x="5" y={plot.top + 10}>{plot.name} ({plot.unit})</text><text x="5" y={plot.bottom}>{fmt(range.min, plot.unit)}</text><text x="910" y={plot.top + 10}>{fmt(range.max, plot.unit)}</text></g>
+              const range = transientRange(plot.values), tickValues = Array.from({ length: 5 }, (_, index) => range.min + (range.max - range.min) * (4 - index) / 4)
+              return <g key={plot.name}>
+                {tickValues.map((tick, index) => { const y = plot.top + index * (plot.bottom - plot.top) / 4; return <g key={index}><path className="diode-axis-tick" d={`M64 ${y}h6`}/><text className="diode-y-tick" x="3" y={y + 3}>{fmt(tick, plot.unit)}</text></g> })}
+                {plot.name === 'Current' ? <><path className="scope-current" d={transientPlotPath(plot.values, plot.top, plot.bottom, 'forward')}/><path className="scope-reverse-current" d={transientPlotPath(plot.values, plot.top, plot.bottom, 'reverse')}/></> : <path className={plot.className} d={transientPlotPath(plot.values, plot.top, plot.bottom)}/>}
+                <text className="diode-axis-title" x="72" y={plot.top + 10}>{plot.name} ({plot.unit})</text>
+              </g>
             })}
-            <text x="60" y="267">0 s</text><text x="900" y="267">{fmt(diodeWaveform.times.at(-1) ?? 0, 's')}</text>
+            {Array.from({ length: 5 }, (_, index) => { const time = diodeTimes[Math.round((diodeTimes.length - 1) * index / 4)] ?? 0, x = 70 + index * 222.5; return <text className="diode-x-tick" key={index} x={x} y="271" textAnchor={index === 0 ? 'start' : index === 4 ? 'end' : 'middle'}>{fmt(time, 's')}</text> })}
+            <text className="diode-axis-title" x="515" y="297" textAnchor="middle">Time (s)</text>
           </svg>
-          <footer>Each trace is scaled to its own min/max range. Run <b>Time-domain analysis</b> to view switching behavior; steady-state DC alone has no time waveform.</footer>
+          <footer>Current is positive from anode to cathode; negative current is reverse-direction current, including the simplified recovery tail when configured. Each row has its own labeled scale.</footer>
         </section>}
         {frequencySweep && <section className="frequency-sweep-panel" aria-label="AC frequency response"><header><div><strong>AC frequency response</strong><small>{frequencySweep.label} · {frequencySweep.samples.length} points · peak {fmt(Math.max(...frequencySweep.samples.map((point)=>point.voltage)),'V RMS')}</small></div><button onClick={() => setFrequencySweep(null)} aria-label="Close frequency response">×</button></header><svg viewBox="0 0 760 190" role="img" aria-label="Logarithmic frequency sweep chart"><path className="scope-grid" d="M58 12H744M58 52H744M58 92H744M58 132H744M58 172H744M58 12V172M230 12V172M401 12V172M573 12V172M744 12V172"/><path className="sweep-trace" d={frequencySweep.samples.map((point,index) => { const x=58+index*686/(frequencySweep.samples.length-1), max=Math.max(...frequencySweep.samples.map((item)=>item.voltage),1e-9), y=164-(point.voltage/max)*144; return `${index?'L':'M'} ${x} ${y}` }).join(' ')}/><text x="58" y="187">{fmt(frequencySweep.samples[0].frequency,'Hz')}</text><text x="695" y="187">{fmt(frequencySweep.samples.at(-1)!.frequency,'Hz')}</text><text x="10" y="20">V</text></svg><footer>Frequency axis is logarithmic · supply amplitude stays constant · select another component and run sweep again.</footer></section>}
         {selected && selectedReading && simulation && <section className="component-scope" aria-label="Selected component scope">
