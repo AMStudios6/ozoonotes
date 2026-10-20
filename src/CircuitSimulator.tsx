@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import './CircuitSimulator.css'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
-type Kind = 'source' | 'resistor' | 'switch' | 'ground'
+type Kind = 'source' | 'resistor' | 'capacitor' | 'inductor' | 'diode' | 'switch' | 'ground'
 type MeterMode = 'voltage' | 'current' | 'resistance'
 type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; rotation?: number; mirrorX?: boolean; mirrorY?: boolean }
 type Point = { x: number; y: number }
@@ -71,8 +71,8 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
   const voltageSources = parts.filter((part) => part.kind === 'source')
   const size = roots.length + voltageSources.length
   if (!size) throw new Error('Add a voltage source and a load to the circuit.')
-  const matrix = Array.from({ length: size }, () => Array(size).fill(0))
-  const rhs = Array(size).fill(0)
+  let matrix = Array.from({ length: size }, () => Array(size).fill(0))
+  let rhs = Array(size).fill(0)
   const nodeFor = (id: string) => nodeIndex.get(find(id))
   const stampConductance = (a: string, b: string, conductance: number) => {
     const ia = nodeFor(a), ib = nodeFor(b)
@@ -80,57 +80,85 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
     if (ib !== undefined) matrix[ib][ib] += conductance
     if (ia !== undefined && ib !== undefined) { matrix[ia][ib] -= conductance; matrix[ib][ia] -= conductance }
   }
-  parts.forEach((part) => {
-    if (part.kind === 'resistor') stampConductance(pinId(part, 'a'), pinId(part, 'b'), 1 / Math.max(0.001, part.value))
-    if (part.kind === 'switch') stampConductance(pinId(part, 'a'), pinId(part, 'b'), part.on ? 50 : 1e-10)
-  })
-  voltageSources.forEach((part, sourceIndex) => {
-    const column = roots.length + sourceIndex
-    const a = nodeFor(pinId(part, 'a')), b = nodeFor(pinId(part, 'b'))
-    if (a !== undefined) { matrix[a][column] += 1; matrix[column][a] += 1 }
-    if (b !== undefined) { matrix[b][column] -= 1; matrix[column][b] -= 1 }
-    rhs[column] = part.value
-  })
-  for (let column = 0; column < size; column++) {
-    let pivot = column
-    for (let row = column + 1; row < size; row++) if (Math.abs(matrix[row][column]) > Math.abs(matrix[pivot][column])) pivot = row
-    if (Math.abs(matrix[pivot][column]) < 1e-14) throw new Error('This circuit has a floating or disconnected node. Check every connection and add a ground.')
-    ;[matrix[column], matrix[pivot]] = [matrix[pivot], matrix[column]]
-    ;[rhs[column], rhs[pivot]] = [rhs[pivot], rhs[column]]
-    const divisor = matrix[column][column]
-    for (let j = column; j < size; j++) matrix[column][j] /= divisor
-    rhs[column] /= divisor
-    for (let row = 0; row < size; row++) {
-      if (row === column) continue
-      const factor = matrix[row][column]
-      if (Math.abs(factor) < 1e-18) continue
-      for (let j = column; j < size; j++) matrix[row][j] -= factor * matrix[column][j]
-      rhs[row] -= factor * rhs[column]
+  const diodeConductance = 1000
+  const activeDiodes = new Set<string>()
+  let solved = Array(size).fill(0)
+  let iterations = 0
+  let changed = true
+  while (changed && iterations++ < parts.length + 2) {
+    changed = false
+    matrix = Array.from({ length: size }, () => Array(size).fill(0))
+    rhs = Array(size).fill(0)
+    parts.forEach((part) => {
+      if (part.kind === 'resistor') stampConductance(pinId(part, 'a'), pinId(part, 'b'), 1 / Math.max(0.001, part.value))
+      if (part.kind === 'inductor') stampConductance(pinId(part, 'a'), pinId(part, 'b'), 1e6)
+      if (part.kind === 'switch') stampConductance(pinId(part, 'a'), pinId(part, 'b'), part.on ? 50 : 1e-10)
+      if (part.kind === 'diode' && activeDiodes.has(part.id)) {
+        stampConductance(pinId(part, 'a'), pinId(part, 'b'), diodeConductance)
+        const a = nodeFor(pinId(part, 'a')), b = nodeFor(pinId(part, 'b')), bias = diodeConductance * Math.max(0, part.value)
+        if (a !== undefined) rhs[a] += bias
+        if (b !== undefined) rhs[b] -= bias
+      }
+    })
+    voltageSources.forEach((part, sourceIndex) => {
+      const column = roots.length + sourceIndex
+      const a = nodeFor(pinId(part, 'a')), b = nodeFor(pinId(part, 'b'))
+      if (a !== undefined) { matrix[a][column] += 1; matrix[column][a] += 1 }
+      if (b !== undefined) { matrix[b][column] -= 1; matrix[column][b] -= 1 }
+      rhs[column] = part.value
+    })
+    for (let column = 0; column < size; column++) {
+      let pivot = column
+      for (let row = column + 1; row < size; row++) if (Math.abs(matrix[row][column]) > Math.abs(matrix[pivot][column])) pivot = row
+      if (Math.abs(matrix[pivot][column]) < 1e-14) throw new Error('This circuit has a floating or disconnected node. Check every connection and add a ground.')
+      ;[matrix[column], matrix[pivot]] = [matrix[pivot], matrix[column]]
+      ;[rhs[column], rhs[pivot]] = [rhs[pivot], rhs[column]]
+      const divisor = matrix[column][column]
+      for (let j = column; j < size; j++) matrix[column][j] /= divisor
+      rhs[column] /= divisor
+      for (let row = 0; row < size; row++) {
+        if (row === column) continue
+        const factor = matrix[row][column]
+        if (Math.abs(factor) < 1e-18) continue
+        for (let j = column; j < size; j++) matrix[row][j] -= factor * matrix[column][j]
+        rhs[row] -= factor * rhs[column]
+      }
     }
+    solved = rhs
+    const voltageOfNode = (id: string) => { const index = nodeFor(id); return index === undefined ? 0 : solved[index] }
+    parts.filter((part) => part.kind === 'diode').forEach((part) => {
+      const forward = voltageOfNode(pinId(part, 'a')) - voltageOfNode(pinId(part, 'b')) > Math.max(0, part.value)
+      if (forward !== activeDiodes.has(part.id)) { if (forward) activeDiodes.add(part.id); else activeDiodes.delete(part.id); changed = true }
+    })
   }
   const nodeVoltages: Record<string, number> = { [groundRoot]: 0 }
-  roots.forEach((root, index) => { nodeVoltages[root] = rhs[index] })
+  roots.forEach((root, index) => { nodeVoltages[root] = solved[index] })
   const voltageOf = (id: string) => nodeVoltages[find(id)] ?? 0
   const readings = parts.filter((part) => part.kind !== 'ground').map((part) => {
     const a = voltageOf(pinId(part, 'a')), b = voltageOf(pinId(part, 'b'))
     const voltage = a - b
-    const current = part.kind === 'source' ? rhs[roots.length + voltageSources.findIndex((source) => source.id === part.id)] : voltage * (part.kind === 'resistor' ? 1 / Math.max(0.001, part.value) : part.on ? 50 : 1e-10)
+    const current = part.kind === 'source' ? solved[roots.length + voltageSources.findIndex((source) => source.id === part.id)]
+      : part.kind === 'resistor' ? voltage / Math.max(0.001, part.value)
+        : part.kind === 'inductor' ? voltage * 1e6
+          : part.kind === 'diode' ? (activeDiodes.has(part.id) ? Math.max(0, voltage - Math.max(0, part.value)) * diodeConductance : 0)
+            : part.kind === 'switch' ? voltage * (part.on ? 50 : 1e-10) : 0
     return { id: part.id, label: part.label, voltage, current, power: voltage * current }
   })
   const pins = allPins.map((pin) => ({ id: pin.id, voltage: voltageOf(pin.id) }))
-  return { readings, nodeVoltages: Object.fromEntries(pins.map((pin) => [pin.id, pin.voltage])), message: 'DC operating point solved · ideal wires · resistive components' }
+  return { readings, nodeVoltages: Object.fromEntries(pins.map((pin) => [pin.id, pin.voltage])), message: 'DC steady state solved · capacitor open, inductor short, diode forward-drop model' }
 }
 const fmt = (value: number, unit: string) => {
   const abs = Math.abs(value)
   const [scaled, prefix] = abs >= 1e6 ? [value / 1e6, 'M'] : abs >= 1e3 ? [value / 1e3, 'k'] : abs >= 1 ? [value, ''] : abs >= 1e-3 ? [value * 1e3, 'm'] : [value * 1e6, 'µ']
   return (Math.abs(scaled) < 10 ? scaled.toFixed(3) : scaled.toFixed(2)) + ' ' + prefix + unit
 }
-const partNames: Record<Kind, string> = { source: 'DC source', resistor: 'Resistor', switch: 'Switch', ground: 'Ground' }
+const partNames: Record<Kind, string> = { source: 'DC source', resistor: 'Resistor', capacitor: 'Capacitor', inductor: 'Inductor', diode: 'Diode', switch: 'Switch', ground: 'Ground' }
+const partGlyph: Record<Kind, string> = { source: '＋', resistor: '▱', capacitor: '║', inductor: '∿', diode: '▷', switch: '⌁', ground: '⏚' }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
-function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
+function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, voltageMap }: {
   part: Part; selected: boolean; onPointerDown: (event: ReactPointerEvent<SVGGElement>, part: Part) => void
-  onPin: (pin: Pin) => void; voltageMap?: Record<string, number>
+  onPin: (pin: Pin) => void; onPinPointerDown: (event: ReactPointerEvent<SVGGElement>, pin: Pin) => void; voltageMap?: Record<string, number>
 }) {
   const pins = symbolPinsText(part)
   const localPinOffset = (pin: Pin) => part.kind === 'ground' ? { x: 0, y: -23 } : { x: pin.id.endsWith(':a') ? -48 : 48, y: 0 }
@@ -139,6 +167,9 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
     {part.kind === 'resistor' && <>
       <line x1="-48" y1="0" x2="-31" y2="0" /><path d="M-31 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L29 0" /><line x1="29" y1="0" x2="48" y2="0" />
     </>}
+    {part.kind === 'capacitor' && <><line x1="-48" y1="0" x2="-8" y2="0" /><line x1="-8" y1="-18" x2="-8" y2="18" className="component-plate" /><line x1="8" y1="-18" x2="8" y2="18" className="component-plate" /><line x1="8" y1="0" x2="48" y2="0" /></>}
+    {part.kind === 'inductor' && <><line x1="-48" y1="0" x2="-30" y2="0" /><path d="M-30 0 C-30 -21 -10 -21 -10 0 C-10 -21 10 -21 10 0 C10 -21 30 -21 30 0" /><line x1="30" y1="0" x2="48" y2="0" /></>}
+    {part.kind === 'diode' && <><line x1="-48" y1="0" x2="-14" y2="0" /><path d="M-14 -17 L14 0 L-14 17 Z" className="diode-triangle" /><line x1="14" y1="-18" x2="14" y2="18" className="component-plate" /><line x1="14" y1="0" x2="48" y2="0" /></>}
     {part.kind === 'source' && <>
       <line x1="-48" y1="0" x2="-27" y2="0" /><line x1="27" y1="0" x2="48" y2="0" /><circle r="27" /><text className="source-plus" x="-9" y="-3">+</text><text className="source-minus" x="7" y="5">−</text>
     </>}
@@ -148,59 +179,82 @@ function PartSymbol({ part, selected, onPointerDown, onPin, voltageMap }: {
     {part.kind === 'ground' && <g transform="translate(0 -23)"><line y1="0" y2="10" /><line x1="-17" y1="10" x2="17" y2="10" /><line x1="-11" y1="15" x2="11" y2="15" /><line x1="-5" y1="20" x2="5" y2="20" /></g>}
     {pins.map((pin) => {
       const local = localPinOffset(pin)
-      return <g key={pin.id} className="circuit-pin" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onPin(pin) }}>
+      return <g key={pin.id} data-pin-id={pin.id} className="circuit-pin" onPointerDown={(event) => { event.stopPropagation(); onPinPointerDown(event, pin) }} onClick={(event) => { event.stopPropagation(); onPin(pin) }}>
         <circle cx={local.x} cy={local.y} r="8" className="pin-hit" />
         <circle cx={local.x} cy={local.y} r="3.2" className="pin-dot" />
         <text x={local.x} y={local.y - 12} className="pin-label">{voltageLabel(pin)}</text>
       </g>
     })}
     <text x="0" y="39" className="part-label">{part.label}</text>
-    {part.kind !== 'ground' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.on ? 'Closed' : 'Open'}</text>}
+    {part.kind !== 'ground' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.kind === 'capacitor' ? fmt(part.value, 'F') : part.kind === 'inductor' ? fmt(part.value, 'H') : part.kind === 'diode' ? 'Vf ' + fmt(part.value, 'V') : part.on ? 'Closed' : 'Open'}</text>}
   </g>
 }
 export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [circuit, setCircuit] = useState<Circuit>(loadCircuit)
   const [colorTheme, setColorTheme] = useSimulatorTheme()
   const [selectedPart, setSelectedPart] = useState<string | null>(null)
+  const [selectedParts, setSelectedParts] = useState<string[]>([])
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
+  const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | null>(null)
+  const [findQuery, setFindQuery] = useState('')
+  const [clipboard, setClipboard] = useState<{ parts: Part[]; wires: Wire[] }>({ parts: [], wires: [] })
+  const [zoom, setZoom] = useState(1)
+  const [viewCenter, setViewCenter] = useState<Point>({ x: W / 2, y: H / 2 })
   const [placement, setPlacement] = useState<Kind | null>(null)
   const [wireStart, setWireStart] = useState<string | null>(null)
   const [dmmActive, setDmmActive] = useState(false)
   const [meterMode, setMeterMode] = useState<MeterMode>('voltage')
-  const [meterFirstPin, setMeterFirstPin] = useState<string | null>(null)
-  const [meterReading, setMeterReading] = useState('Select a measurement mode, then probe the circuit.')
+  const [meterProbe, setMeterProbe] = useState<'red' | 'black' | null>(null)
+  const [meterPins, setMeterPins] = useState<{ red: string | null; black: string | null }>({ red: null, black: null })
+  const [meterReading, setMeterReading] = useState('Choose a mode, then connect the probes.')
+  const [gridVisible, setGridVisible] = useState(true)
   const [simulation, setSimulation] = useState<Simulation | null>(null)
+  const [simulationActive, setSimulationActive] = useState(false)
+  const [historyVersion, setHistoryVersion] = useState(0)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
   const [dragPoint, setDragPoint] = useState<WireHandle | null>(null)
   const [wirePoints, setWirePoints] = useState<Point[]>([])
   const [wireCursor, setWireCursor] = useState<Point | null>(null)
+  const wireDrag = useRef<{ from: string; x: number; y: number; moved: boolean } | null>(null)
+  const suppressPinClick = useRef(false)
+  const undoStack = useRef<Circuit[]>([])
+  const redoStack = useRef<Circuit[]>([])
+  const lastCircuit = useRef(circuit)
+  const historyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const historyAction = useRef(false)
+  const designFileInput = useRef<HTMLInputElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const selected = circuit.parts.find((part) => part.id === selectedPart)
+  const selectedIds = selectedParts.length ? selectedParts : selectedPart ? [selectedPart] : []
+  const viewWidth = W / zoom, viewHeight = H / zoom
+  const viewBox = `${viewCenter.x - viewWidth / 2} ${viewCenter.y - viewHeight / 2} ${viewWidth} ${viewHeight}`
   const pinLookup = Object.fromEntries(circuit.parts.flatMap(pinsFor).map((pin) => [pin.id, pin]))
   useEffect(() => { try { localStorage.setItem('ozoo:circuit', JSON.stringify(circuit)) } catch {} }, [circuit])
   useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setPlacement(null); setWireStart(null); setWirePoints([]); setWireCursor(null); setDragPoint(null) }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPart) {
-        setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selectedPart), wires: value.wires.filter((wire) => !wire.from.startsWith(selectedPart + ':') && !wire.to.startsWith(selectedPart + ':')) }))
-        setSelectedPart(null); setSimulation(null)
-      }
-    }
-    window.addEventListener('keydown', keydown)
-    return () => window.removeEventListener('keydown', keydown)
-  }, [selectedPart])
+    if (historyAction.current) { historyAction.current = false; lastCircuit.current = circuit; return }
+    if (circuit === lastCircuit.current) return
+    const previous = lastCircuit.current
+    if (historyTimer.current) clearTimeout(historyTimer.current)
+    historyTimer.current = setTimeout(() => { undoStack.current.push(previous); if (undoStack.current.length > 80) undoStack.current.shift(); redoStack.current = []; lastCircuit.current = circuit; historyTimer.current = null; setHistoryVersion((version) => version + 1) }, 240)
+  }, [circuit])
+  useEffect(() => {
+    if (!simulationActive) return
+    try { setSimulation(solveCircuit(circuit.parts, circuit.wires)); setError('') }
+    catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
+  }, [circuit, simulationActive])
   const screenPoint = (event: { clientX: number; clientY: number }) => {
     const rect = svgRef.current?.getBoundingClientRect()
-    return rect ? { x: (event.clientX - rect.left) * W / rect.width, y: (event.clientY - rect.top) * H / rect.height } : { x: W / 2, y: H / 2 }
+    const view = svgRef.current?.viewBox.baseVal
+    return rect && view ? { x: view.x + (event.clientX - rect.left) * view.width / rect.width, y: view.y + (event.clientY - rect.top) * view.height / rect.height } : { x: W / 2, y: H / 2 }
   }
   const addPartAt = (kind: Kind, x: number, y: number) => {
-    const labels = { source: 'V', resistor: 'R', switch: 'S', ground: 'GND' }
-    const value = kind === 'source' ? 5 : kind === 'resistor' ? 1000 : 0
+    const labels: Record<Kind, string> = { source: 'V', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', switch: 'S', ground: 'GND' }
+    const value = kind === 'source' ? 5 : kind === 'resistor' ? 1000 : kind === 'capacitor' ? 100e-6 : kind === 'inductor' ? 10e-3 : kind === 'diode' ? 0.7 : 0
     const label = kind === 'ground' ? 'GND' : labels[kind] + (circuit.parts.filter((part) => part.kind === kind).length + 1)
     const part: Part = { id: makeId(), kind, x: Math.max(64, Math.min(W - 64, x)), y: Math.max(90, Math.min(H - 62, y)), value, label, on: true }
     setCircuit((current) => ({ ...current, parts: [...current.parts, part] }))
-    setSelectedPart(part.id); setSelectedWire(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterFirstPin(null)
+    setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterPins({ red: null, black: null })
   }
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.button !== 0 || event.target !== event.currentTarget) return
@@ -217,12 +271,13 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       return
     }
     setSelectedPart(null)
+    setSelectedParts([])
     setSelectedWire(null)
   }
   const handlePartPointerDown = (event: ReactPointerEvent<SVGGElement>, part: Part) => {
     if (event.button !== 0 || placement) return
     if (dmmActive) {
-      setSelectedPart(part.id); setSelectedWire(null)
+      setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null)
       if (meterMode === 'voltage') { setMeterReading('Voltage mode: select two terminal pins.'); return }
       try {
         const result = solveCircuit(circuit.parts, circuit.wires).readings.find((reading) => reading.id === part.id)
@@ -233,30 +288,53 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       } catch (reason) { setMeterReading(reason instanceof Error ? reason.message : 'Run a valid circuit before measuring.') }
       return
     }
+    if (event.shiftKey) {
+      setSelectedParts((current) => { const base = current.length ? current : selectedPart ? [selectedPart] : []; return base.includes(part.id) ? base.filter((id) => id !== part.id) : [...base, part.id] })
+      setSelectedPart(null); setSelectedWire(null); return
+    }
     const point = screenPoint(event)
-    setSelectedPart(part.id); setSelectedWire(null)
+    if (!selectedParts.includes(part.id)) { setSelectedPart(part.id); setSelectedParts([]) }
+    else setSelectedPart(part.id)
+    setSelectedWire(null)
     setDrag({ id: part.id, dx: point.x - part.x, dy: point.y - part.y })
     svgRef.current?.setPointerCapture(event.pointerId)
   }
   const handlePin = (pin: Pin) => {
+    if (suppressPinClick.current) { suppressPinClick.current = false; return }
     if (dmmActive && meterMode !== 'voltage') { setMeterReading('Click a component body to measure ' + (meterMode === 'current' ? 'current.' : 'resistance.')); return }
     if (dmmActive && meterMode === 'voltage') {
-      if (!meterFirstPin) { setMeterFirstPin(pin.id); setMeterReading('Probe A set. Select a second pin for Probe B.'); setError(''); return }
-      if (meterFirstPin === pin.id) { setMeterReading('Choose a different pin for Probe B.'); return }
+      const lead = meterProbe ?? (meterPins.red === null ? 'red' : 'black')
+      const nextPins = { ...meterPins, [lead]: pin.id }
+      setMeterPins(nextPins)
+      setMeterProbe(null)
+      setError('')
+      if (!nextPins.red || !nextPins.black) {
+        setMeterReading(`${lead === 'red' ? 'Red' : 'Black'} probe placed on ${pin.label}. Choose the other probe and select a terminal.`)
+        return
+      }
       try {
         const result = solveCircuit(circuit.parts, circuit.wires)
-        const volts = (result.nodeVoltages[pin.id] ?? 0) - (result.nodeVoltages[meterFirstPin] ?? 0)
-        setMeterReading('Voltage B − A: ' + fmt(volts, 'V'))
+        const volts = (result.nodeVoltages[nextPins.red] ?? 0) - (result.nodeVoltages[nextPins.black] ?? 0)
+        setMeterReading(fmt(volts, 'V'))
         setSimulation(result); setError('')
       } catch (reason) { setMeterReading(reason instanceof Error ? reason.message : 'Run a valid circuit before measuring.'); setError('') }
-      setMeterFirstPin(null); return
+      return
     }
-    setSelectedPart(null); setSelectedWire(null)
+    setSelectedPart(null); setSelectedParts([]); setSelectedWire(null)
     if (!wireStart) { setPlacement(null); setWireStart(pin.id); setWirePoints([]); setWireCursor({ x: pin.x, y: pin.y }); setError('Wire follows the pointer. Click the board to add a bend, then another pin to finish.'); return }
     if (wireStart !== pin.id) setCircuit((current) => ({ ...current, wires: [...current.wires, { id: makeId(), from: wireStart, to: pin.id, points: wirePoints }] }))
     setWireStart(null); setWirePoints([]); setWireCursor(null); setError(''); setSimulation(null)
   }
+  const handlePinPointerDown = (event: ReactPointerEvent<SVGGElement>, pin: Pin) => {
+    if (event.button !== 0 || dmmActive || placement || wireStart) return
+    const point = screenPoint(event)
+    wireDrag.current = { from: pin.id, x: point.x, y: point.y, moved: false }
+    setWireStart(pin.id); setWirePoints([]); setWireCursor(point); setSelectedPart(null); setSelectedWire(null)
+    setError('Drag this terminal to another pin to connect it, or click pins to route a wire.')
+    svgRef.current?.setPointerCapture(event.pointerId)
+  }
   const runSimulation = () => {
+    setSimulationActive(true)
     setError('')
     try { setSimulation(solveCircuit(circuit.parts, circuit.wires)) }
     catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
@@ -266,7 +344,96 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === selectedPart ? { ...part, ...change } : part) }))
     setSimulation(null)
   }
-  const newCircuit = () => { setCircuit({ parts: [], wires: [] }); setSimulation(null); setError(''); setSelectedPart(null); setSelectedWire(null); setWireStart(null) }
+  const undoCircuit = () => {
+    if (historyTimer.current) { clearTimeout(historyTimer.current); historyTimer.current = null; undoStack.current.push(lastCircuit.current); lastCircuit.current = circuit }
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    redoStack.current.push(circuit); historyAction.current = true; lastCircuit.current = previous; setCircuit(previous); setSimulation(null); setHistoryVersion((version) => version + 1)
+  }
+  const redoCircuit = () => {
+    const next = redoStack.current.pop()
+    if (!next) return
+    undoStack.current.push(circuit); historyAction.current = true; lastCircuit.current = next; setCircuit(next); setSimulation(null); setHistoryVersion((version) => version + 1)
+  }
+  const deleteSelection = () => {
+    if (selectedIds.length) setCircuit((current) => ({ parts: current.parts.filter((part) => !selectedIds.includes(part.id)), wires: current.wires.filter((wire) => !selectedIds.some((id) => wire.from.startsWith(id + ':') || wire.to.startsWith(id + ':'))) }))
+    else if (selectedWire) setCircuit((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selectedWire) }))
+    setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSimulation(null)
+  }
+  const copySelection = () => {
+    if (!selectedIds.length) return
+    const parts = circuit.parts.filter((part) => selectedIds.includes(part.id))
+    const wires = circuit.wires.filter((wire) => selectedIds.some((id) => wire.from.startsWith(id + ':')) && selectedIds.some((id) => wire.to.startsWith(id + ':')))
+    setClipboard({ parts, wires })
+  }
+  const pasteParts = (parts: Part[], wires: Wire[]) => {
+    if (!parts.length) return
+    const remap = new Map(parts.map((part) => [part.id, makeId()]))
+    const copies = parts.map((part) => ({ ...part, id: remap.get(part.id)!, x: Math.min(W - 64, part.x + 42), y: Math.min(H - 62, part.y + 42), label: part.label + ' copy' }))
+    const mapPin = (id: string) => { const split = id.lastIndexOf(':'); return (remap.get(id.slice(0, split)) ?? id.slice(0, split)) + id.slice(split) }
+    const copiedWires = wires.map((wire) => ({ ...wire, id: makeId(), from: mapPin(wire.from), to: mapPin(wire.to), points: wire.points?.map((point) => ({ x: point.x + 42, y: point.y + 42 })) }))
+    setCircuit((current) => ({ parts: [...current.parts, ...copies], wires: [...current.wires, ...copiedWires] }))
+    setSelectedPart(null); setSelectedParts(copies.map((part) => part.id)); setSelectedWire(null); setSimulation(null)
+  }
+  const duplicateSelection = () => pasteParts(circuit.parts.filter((part) => selectedIds.includes(part.id)), circuit.wires.filter((wire) => selectedIds.some((id) => wire.from.startsWith(id + ':')) && selectedIds.some((id) => wire.to.startsWith(id + ':'))))
+  const centerCircuit = () => {
+    if (!circuit.parts.length) { setZoom(1); setViewCenter({ x: W / 2, y: H / 2 }); return }
+    const xs = circuit.parts.map((part) => part.x), ys = circuit.parts.map((part) => part.y)
+    const minX = Math.min(...xs) - 110, maxX = Math.max(...xs) + 110, minY = Math.min(...ys) - 90, maxY = Math.max(...ys) + 100
+    setViewCenter({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }); setZoom(Math.min(1, W / (maxX - minX), H / (maxY - minY)))
+  }
+  const setZoomBy = (factor: number) => setZoom((value) => Math.max(0.35, Math.min(3, value * factor)))
+  const resetZoom = () => { setZoom(1); setViewCenter({ x: W / 2, y: H / 2 }) }
+  const rotateSelection = (degrees: number) => { if (selectedIds.length) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, rotation: ((part.rotation ?? 0) + degrees + 360) % 360 } : part) })) }
+  const mirrorSelection = (axis: 'mirrorX' | 'mirrorY') => { if (selectedIds.length) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, [axis]: !part[axis] } : part) })) }
+  const selectAll = () => { setSelectedParts(circuit.parts.map((part) => part.id)); setSelectedPart(null); setSelectedWire(null) }
+  const findComponent = () => {
+    const query = findQuery.trim().toLowerCase()
+    if (!query) return
+    const found = circuit.parts.find((part) => part.label.toLowerCase().includes(query) || partNames[part.kind].toLowerCase().includes(query))
+    if (found) { setSelectedPart(found.id); setSelectedParts([]); setViewCenter({ x: found.x, y: found.y }); setZoom(1.5); setError('Found ' + found.label + '.') }
+    else setError('No component matched “' + findQuery + '”.')
+  }
+  const saveDesign = () => {
+    const payload = JSON.stringify({ format: 'ozoo-circuit', version: 1, parts: circuit.parts, wires: circuit.wires }, null, 2)
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' })), link = document.createElement('a')
+    link.href = url; link.download = 'ozoo-circuit.json'; link.click(); URL.revokeObjectURL(url)
+  }
+  const importDesign = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const data = JSON.parse(await file.text()) as Circuit & { format?: string; version?: number }
+      if (!Array.isArray(data.parts) || !Array.isArray(data.wires) || data.parts.some((part) => !part.id || !part.kind || !Number.isFinite(part.x) || !Number.isFinite(part.y)) || data.wires.some((wire) => !wire.from || !wire.to)) throw new Error('This file is not a valid circuit design.')
+      setCircuit({ parts: data.parts, wires: data.wires }); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Circuit design opened.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open this circuit file.') }
+    event.target.value = ''
+  }
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const typing = !!target?.closest('input, textarea, select, [contenteditable="true"]')
+      if (event.key === 'Escape') { setOpenMenu(null); setPlacement(null); setWireStart(null); setWirePoints([]); setWireCursor(null); setDragPoint(null); return }
+      if (typing) return
+      const mod = event.ctrlKey || event.metaKey
+      if (mod && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redoCircuit() : undoCircuit(); return }
+      if (mod && event.key.toLowerCase() === 'y') { event.preventDefault(); redoCircuit(); return }
+      if (mod && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAll(); return }
+      if (mod && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelection(); return }
+      if (mod && event.key.toLowerCase() === 'x') { event.preventDefault(); copySelection(); deleteSelection(); return }
+      if (mod && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteParts(clipboard.parts, clipboard.wires); return }
+      if (mod && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelection(); return }
+      if (event.key === '/') { event.preventDefault(); setOpenMenu('edit'); return }
+      if (event.key === '0') { resetZoom(); return }
+      if (event.key === '+' || event.key === '=') { setZoomBy(1.2); return }
+      if (event.key === '-') { setZoomBy(1 / 1.2); return }
+      if (event.key === 'Home') { centerCircuit(); return }
+      if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelection() }
+    }
+    window.addEventListener('keydown', keydown)
+    return () => window.removeEventListener('keydown', keydown)
+  }, [circuit, selectedPart, selectedParts, selectedWire, clipboard])
+  const newCircuit = () => { setCircuit({ parts: [], wires: [] }); setSimulation(null); setError(''); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }
   const downloadSvg = () => {
     const svg = svgRef.current
     if (!svg) return
@@ -277,65 +444,90 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     <header className="circuit-topbar">
       <button className="circuit-back" onClick={onBack}>← <span>Simulator</span></button>
       <div className="circuit-brand"><span className="circuit-brand-icon">Ω</span><div><strong>Circuit Studio</strong><small>Electronics simulator</small></div></div>
-      <div className="circuit-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><button onClick={() => { setCircuit(exampleCircuit()); setSimulation(null); setError('') }}>Load example</button><button aria-label="Delete selected" title="Delete selected component or wire" disabled={!selectedPart && !selectedWire} onClick={() => { if (selectedWire) { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null) } else if (selectedPart) { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selectedPart), wires: value.wires.filter((wire) => !wire.from.startsWith(selectedPart + ':') && !wire.to.startsWith(selectedPart + ':')) })); setSelectedPart(null) } setSimulation(null) }}>Delete</button><button onClick={downloadSvg}>Export SVG</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
+      <div className="circuit-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><button aria-label="Delete selected" title="Delete selected component or wire" disabled={!selectedIds.length && !selectedWire} onClick={deleteSelection}>Delete</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
     </header>
-    <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Place components, wire the pins, and solve a basic DC operating point.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
+    <nav className="circuit-menubar" aria-label="Circuit menus" data-history-version={historyVersion}>
+      <div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" onClick={() => { newCircuit(); setOpenMenu(null) }}>New design</button><button role="menuitem" onClick={() => designFileInput.current?.click()}>Open design…</button><button role="menuitem" onClick={() => { saveDesign(); setOpenMenu(null) }}>Download design <kbd>JSON</kbd></button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>Export schematic <kbd>SVG</kbd></button><hr /><button role="menuitem" onClick={() => { setCircuit(exampleCircuit()); setSelectedPart(null); setSelectedParts([]); setSimulation(null); setError(''); setOpenMenu(null) }}>Load example circuit</button></div>}</div>
+      <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div>{(['source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} onClick={() => { setPlacement(kind); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div>}</div>
+      <div className="circuit-menu-wrap"><button className={openMenu === 'edit' ? 'open' : ''} aria-expanded={openMenu === 'edit'} onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}>Edit <span>⌄</span></button>{openMenu === 'edit' && <div className="circuit-menu-popover circuit-edit-popover" role="menu">
+        <button role="menuitem" disabled={!undoStack.current.length} onClick={() => { undoCircuit(); setOpenMenu(null) }}>↶ Undo <kbd>Ctrl+Z</kbd></button><button role="menuitem" disabled={!redoStack.current.length} onClick={() => { redoCircuit(); setOpenMenu(null) }}>↷ Redo <kbd>Ctrl+Y</kbd></button><hr />
+        <button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); deleteSelection(); setOpenMenu(null) }}>✂ Cut <kbd>Ctrl+X</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); setOpenMenu(null) }}>▢ Copy <kbd>Ctrl+C</kbd></button><button role="menuitem" disabled={!clipboard.parts.length} onClick={() => { pasteParts(clipboard.parts, clipboard.wires); setOpenMenu(null) }}>▣ Paste <kbd>Ctrl+V</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { duplicateSelection(); setOpenMenu(null) }}>▧ Duplicate <kbd>Ctrl+D</kbd></button><button role="menuitem" onClick={() => { selectAll(); setOpenMenu(null) }}>✣ Select all <kbd>Ctrl+A</kbd></button><hr />
+        <label className="circuit-menu-search"><span>Find component <kbd>/</kbd></span><div><input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { findComponent(); setOpenMenu(null) } }} placeholder="Name or type…" /><button onClick={() => { findComponent(); setOpenMenu(null) }}>Find</button></div></label>
+        <button role="menuitem" onClick={() => { centerCircuit(); setOpenMenu(null) }}>⌖ Center circuit <kbd>Home</kbd></button><button role="menuitem" onClick={() => { resetZoom(); setOpenMenu(null) }}>◎ Zoom 100% <kbd>0</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1.2); setOpenMenu(null) }}>⊕ Zoom in <kbd>+</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1 / 1.2); setOpenMenu(null) }}>⊖ Zoom out <kbd>−</kbd></button><hr />
+        <button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorX'); setOpenMenu(null) }}>↔ Mirror X</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorY'); setOpenMenu(null) }}>↕ Mirror Y</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(-90); setOpenMenu(null) }}>↶ Rotate CCW</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(90); setOpenMenu(null) }}>↻ Rotate CW</button>
+      </div>}</div>
+      <input ref={designFileInput} type="file" accept=".json,application/json" hidden onChange={importDesign} />
+    </nav>
+    <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Drag parts into place, connect terminals, and watch current and voltage.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
     <section className="circuit-layout">
-      <aside className="circuit-palette">
-        <div className="circuit-section-title">COMPONENTS</div>
-        {(['source', 'resistor', 'switch', 'ground'] as Kind[]).map((kind) => <button key={kind} className={placement === kind ? 'active' : ''} onClick={() => { setPlacement(placement === kind ? null : kind); setWireStart(null); setError('Click the canvas to place ' + partNames[kind].toLowerCase() + '.') }}>
-          <span className={'palette-symbol symbol-' + kind}>{kind === 'source' ? '＋' : kind === 'resistor' ? '▱' : kind === 'switch' ? '⌁' : '⏚'}</span><span>{partNames[kind]}</span><small>{kind === 'source' ? 'DC voltage' : kind === 'resistor' ? 'Resistance' : kind === 'switch' ? 'Open / close' : 'Reference node'}</small>
-        </button>)}
-        <div className="circuit-section-title">TOOLS</div>
-        <button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setWireStart(null); setMeterFirstPin(null); setMeterReading('Voltage: select two pins · Current / resistance: select a component.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Digital multimeter</span><small>Measure voltage, current, resistance</small></button>
-        {dmmActive && <div className="circuit-meter-panel"><strong>Meter mode</strong><select aria-label="Multimeter mode" value={meterMode} onChange={(event) => { setMeterMode(event.target.value as MeterMode); setMeterFirstPin(null); setMeterReading('Choose where to probe the circuit.') }}><option value="voltage">Voltage (two pins)</option><option value="current">Current (component)</option><option value="resistance">Resistance (component)</option></select><output>{meterReading}</output></div>}
-        <button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Click any two pins to connect them with a wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span><small>Pin → bend points → pin</small></button>
-        <button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New circuit</span><small>Clear this canvas</small></button>
-        <div className="circuit-help"><strong>Quick start</strong><p>Select a component, then click the canvas. To route a wire, click a terminal, add bend points on the board, then click the destination terminal.</p><p>Try the loaded 5 V source and 1 kΩ resistor. Click <b>Simulate</b> to read voltage and current.</p></div>
-      </aside>
+      <section className="circuit-tools" aria-label="Circuit tools">
+        <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New</span></button></div>
+      </section>
       <section className="circuit-main">
-        <div className="circuit-canvas-head"><span><i /> Schematic</span><span>{placement ? 'Click to place · Esc to cancel' : wireStart ? 'Select the second pin' : 'Drag parts to arrange · click a pin to wire'}</span></div>
-        <svg ref={svgRef} viewBox={'0 0 ' + W + ' ' + H} className={'circuit-canvas ' + (placement ? 'placing' : '')} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
+        <div className="circuit-canvas-head"><span><i /> Schematic</span><span className="circuit-canvas-controls"><span>{placement ? 'Click to place · Esc to cancel' : wireStart ? 'Drag to a pin or click the destination terminal' : 'Drag parts to arrange · drag a pin to wire'}</span><div className="circuit-zoom-controls"><button title="Zoom out" aria-label="Zoom out" onClick={() => setZoomBy(1 / 1.2)}>−</button><output>{Math.round(zoom * 100)}%</output><button title="Zoom in" aria-label="Zoom in" onClick={() => setZoomBy(1.2)}>+</button><button title="Center circuit" onClick={centerCircuit}>Center</button></div></span></div>
+        <svg ref={svgRef} viewBox={viewBox} className={'circuit-canvas ' + (placement ? 'placing' : '')} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
           const point = screenPoint(event)
-          if (wireStart) setWireCursor(point)
+          if (wireDrag.current) { const state = wireDrag.current; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(point) }
+          else if (wireStart) setWireCursor(point)
           if (dragPoint) { setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
           if (!drag) return
           setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === drag.id ? { ...part, x: Math.max(55, Math.min(W - 55, point.x - drag.dx)), y: Math.max(70, Math.min(H - 45, point.y - drag.dy)) } : part) }))
-        }} onPointerUp={(event) => { if (drag || dragPoint) { setDrag(null); setDragPoint(null); setSimulation(null); try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {} } }}>
+        }} onPointerUp={(event) => {
+          if (wireDrag.current) {
+            const state = wireDrag.current
+            const endpoint = document.elementFromPoint(event.clientX, event.clientY)?.closest<SVGGElement>('.circuit-pin')?.dataset.pinId
+            if (state.moved && endpoint && endpoint !== state.from) {
+              setCircuit((value) => ({ ...value, wires: [...value.wires, { id: makeId(), from: state.from, to: endpoint }] }))
+              setWireStart(null); setWireCursor(null); setWirePoints([]); setSimulation(null); setError('Wire connected.')
+            } else if (state.moved) { const point = screenPoint(event); setWirePoints((value) => [...value, point]); setWireCursor(point) }
+            suppressPinClick.current = true; window.setTimeout(() => { suppressPinClick.current = false }, 0); wireDrag.current = null
+          }
+          if (drag || dragPoint) { setDrag(null); setDragPoint(null); setSimulation(null) }
+          try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {}
+        }}>
           <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern></defs>
-          <rect width={W} height={H} fill="url(#circuit-grid)" />
+          {gridVisible && <rect width={W} height={H} fill="url(#circuit-grid)" />}
           {circuit.wires.map((wire) => {
             const a = pinLookup[wire.from], b = pinLookup[wire.to]
             if (!a || !b) return null
             const middle = wire.points?.[Math.floor((wire.points.length - 1) / 2)] ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
             const path = wirePath(a, b, wire.points)
             return <g key={wire.id} className={'circuit-wire ' + (selectedWire === wire.id ? 'selected' : '')} onClick={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null) }}>
-              <path d={path} />
+              <path d={path} className={simulation && simulation.readings.some((reading) => Math.abs(reading.current) > 1e-8) ? 'current-live' : ''} />
               <path className="wire-hit" d={path} />
               {selectedWire === wire.id && (wire.points ?? []).map((point, index) => <circle key={index} className="wire-handle" cx={point.x} cy={point.y} r="6" onPointerDown={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null); setDragPoint({ wireId: wire.id, index }); svgRef.current?.setPointerCapture(event.pointerId) }} />)}
               {simulation && <text x={middle.x} y={middle.y - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
             </g>
           })}
           {wireStart && wireCursor && pinLookup[wireStart] && <><path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />{wirePoints.map((point, index) => <circle key={'route-' + index} className="wire-preview-handle" cx={point.x} cy={point.y} r="4" />)}</>}
-          {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id} onPointerDown={handlePartPointerDown} onPin={handlePin} voltageMap={simulation?.nodeVoltages} />)}
+          {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={simulation?.nodeVoltages} />)}
         </svg>
-        <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · 5 V example loaded · Double click a switch to toggle it in the inspector</span>}</div>
+        <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · Drag parts to move them · drag terminals to connect wires · Simulate to show voltages and current</span>}</div>
         {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>DC analysis</span></div><div className="circuit-results-table"><div className="circuit-result-row labels"><span>Part</span><span>Voltage</span><span>Current</span><span>Power</span></div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id}><span>{reading.label}</span><span>{fmt(reading.voltage, 'V')}</span><span>{fmt(reading.current, 'A')}</span><span>{fmt(reading.power, 'W')}</span></div>)}</div></div>}
       </section>
       <aside className="circuit-inspector">
         <div className="circuit-section-title">INSPECTOR</div>
+        {dmmActive && <section className="physical-dmm" aria-label="Digital multimeter">
+          <div className="dmm-topline"><span>OZOO</span><small>DIGITAL MULTIMETER</small></div>
+          <div className="dmm-screen"><small>{meterMode === 'voltage' ? 'DC VOLTS' : meterMode === 'current' ? 'DC AMPS' : 'RESISTANCE'}</small><output>{meterReading}</output><span>{meterMode === 'voltage' ? 'RED − BLACK' : 'SELECT COMPONENT'}</span></div>
+          <div className="dmm-mode-label">MEASURE</div>
+          <div className="dmm-modes">{([['voltage', 'V'], ['current', 'A'], ['resistance', 'Ω']] as const).map(([mode, label]) => <button key={mode} className={meterMode === mode ? 'active' : ''} onClick={() => { setMeterMode(mode); setMeterProbe(null); setMeterPins({ red: null, black: null }); setMeterReading(mode === 'voltage' ? 'Choose red and black probe terminals.' : `Select a component to read ${mode === 'current' ? 'current.' : 'resistance.'}`) }}>{label}</button>)}</div>
+          <div className="dmm-leads"><button className={'dmm-lead red ' + (meterProbe === 'red' ? 'chosen' : '')} onClick={() => { setMeterProbe('red'); setMeterReading('Red probe selected. Click a circuit terminal.') }}><i /> RED PROBE <b>{meterPins.red ? pinLookup[meterPins.red]?.label ?? 'Set' : 'Set'}</b></button><button className={'dmm-lead black ' + (meterProbe === 'black' ? 'chosen' : '')} onClick={() => { setMeterProbe('black'); setMeterReading('Black probe selected. Click a circuit terminal.') }}><i /> BLACK PROBE <b>{meterPins.black ? pinLookup[meterPins.black]?.label ?? 'Set' : 'Set'}</b></button></div>
+          <p className="dmm-hint">{meterMode === 'voltage' ? 'Select a probe, then click a terminal. Voltage is measured red relative to black.' : 'Select a component on the schematic to measure it.'}</p>
+        </section>}
         {selected ? <>
-          <div className="circuit-selected-kind"><span className={'palette-symbol symbol-' + selected.kind}>{selected.kind === 'source' ? '＋' : selected.kind === 'resistor' ? '▱' : selected.kind === 'switch' ? '⌁' : '⏚'}</span><span><b>{partNames[selected.kind]}</b><small>{selected.label}</small></span></div>
-          {selected.kind !== 'ground' && <label className="circuit-field"><span>{selected.kind === 'source' ? 'Voltage' : selected.kind === 'resistor' ? 'Resistance' : 'Switch state'}</span>
-            {selected.kind === 'switch' ? <button className={'switch-toggle ' + (selected.on ? 'on' : '')} onClick={() => updateSelected({ on: !selected.on })}>{selected.on ? 'Closed' : 'Open'}</button> : <span className="circuit-number"><input type="number" min={selected.kind === 'resistor' ? 0.001 : undefined} step={selected.kind === 'resistor' ? 100 : 0.1} value={selected.value} onChange={(event) => updateSelected({ value: Number(event.target.value) })} /><b>{selected.kind === 'source' ? 'V' : 'Ω'}</b></span>}
+          <div className="circuit-selected-kind"><span className={'palette-symbol symbol-' + selected.kind}>{selected.kind === 'source' ? '＋' : selected.kind === 'resistor' ? '▱' : selected.kind === 'capacitor' ? '║' : selected.kind === 'inductor' ? '∿' : selected.kind === 'diode' ? '▷' : selected.kind === 'switch' ? '⌁' : '⏚'}</span><span><b>{partNames[selected.kind]}</b><small>{selected.label}</small></span></div>
+          {selected.kind !== 'ground' && <label className="circuit-field"><span>{selected.kind === 'source' ? 'Voltage' : selected.kind === 'resistor' ? 'Resistance' : selected.kind === 'capacitor' ? 'Capacitance' : selected.kind === 'inductor' ? 'Inductance' : selected.kind === 'diode' ? 'Forward voltage' : 'Switch state'}</span>
+            {selected.kind === 'switch' ? <button className={'switch-toggle ' + (selected.on ? 'on' : '')} onClick={() => updateSelected({ on: !selected.on })}>{selected.on ? 'Closed' : 'Open'}</button> : <span className="circuit-number"><input type="number" min={['resistor', 'capacitor', 'inductor', 'diode'].includes(selected.kind) ? 0.000001 : undefined} step={selected.kind === 'resistor' ? 100 : selected.kind === 'capacitor' ? 0.000001 : selected.kind === 'inductor' ? 0.001 : 0.1} value={selected.value} onChange={(event) => updateSelected({ value: Number(event.target.value) })} /><b>{selected.kind === 'source' || selected.kind === 'diode' ? 'V' : selected.kind === 'resistor' ? 'Ω' : selected.kind === 'capacitor' ? 'F' : 'H'}</b></span>}
           </label>}
           <label className="circuit-field"><span>Reference name</span><input value={selected.label} onChange={(event) => updateSelected({ label: event.target.value })} /></label>
           <div className="circuit-rotation"><span>Rotate</span><button type="button" title="Rotate counterclockwise 90°" aria-label="Rotate counterclockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 270) % 360 })}>↶</button><output>{selected.rotation ?? 0}°</output><button type="button" title="Rotate clockwise 90°" aria-label="Rotate clockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 90) % 360 })}>↻</button></div>
           <div className="circuit-rotation"><span>Mirror</span><button type="button" className={selected.mirrorX ? 'pressed' : ''} title="Mirror left to right" aria-label="Mirror horizontally" onClick={() => updateSelected({ mirrorX: !selected.mirrorX })}>↔</button><button type="button" className={selected.mirrorY ? 'pressed' : ''} title="Mirror top to bottom" aria-label="Mirror vertically" onClick={() => updateSelected({ mirrorY: !selected.mirrorY })}>↕</button></div>
           <button className="circuit-danger" onClick={() => { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selected.id), wires: value.wires.filter((wire) => !wire.from.startsWith(selected.id + ':') && !wire.to.startsWith(selected.id + ':')) })); setSelectedPart(null); setSimulation(null) }}>Delete component</button>
-        </> : selectedWire ? <><p className="circuit-empty">Wire selected</p><button className="circuit-danger" onClick={() => { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null); setSimulation(null) }}>Delete wire</button></> : <p className="circuit-empty">Select a part or wire to inspect it. Components, values, and circuit files stay in this browser.</p>}
-        <div className="circuit-library-note"><strong>Supported in this simulator</strong><p>DC voltage sources, resistors, switches, and ground. This solver handles resistive DC circuits; it does not model AC, capacitors, inductors, diodes, or transistor behavior yet.</p></div>
+        </> : selectedParts.length ? <p className="circuit-empty">{selectedParts.length} components selected. Use Edit to duplicate, rotate, mirror, or delete them.</p> : selectedWire ? <><p className="circuit-empty">Wire selected</p><button className="circuit-danger" onClick={() => { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null); setSimulation(null) }}>Delete wire</button></> : <p className="circuit-empty">Select a part or wire to inspect it. Components, values, and circuit files stay in this browser.</p>}
+        <div className="circuit-library-note"><strong>DC steady-state model</strong><p>Sources, resistors, capacitors, inductors, diodes, switches, and ground. Capacitors act open and inductors act as short circuits at steady state; transients and AC are not modeled.</p></div>
       </aside>
     </section>
   </main>
 }
+
