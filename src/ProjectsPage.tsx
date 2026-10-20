@@ -272,14 +272,15 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const insertEquation = (equation: string) => {
     if (!equation.trim()) return
     let markup = escapeHtml(equation.trim())
-    markup = markup.replace(/\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
-    markup = markup.replace(/(?<![\\w/])([A-Za-z0-9]+)\\/([A-Za-z0-9]+)(?![\\w/])/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
-    markup = markup.replace(/([A-Za-z0-9]+)\\^(?:\\{([^{}]+)\\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => `${base}<sup>${grouped ?? simple}</sup>`)
-    markup = markup.replace(/([A-Za-z0-9]+)_((?:\\{[^{}]+\\})|(?:[A-Za-z0-9]+))/g, (_match, base: string, value: string) => `${base}<sub>${value.startsWith('{') ? value.slice(1,-1) : value}</sub>`)
-    insertHtml(`<span class="project-equation">${markup}</span>&nbsp;`)
+    const fraction = (numerator: string, denominator: string) => '<span class="project-equation project-fraction"><span class="project-math-slot">' + numerator + '</span><span class="project-math-slot">' + denominator + '</span></span>'
+    markup = markup.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, (_match, numerator: string, denominator: string) => fraction(numerator, denominator))
+    markup = markup.replace(/(?<![\w/])([A-Za-z0-9]+)\/([A-Za-z0-9]+)(?![\w/])/g, (_match, numerator: string, denominator: string) => fraction(numerator, denominator))
+    markup = markup.replace(/([A-Za-z0-9]+)\^(?:\{([^{}]+)\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => base + '<sup>' + (grouped ?? simple) + '</sup>')
+    markup = markup.replace(/([A-Za-z0-9]+)_(?:\{([^{}]+)\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => base + '<sub>' + (grouped ?? simple) + '</sub>')
+    insertHtml('<span class="project-equation">' + markup + '</span>&nbsp;')
   }
   const insertFraction = () => insertHtml('<span class="project-equation project-fraction"><span class="project-math-slot"></span><span class="project-math-slot"></span></span>&nbsp;')
-  const hasMathSyntax = (value: string) => /\\\\frac\\{[^{}]+\\}\\{[^{}]+\\}|\\^[{]?[A-Za-z0-9]+|_[{]?[A-Za-z0-9]+|[A-Za-z0-9]+\\/[A-Za-z0-9]+/.test(value)
+  const hasMathSyntax = (value: string) => /\\frac\{[^{}]+\}\{[^{}]+\}|\^[{]?[A-Za-z0-9]+|_[{]?[A-Za-z0-9]+|[A-Za-z0-9]+\/[A-Za-z0-9]+/.test(value)
   const insertTable = () => {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
