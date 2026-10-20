@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import './CircuitSimulator.css'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
@@ -12,9 +12,11 @@ type WireSnap = { partId: string; wireId: string; pinId: string; point: Point; x
 type Pin = { id: string; x: number; y: number; label: string }
 type DrawKind = 'image' | 'text' | 'arrow' | 'rectangle' | 'ellipse'
 type DrawItem = { id: string; kind: DrawKind; x: number; y: number; content?: string; color?: string }
+type CircuitOptions = { showCurrent: boolean; showVoltage: boolean; showPower: boolean; showValues: boolean; smallGrid: boolean; toolbar: boolean; cursorCrosshair: boolean; europeanResistors: boolean; showOhmUnit: boolean; whiteBackground: boolean; conventionalCurrent: boolean; disableEditing: boolean; editValuesWithMouseWheel: boolean }
 type Reading = { id: string; label: string; voltage: number; current: number; power: number; voltagePhase?: number; currentPhase?: number }
 type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; nodePhasors?: Record<string, { re: number; im: number }>; frequency?: number; ac?: boolean; message: string }
 type Circuit = { parts: Part[]; wires: Wire[]; drawings?: DrawItem[] }
+const defaultCircuitOptions: CircuitOptions = { showCurrent: true, showVoltage: true, showPower: false, showValues: true, smallGrid: false, toolbar: true, cursorCrosshair: false, europeanResistors: false, showOhmUnit: true, whiteBackground: false, conventionalCurrent: true, disableEditing: false, editValuesWithMouseWheel: true }
 
 const W = 1120
 const H = 700
@@ -249,16 +251,16 @@ const nearestPointOnSegment = (point: Point, a: Point, b: Point) => {
   const projected = { x: a.x + t * dx, y: a.y + t * dy }
   return { point: projected, distance: Math.hypot(point.x - projected.x, point.y - projected.y) }
 }
-function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, voltageMap }: {
+function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, voltageMap, showValues, showOhmUnit, europeanResistors }: {
   part: Part; selected: boolean; onPointerDown: (event: ReactPointerEvent<SVGGElement>, part: Part) => void
-  onPin: (pin: Pin) => void; onPinPointerDown: (event: ReactPointerEvent<SVGGElement>, pin: Pin) => void; voltageMap?: Record<string, number>
+  onPin: (pin: Pin) => void; onPinPointerDown: (event: ReactPointerEvent<SVGGElement>, pin: Pin) => void; voltageMap?: Record<string, number>; showValues: boolean; showOhmUnit: boolean; europeanResistors: boolean
 }) {
   const pins = symbolPinsText(part)
   const localPinOffset = (pin: Pin) => part.kind === 'ground' ? { x: 0, y: -23 } : part.kind === 'junction' ? { x: 0, y: 0 } : { x: pin.id.endsWith(':a') ? -48 : 48, y: 0 }
   const voltageLabel = (pin: Pin) => voltageMap ? fmt(voltageMap[pin.id] ?? 0, 'V') : pin.label
-  return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ') scale(' + (part.mirrorX ? -1 : 1) + ' ' + (part.mirrorY ? -1 : 1) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
+  return <g data-part-id={part.id} transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ') scale(' + (part.mirrorX ? -1 : 1) + ' ' + (part.mirrorY ? -1 : 1) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
     {part.kind === 'resistor' && <>
-      <line x1="-48" y1="0" x2="-31" y2="0" /><path d="M-31 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L29 0" /><line x1="29" y1="0" x2="48" y2="0" />
+      {europeanResistors ? <><line x1="-48" y1="0" x2="-25" y2="0" /><rect x="-25" y="-10" width="50" height="20" /><line x1="25" y1="0" x2="48" y2="0" /></> : <><line x1="-48" y1="0" x2="-31" y2="0" /><path d="M-31 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L29 0" /><line x1="29" y1="0" x2="48" y2="0" /></>}
     </>}
     {part.kind === 'capacitor' && <><line x1="-48" y1="0" x2="-8" y2="0" /><line x1="-8" y1="-18" x2="-8" y2="18" className="component-plate" /><line x1="8" y1="-18" x2="8" y2="18" className="component-plate" /><line x1="8" y1="0" x2="48" y2="0" /></>}
     {part.kind === 'inductor' && <><line x1="-48" y1="0" x2="-30" y2="0" /><path d="M-30 0 C-30 -21 -10 -21 -10 0 C-10 -21 10 -21 10 0 C10 -21 30 -21 30 0" /><line x1="30" y1="0" x2="48" y2="0" /></>}
@@ -279,7 +281,7 @@ function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, vo
       </g>
     })}
     {part.kind !== 'ground' && part.kind !== 'junction' && <text x="0" y="39" className="part-label">{part.label}</text>}
-    {part.kind !== 'ground' && part.kind !== 'junction' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'ac-source' ? fmt(part.value, 'V rms') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.kind === 'capacitor' ? fmt(part.value, 'F') : part.kind === 'inductor' ? fmt(part.value, 'H') : part.kind === 'diode' ? 'Vf ' + fmt(part.value, 'V') : part.on ? 'Closed' : 'Open'}</text>}
+    {showValues && part.kind !== 'ground' && part.kind !== 'junction' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'ac-source' ? fmt(part.value, 'V rms') : part.kind === 'resistor' ? fmt(part.value, showOhmUnit ? 'Ω' : '') : part.kind === 'capacitor' ? fmt(part.value, 'F') : part.kind === 'inductor' ? fmt(part.value, 'H') : part.kind === 'diode' ? 'Vf ' + fmt(part.value, 'V') : part.on ? 'Closed' : 'Open'}</text>}
   </g>
 }
 export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
@@ -290,7 +292,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null)
   const [drawingDrag, setDrawingDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
-  const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | 'draw' | null>(null)
+  const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | 'draw' | 'options' | 'tools' | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [clipboard, setClipboard] = useState<{ parts: Part[]; wires: Wire[] }>({ parts: [], wires: [] })
   const [zoom, setZoom] = useState(1)
@@ -305,6 +307,10 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [meterPins, setMeterPins] = useState<{ red: string | null; black: string | null }>({ red: null, black: null })
   const [meterReading, setMeterReading] = useState('Choose a mode, then connect the probes.')
   const [gridVisible, setGridVisible] = useState(true)
+  const [options, setOptions] = useState<CircuitOptions>(() => { try { return { ...defaultCircuitOptions, ...JSON.parse(localStorage.getItem('ozoo:circuit-options') ?? '{}') } } catch { return defaultCircuitOptions } })
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showOtherOptions, setShowOtherOptions] = useState(false)
+  const toggleOption = (key: keyof CircuitOptions) => setOptions((current) => ({ ...current, [key]: !current[key] }))
   const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [simulationActive, setSimulationActive] = useState(false)
   const [historyVersion, setHistoryVersion] = useState(0)
@@ -329,6 +335,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const selected = circuit.parts.find((part) => part.id === selectedPart)
   const selectedReading = selected ? simulation?.readings.find((reading) => reading.id === selected.id) : undefined
   const selectedIds = selectedParts.length ? selectedParts : selectedPart ? [selectedPart] : []
+  const metricColumns = Number(options.showVoltage) + Number(options.showCurrent) + Number(options.showPower)
   const viewWidth = W / zoom, viewHeight = H / zoom
   const viewBox = `${viewCenter.x - viewWidth / 2} ${viewCenter.y - viewHeight / 2} ${viewWidth} ${viewHeight}`
   const pinLookup = Object.fromEntries(circuit.parts.flatMap(pinsFor).map((pin) => [pin.id, pin]))
@@ -378,6 +385,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedPart(snap.partId); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Component snapped to wire and connected.'); setWireSnapPreview(null)
   }
   useEffect(() => { try { localStorage.setItem('ozoo:circuit', JSON.stringify(circuit)) } catch {} }, [circuit])
+  useEffect(() => { try { localStorage.setItem('ozoo:circuit-options', JSON.stringify(options)) } catch {} }, [options])
   useEffect(() => {
     if (historyAction.current) { historyAction.current = false; lastCircuit.current = circuit; return }
     if (circuit === lastCircuit.current) return
@@ -402,6 +410,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     return { x: W / 2, y: H / 2 }
   }
   const addPartAt = (kind: Kind, x: number, y: number) => {
+    if (options.disableEditing) return
     const labels: Record<Kind, string> = { source: 'V', 'ac-source': 'VAC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', switch: 'S', ground: 'GND', junction: 'J' }
     const value = kind === 'source' || kind === 'ac-source' ? 5 : kind === 'resistor' ? 1000 : kind === 'capacitor' ? 100e-6 : kind === 'inductor' ? 10e-3 : kind === 'diode' ? 0.7 : 0
     const label = kind === 'ground' ? 'GND' : labels[kind] + (circuit.parts.filter((part) => part.kind === kind).length + 1)
@@ -410,6 +419,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterPins({ red: null, black: null })
   }
   const importPicture = (event: ChangeEvent<HTMLInputElement>) => {
+    if (options.disableEditing) { event.target.value = ''; return }
     const file = event.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) { setError('Choose an image file to place on the schematic.'); event.target.value = ''; return }
@@ -425,6 +435,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     event.target.value = ''
   }
   const beginDrawing = (kind: DrawKind) => {
+    if (options.disableEditing) return
     if (kind === 'image') { pictureFileInput.current?.click(); return }
     const content = kind === 'text' ? window.prompt('Text to place on the circuit:') : ''
     if (kind === 'text' && !content?.trim()) return
@@ -441,12 +452,12 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       setError('Bend added. Click to add another bend or select a pin to finish the wire.')
       return
     }
-    if (placement) {
+    if (placement && !options.disableEditing) {
       const point = screenPoint(event)
       addPartAt(placement, point.x, point.y)
       return
     }
-    if (drawMode) {
+    if (drawMode && !options.disableEditing) {
       const point = screenPoint(event)
       const drawing: DrawItem = { id: makeId(), kind: drawMode, x: point.x, y: point.y, ...(drawContent ? { content: drawContent } : {}) }
       setCircuit((current) => ({ ...current, drawings: [...(current.drawings ?? []), drawing] }))
@@ -461,6 +472,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }
   const handlePartPointerDown = (event: ReactPointerEvent<SVGGElement>, part: Part) => {
     if (event.button !== 0 || placement) return
+    if (options.disableEditing) { setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); return }
     if (dmmActive) {
       setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null)
       if (meterMode === 'voltage') { setMeterReading('Voltage mode: select two terminal pins.'); return }
@@ -492,6 +504,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }
   const handlePin = (pin: Pin) => {
     if (suppressPinClick.current) { suppressPinClick.current = false; return }
+    if (options.disableEditing) return
     if (dmmActive && meterMode !== 'voltage') { setMeterReading('Click a component body to measure ' + (meterMode === 'current' ? 'current.' : 'resistance.')); return }
     if (dmmActive && meterMode === 'voltage') {
       const lead = meterProbe ?? (meterPins.red === null ? 'red' : 'black')
@@ -519,7 +532,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setWireStart(null); setWirePoints([]); setWireCursor(null); setError(''); setSimulation(null)
   }
   const handlePinPointerDown = (event: ReactPointerEvent<SVGGElement>, pin: Pin) => {
-    if (event.button !== 0 || dmmActive || placement || wireStart) return
+    if (event.button !== 0 || dmmActive || placement || wireStart || options.disableEditing) return
     const point = screenPoint(event)
     wireDrag.current = { from: pin.id, x: point.x, y: point.y, moved: false }
     setWireStart(pin.id); setWirePoints([]); setWireCursor(point); setSelectedPart(null); setSelectedWire(null)
@@ -533,22 +546,25 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   const updateSelected = (change: Partial<Part>) => {
-    if (!selectedPart) return
+    if (!selectedPart || options.disableEditing) return
     setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === selectedPart ? { ...part, ...change } : part) }))
     setSimulation(null)
   }
   const undoCircuit = () => {
+    if (options.disableEditing) return
     if (historyTimer.current) { clearTimeout(historyTimer.current); historyTimer.current = null; undoStack.current.push(lastCircuit.current); lastCircuit.current = circuit }
     const previous = undoStack.current.pop()
     if (!previous) return
     redoStack.current.push(circuit); historyAction.current = true; lastCircuit.current = previous; setCircuit(previous); setSimulation(null); setHistoryVersion((version) => version + 1)
   }
   const redoCircuit = () => {
+    if (options.disableEditing) return
     const next = redoStack.current.pop()
     if (!next) return
     undoStack.current.push(circuit); historyAction.current = true; lastCircuit.current = next; setCircuit(next); setSimulation(null); setHistoryVersion((version) => version + 1)
   }
   const deleteSelection = () => {
+    if (options.disableEditing) return
     if (selectedIds.length) setCircuit((current) => ({ parts: current.parts.filter((part) => !selectedIds.includes(part.id)), wires: current.wires.filter((wire) => !selectedIds.some((id) => wire.from.startsWith(id + ':') || wire.to.startsWith(id + ':'))) }))
     else if (selectedWire) setCircuit((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selectedWire) }))
     else if (selectedDrawing) setCircuit((current) => ({ ...current, drawings: (current.drawings ?? []).filter((item) => item.id !== selectedDrawing) }))
@@ -561,7 +577,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setClipboard({ parts, wires })
   }
   const pasteParts = (parts: Part[], wires: Wire[]) => {
-    if (!parts.length) return
+    if (!parts.length || options.disableEditing) return
     const remap = new Map(parts.map((part) => [part.id, makeId()]))
     const copies = parts.map((part) => ({ ...part, id: remap.get(part.id)!, x: Math.min(W - 64, part.x + 42), y: Math.min(H - 62, part.y + 42), label: part.label + ' copy' }))
     const mapPin = (id: string) => { const split = id.lastIndexOf(':'); return (remap.get(id.slice(0, split)) ?? id.slice(0, split)) + id.slice(split) }
@@ -578,8 +594,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }
   const setZoomBy = (factor: number) => setZoom((value) => Math.max(0.35, Math.min(3, value * factor)))
   const resetZoom = () => { setZoom(1); setViewCenter({ x: W / 2, y: H / 2 }) }
-  const rotateSelection = (degrees: number) => { if (selectedIds.length) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, rotation: ((part.rotation ?? 0) + degrees + 360) % 360 } : part) })) }
-  const mirrorSelection = (axis: 'mirrorX' | 'mirrorY') => { if (selectedIds.length) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, [axis]: !part[axis] } : part) })) }
+  const rotateSelection = (degrees: number) => { if (selectedIds.length && !options.disableEditing) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, rotation: ((part.rotation ?? 0) + degrees + 360) % 360 } : part) })) }
+  const mirrorSelection = (axis: 'mirrorX' | 'mirrorY') => { if (selectedIds.length && !options.disableEditing) setCircuit((current) => ({ ...current, parts: current.parts.map((part) => selectedIds.includes(part.id) ? { ...part, [axis]: !part[axis] } : part) })) }
   const selectAll = () => { setSelectedParts(circuit.parts.map((part) => part.id)); setSelectedPart(null); setSelectedWire(null) }
   const findComponent = () => {
     const query = findQuery.trim().toLowerCase()
@@ -594,6 +610,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     link.href = url; link.download = 'ozoo-circuit.json'; link.click(); URL.revokeObjectURL(url)
   }
   const importDesign = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (options.disableEditing) { event.target.value = ''; return }
     const file = event.target.files?.[0]
     if (!file) return
     try {
@@ -634,27 +651,44 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' })
     const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'ozoo-circuit.svg'; link.click(); URL.revokeObjectURL(url)
   }
-  return <main className="circuit-workspace" data-theme={colorTheme}>
+  return <main className="circuit-workspace" data-theme={colorTheme} data-white-background={options.whiteBackground}>
     <header className="circuit-topbar">
       <button className="circuit-back" onClick={onBack}>← <span>Simulator</span></button>
       <div className="circuit-brand"><span className="circuit-brand-icon">Ω</span><div><strong>Circuit Studio</strong><small>Electronics simulator</small></div></div>
-      <div className="circuit-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><button aria-label="Delete selected" title="Delete selected component, wire, or drawing" disabled={!selectedIds.length && !selectedWire && !selectedDrawing} onClick={deleteSelection}>Delete</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
+      <div className="circuit-top-actions"><SimulatorThemePicker theme={colorTheme} onChange={setColorTheme} /><button aria-label="Delete selected" title="Delete selected component, wire, or drawing" disabled={options.disableEditing || (!selectedIds.length && !selectedWire && !selectedDrawing)} onClick={deleteSelection}>Delete</button><button className="circuit-run" onClick={runSimulation}>▶ Simulate</button></div>
     </header>
     <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Drag parts into place, connect terminals, and watch current and voltage.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
     <section className="circuit-layout">
       <nav className="circuit-menubar" aria-label="Circuit menus" data-history-version={historyVersion}>
-        <div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" onClick={() => { newCircuit(); setOpenMenu(null) }}>New design</button><button role="menuitem" onClick={() => designFileInput.current?.click()}>Open design…</button><button role="menuitem" onClick={() => { saveDesign(); setOpenMenu(null) }}>Download design <kbd>JSON</kbd></button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>Export schematic <kbd>SVG</kbd></button><hr /><button role="menuitem" onClick={() => { setCircuit(exampleCircuit()); setSelectedPart(null); setSelectedParts([]); setSimulation(null); setError(''); setOpenMenu(null) }}>Load example circuit</button></div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>New design</button><button role="menuitem" disabled={options.disableEditing} onClick={() => designFileInput.current?.click()}>Open design…</button><button role="menuitem" onClick={() => { saveDesign(); setOpenMenu(null) }}>Download design <kbd>JSON</kbd></button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>Export schematic <kbd>SVG</kbd></button><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => { setCircuit(exampleCircuit()); setSelectedPart(null); setSelectedParts([]); setSimulation(null); setError(''); setOpenMenu(null) }}>Load example circuit</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'edit' ? 'open' : ''} aria-expanded={openMenu === 'edit'} onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}>Edit <span>⌄</span></button>{openMenu === 'edit' && <div className="circuit-menu-popover circuit-edit-popover" role="menu"><button role="menuitem" disabled={!undoStack.current.length} onClick={() => { undoCircuit(); setOpenMenu(null) }}>↶ Undo <kbd>Ctrl+Z</kbd></button><button role="menuitem" disabled={!redoStack.current.length} onClick={() => { redoCircuit(); setOpenMenu(null) }}>↷ Redo <kbd>Ctrl+Y</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); deleteSelection(); setOpenMenu(null) }}>✂ Cut <kbd>Ctrl+X</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); setOpenMenu(null) }}>▢ Copy <kbd>Ctrl+C</kbd></button><button role="menuitem" disabled={!clipboard.parts.length} onClick={() => { pasteParts(clipboard.parts, clipboard.wires); setOpenMenu(null) }}>▣ Paste <kbd>Ctrl+V</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { duplicateSelection(); setOpenMenu(null) }}>▧ Duplicate <kbd>Ctrl+D</kbd></button><button role="menuitem" onClick={() => { selectAll(); setOpenMenu(null) }}>✣ Select all <kbd>Ctrl+A</kbd></button><hr /><label className="circuit-menu-search"><span>Find component <kbd>/</kbd></span><div><input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { findComponent(); setOpenMenu(null) } }} placeholder="Name or type…" /><button onClick={() => { findComponent(); setOpenMenu(null) }}>Find</button></div></label><button role="menuitem" onClick={() => { centerCircuit(); setOpenMenu(null) }}>⌖ Center circuit <kbd>Home</kbd></button><button role="menuitem" onClick={() => { resetZoom(); setOpenMenu(null) }}>◎ Zoom 100% <kbd>0</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1.2); setOpenMenu(null) }}>⊕ Zoom in <kbd>+</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1 / 1.2); setOpenMenu(null) }}>⊖ Zoom out <kbd>−</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorX'); setOpenMenu(null) }}>↔ Mirror X</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorY'); setOpenMenu(null) }}>↕ Mirror Y</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(-90); setOpenMenu(null) }}>↶ Rotate CCW</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(90); setOpenMenu(null) }}>↻ Rotate CW</button></div>}</div>
-        <div className="circuit-menu-wrap"><button className={openMenu === 'draw' ? 'open' : ''} aria-expanded={openMenu === 'draw'} onClick={() => setOpenMenu(openMenu === 'draw' ? null : 'draw')}>Draw <span>⌄</span></button>{openMenu === 'draw' && <div className="circuit-menu-popover" role="menu"><div className="circuit-menu-label">ANNOTATIONS & PICTURES</div><button role="menuitem" onClick={() => beginDrawing('image')}>▧ Insert image…</button><button role="menuitem" onClick={() => beginDrawing('text')}>T Add text label…</button><hr /><button role="menuitem" onClick={() => beginDrawing('arrow')}>↗ Add arrow</button><button role="menuitem" onClick={() => beginDrawing('rectangle')}>▱ Add rectangle</button><button role="menuitem" onClick={() => beginDrawing('ellipse')}>◯ Add ellipse</button></div>}</div>
-        <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div>{(['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} onClick={() => { setPlacement(kind); setDrawMode(null); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'draw' ? 'open' : ''} aria-expanded={openMenu === 'draw'} onClick={() => setOpenMenu(openMenu === 'draw' ? null : 'draw')}>Draw <span>⌄</span></button>{openMenu === 'draw' && <div className="circuit-menu-popover" role="menu"><div className="circuit-menu-label">ANNOTATIONS & PICTURES</div><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('image')}>▧ Insert image…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('text')}>T Add text label…</button><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('arrow')}>↗ Add arrow</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('rectangle')}>▱ Add rectangle</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('ellipse')}>◯ Add ellipse</button></div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'tools' ? 'open' : ''} aria-expanded={openMenu === 'tools'} onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}>Tools <span>⌄</span></button>{openMenu === 'tools' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" aria-pressed={dmmActive} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setOpenMenu(null) }}>▦ {dmmActive ? 'Close multimeter' : 'Digital multimeter'}</button><button role="menuitem" disabled={options.disableEditing} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.'); setOpenMenu(null) }}>⌁ Wire tool</button><button role="menuitemcheckbox" aria-checked={gridVisible} onClick={() => setGridVisible((visible) => !visible)}>▧ {gridVisible ? 'Hide grid' : 'Show grid'}</button></div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div>{(['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} disabled={options.disableEditing} onClick={() => { setPlacement(kind); setDrawMode(null); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'options' ? 'open' : ''} aria-expanded={openMenu === 'options'} onClick={() => setOpenMenu(openMenu === 'options' ? null : 'options')}>Options <span>⌄</span></button>{openMenu === 'options' && <div className="circuit-menu-popover circuit-options-popover" role="menu">
+          <div className="circuit-menu-label">DISPLAY</div>
+          {([['showCurrent','Show Current'],['showVoltage','Show Voltage'],['showPower','Show Power'],['showValues','Show Values'],['smallGrid','Small Grid'],['toolbar','Toolbar'],['cursorCrosshair','Show Cursor Crosshair'],['europeanResistors','European Resistors'],['showOhmUnit','Show Ω Unit'],['whiteBackground','White Background'],['conventionalCurrent','Conventional Current Motion'],['disableEditing','Disable Editing'],['editValuesWithMouseWheel','Edit Values With Mouse Wheel']] as [keyof CircuitOptions,string][]).map(([key,label]) => <button key={key} role="menuitemcheckbox" aria-checked={options[key]} onClick={() => toggleOption(key)}><span className="option-check">{options[key] ? '✓' : ''}</span>{label}</button>)}
+          <button role="menuitem" disabled title="Digital logic-gate parts are not available in this simulator yet.">IEC Gates <small>coming later</small></button><hr />
+          <button role="menuitem" onClick={() => { setShowShortcuts(true); setOpenMenu(null) }}>⌨ Shortcuts…</button><button role="menuitem" onClick={() => { setShowOtherOptions(true); setOpenMenu(null) }}>Other Options…</button>
+        </div>}</div>
         <input ref={designFileInput} type="file" accept=".json,application/json" hidden onChange={importDesign} /><input ref={pictureFileInput} type="file" accept="image/*" hidden onChange={importPicture} />
       </nav>
-      <section className="circuit-tools" aria-label="Circuit tools">
-        <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New</span></button></div>
-      </section>
+      {options.toolbar && <section className="circuit-tools" aria-label="Circuit tools">
+        <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit} disabled={options.disableEditing}><span className="palette-symbol">＋</span><span>New</span></button></div>
+      </section>}
       <section className="circuit-main">
         <div className="circuit-canvas-head"><span><i /> Schematic</span><span className="circuit-canvas-controls"><span>{wireSnapPreview ? 'Release to connect component to wire' : drawMode ? `Click the board to place ${drawMode} · Esc to cancel` : placement ? 'Click to place · Esc to cancel' : wireStart ? 'Drag to a pin or click the destination terminal' : 'Drag parts to arrange · drag a pin to wire'}</span><div className="circuit-zoom-controls"><button title="Zoom out" aria-label="Zoom out" onClick={() => setZoomBy(1 / 1.2)}>−</button><output>{Math.round(zoom * 100)}%</output><button title="Zoom in" aria-label="Zoom in" onClick={() => setZoomBy(1.2)}>+</button><button title="Center circuit" onClick={centerCircuit}>Center</button></div></span></div>
-        <svg ref={svgRef} viewBox={viewBox} className={'circuit-canvas ' + (placement || drawMode ? 'placing' : '')} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
+        <svg ref={svgRef} viewBox={viewBox} className={'circuit-canvas ' + (placement || drawMode ? 'placing' : '') + (options.cursorCrosshair ? ' crosshair' : '')} onWheel={(event: ReactWheelEvent<SVGSVGElement>) => {
+          if (!options.editValuesWithMouseWheel || options.disableEditing || !selectedPart) return
+          const target = event.target instanceof Element ? event.target.closest<SVGGElement>('.circuit-part') : null
+          if (target?.dataset.partId !== selectedPart) return
+          const part = circuit.parts.find((item) => item.id === selectedPart)
+          if (!part || !['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode'].includes(part.kind)) return
+          event.preventDefault()
+          const amount = Math.max(Math.abs(part.value) * 0.05, part.kind === 'capacitor' ? 1e-7 : 0.01)
+          const next = Math.max(0.000001, part.value + (event.deltaY < 0 ? amount : -amount))
+          setCircuit((current) => ({ ...current, parts: current.parts.map((item) => item.id === part.id ? { ...item, value: next } : item) }))
+        }} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
           const point = screenPoint(event)
           if (wireDrag.current) { const state = wireDrag.current; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(point) }
           else if (wireStart) setWireCursor(point)
@@ -685,9 +719,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           if (!drag) setWireSnapPreview(null)
           try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {}
         }}>
-          <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern><marker id="circuit-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
+          <defs><pattern id="circuit-grid" width={options.smallGrid ? 12 : 24} height={options.smallGrid ? 12 : 24} patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern><marker id="circuit-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
           {gridVisible && <rect width={W} height={H} fill="url(#circuit-grid)" />}
-          {(circuit.drawings ?? []).map((item) => <g key={item.id} className={'circuit-drawing ' + (selectedDrawing === item.id ? 'selected' : '')} onPointerDown={(event) => { if (event.button !== 0) return; event.stopPropagation(); const point = screenPoint(event); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setDrawingDrag({ id: item.id, dx: point.x - item.x, dy: point.y - item.y }); svgRef.current?.setPointerCapture(event.pointerId) }} onClick={(event) => { event.stopPropagation(); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null) }}>
+          {(circuit.drawings ?? []).map((item) => <g key={item.id} className={'circuit-drawing ' + (selectedDrawing === item.id ? 'selected' : '')} onPointerDown={(event) => { if (event.button !== 0) return; event.stopPropagation(); const point = screenPoint(event); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); if (!options.disableEditing) { setDrawingDrag({ id: item.id, dx: point.x - item.x, dy: point.y - item.y }); svgRef.current?.setPointerCapture(event.pointerId) } }} onClick={(event) => { event.stopPropagation(); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null) }}>
             {selectedDrawing === item.id && item.kind === 'image' && <rect className="drawing-selection-frame" x={item.x - 110} y={item.y - 73} width="220" height="146" rx="4" />}
             {selectedDrawing === item.id && item.kind === 'text' && <rect className="drawing-selection-frame" x={item.x - 94} y={item.y - 24} width="188" height="34" rx="4" />}
             {item.kind === 'image' && item.content && <image href={item.content} x={item.x - 105} y={item.y - 68} width="210" height="136" preserveAspectRatio="xMidYMid meet" />}
@@ -702,23 +736,23 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             const middle = wire.points?.[Math.floor((wire.points.length - 1) / 2)] ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
             const path = wirePath(a, b, wire.points)
             return <g key={wire.id} className={'circuit-wire ' + (selectedWire === wire.id ? 'selected' : '')} onClick={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null); setSelectedParts([]); setSelectedDrawing(null) }}>
-              <path d={path} className={simulation && simulation.readings.some((reading) => Math.abs(reading.current) > 1e-8) ? 'current-live' : ''} />
+              <path d={path} className={simulation && options.showCurrent && simulation.readings.some((reading) => Math.abs(reading.current) > 1e-8) ? 'current-live' + (options.conventionalCurrent ? '' : ' reverse') : ''} />
               <path className="wire-hit" d={path} />
-              {selectedWire === wire.id && (wire.points ?? []).map((point, index) => <circle key={index} className="wire-handle" cx={point.x} cy={point.y} r="6" onPointerDown={(event) => { event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null); setDragPoint({ wireId: wire.id, index }); svgRef.current?.setPointerCapture(event.pointerId) }} />)}
-              {simulation && <text x={middle.x} y={middle.y - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
+              {selectedWire === wire.id && (wire.points ?? []).map((point, index) => <circle key={index} className="wire-handle" cx={point.x} cy={point.y} r="6" onPointerDown={(event) => { if (options.disableEditing) return; event.stopPropagation(); setSelectedWire(wire.id); setSelectedPart(null); setDragPoint({ wireId: wire.id, index }); svgRef.current?.setPointerCapture(event.pointerId) }} />)}
+              {simulation && options.showVoltage && <text x={middle.x} y={middle.y - 6} className="wire-voltage">{fmt(simulation.nodeVoltages[wire.from] ?? 0, 'V')}</text>}
             </g>
           })}
           {wireStart && wireCursor && pinLookup[wireStart] && <><path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />{wirePoints.map((point, index) => <circle key={'route-' + index} className="wire-preview-handle" cx={point.x} cy={point.y} r="4" />)}</>}
           {wireSnapPreview && pinLookup[wireSnapPreview.pinId] && <g className="wire-snap-indicator" pointerEvents="none"><circle cx={wireSnapPreview.point.x} cy={wireSnapPreview.point.y} r="9" /><path d={`M ${wireSnapPreview.point.x - 13} ${wireSnapPreview.point.y} H ${wireSnapPreview.point.x + 13} M ${wireSnapPreview.point.x} ${wireSnapPreview.point.y - 13} V ${wireSnapPreview.point.y + 13}`} /></g>}
-          {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={simulation?.nodeVoltages} />)}
+          {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={options.showVoltage ? simulation?.nodeVoltages : undefined} showValues={options.showValues} showOhmUnit={options.showOhmUnit} europeanResistors={options.europeanResistors} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · Drag parts to move them · drag terminals to connect wires · Simulate to show voltages and current</span>}</div>
         {selected && selectedReading && simulation && <section className="component-scope" aria-label="Selected component scope">
           <header><div><span className="scope-live-dot" /><strong>Scope</strong><span className="scope-part-name">{selected.label} · {partNames[selected.kind]}</span></div><small>{simulation.ac ? `AC · ${simulation.frequency} Hz · one cycle` : 'DC · steady state'}</small></header>
-          <svg viewBox="0 0 1000 160" role="img" aria-label={`${selected.label} voltage and current scope graph`}><path className="scope-grid" d="M54 10H946M54 43H946M54 77H946M54 112H946M54 145H946M54 10V145M165 10V145M277 10V145M388 10V145M500 10V145M611 10V145M723 10V145M834 10V145M946 10V145"/><path className="scope-voltage" d={componentTracePath(selectedReading, simulation)} /><path className="scope-current" d={componentTracePath(selectedReading, simulation, true)} /><text x="8" y="18">V</text><text x="8" y="87">A</text><text x="54" y="157">0</text><text x="920" y="157">{simulation.ac ? '1 cycle' : 'time'}</text></svg>
-          <footer><span><i className="scope-key-voltage" />Voltage {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.voltage, 'V')}</span><span><i className="scope-key-current" />Current {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.current, 'A')}</span><small>{simulation.ac ? 'AC waveform shown from its steady-state phasor.' : 'Flat trace: DC steady-state does not model transients.'}</small></footer>
+          <svg viewBox="0 0 1000 160" role="img" aria-label={`${selected.label} scope graph`}><path className="scope-grid" d="M54 10H946M54 43H946M54 77H946M54 112H946M54 145H946M54 10V145M165 10V145M277 10V145M388 10V145M500 10V145M611 10V145M723 10V145M834 10V145M946 10V145"/>{options.showVoltage && <><path className="scope-voltage" d={componentTracePath(selectedReading, simulation)} /><text x="8" y="18">V</text></>}{options.showCurrent && <><path className="scope-current" d={componentTracePath(selectedReading, simulation, true)} /><text x="8" y="87">A</text></>}<text x="54" y="157">0</text><text x="920" y="157">{simulation.ac ? '1 cycle' : 'time'}</text></svg>
+          <footer>{options.showVoltage && <span><i className="scope-key-voltage" />Voltage {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.voltage, 'V')}</span>}{options.showCurrent && <span><i className="scope-key-current" />Current {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.current, 'A')}</span>}{options.showPower && <span><i className="scope-key-power" />Power {fmt(selectedReading.power, 'W')}</span>}<small>{simulation.ac ? 'AC waveform shown from its steady-state phasor.' : 'Flat trace: DC steady-state does not model transients.'}</small></footer>
         </section>}
-        {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>DC analysis</span></div><div className="circuit-results-table"><div className="circuit-result-row labels"><span>Part</span><span>Voltage</span><span>Current</span><span>Power</span></div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id}><span>{reading.label}</span><span>{fmt(reading.voltage, 'V')}</span><span>{fmt(reading.current, 'A')}</span><span>{fmt(reading.power, 'W')}</span></div>)}</div></div>}
+        {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>{simulation.ac ? `AC · ${simulation.frequency} Hz` : 'DC analysis'}</span></div><div className="circuit-results-table"><div className="circuit-result-row labels" style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>Part</span>{options.showVoltage && <span>Voltage</span>}{options.showCurrent && <span>Current</span>}{options.showPower && <span>Power</span>}</div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id} style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>{reading.label}</span>{options.showVoltage && <span>{fmt(reading.voltage, 'V')}</span>}{options.showCurrent && <span>{fmt(reading.current, 'A')}</span>}{options.showPower && <span>{fmt(reading.power, 'W')}</span>}</div>)}</div></div>}
       </section>
       <aside className="circuit-inspector">
         <div className="circuit-section-title">INSPECTOR</div>
@@ -744,6 +778,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         <div className="circuit-library-note"><strong>Simulator model</strong><p>DC mode solves steady state; AC mode uses RMS phasors for resistors, capacitors, inductors, switches, and sources. AC diode analysis and time-domain transients are not modeled.</p></div>
       </aside>
     </section>
+    {(showShortcuts || showOtherOptions) && <div className="circuit-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setShowShortcuts(false); setShowOtherOptions(false) } }}><section className="circuit-options-dialog" role="dialog" aria-modal="true" aria-labelledby="circuit-options-dialog-title"><button className="circuit-dialog-close" aria-label="Close dialog" onClick={() => { setShowShortcuts(false); setShowOtherOptions(false) }}>×</button><h2 id="circuit-options-dialog-title">{showShortcuts ? 'Keyboard shortcuts' : 'Other options'}</h2>{showShortcuts ? <ul><li><kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo</li><li><kbd>Ctrl</kbd> + <kbd>Y</kbd> Redo</li><li><kbd>Ctrl</kbd> + <kbd>D</kbd> Duplicate</li><li><kbd>Delete</kbd> Remove selection</li><li><kbd>0</kbd> Reset zoom</li><li><kbd>+</kbd> / <kbd>−</kbd> Zoom in or out</li><li><kbd>Home</kbd> Center the circuit</li><li><kbd>Esc</kbd> Cancel current action</li></ul> : <><p>These display and editing preferences are saved in this browser. Circuit designs and uploaded pictures are also stored locally on this device.</p><button className="circuit-reset-options" onClick={() => setOptions(defaultCircuitOptions)}>Restore default options</button></>}</section></div>}
   </main>
 }
 
