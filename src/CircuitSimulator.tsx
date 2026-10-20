@@ -16,6 +16,22 @@ type CircuitOptions = { showCurrent: boolean; showVoltage: boolean; showPower: b
 type Reading = { id: string; label: string; voltage: number; current: number; power: number; voltagePhase?: number; currentPhase?: number }
 type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; nodePhasors?: Record<string, { re: number; im: number }>; frequency?: number; ac?: boolean; message: string }
 type Circuit = { parts: Part[]; wires: Wire[]; drawings?: DrawItem[] }
+type PresetPart = { kind: Exclude<Kind, 'ground' | 'junction'>; value: number; label: string }
+type CircuitPreset = { name: string; category: string; description: string; source: 'dc' | 'ac'; voltage: number; frequency?: number; parts: PresetPart[] }
+const circuitPresets: CircuitPreset[] = [
+  { category: 'Basics', name: 'Simple resistor circuit', description: 'DC supply with one resistor', source: 'dc', voltage: 9, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }] },
+  { category: 'Basics', name: 'Voltage divider', description: 'Two resistors share the supply voltage', source: 'dc', voltage: 9, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'resistor', value: 2000, label: 'R2' }] },
+  { category: 'Basics', name: 'Switched load', description: 'Open and close a resistive load', source: 'dc', voltage: 5, parts: [{ kind: 'switch', value: 0, label: 'S1' }, { kind: 'resistor', value: 220, label: 'R1' }] },
+  { category: 'Basics', name: 'LED current limiter', description: 'DC source, current-limiting resistor, and diode', source: 'dc', voltage: 5, parts: [{ kind: 'resistor', value: 220, label: 'R1' }, { kind: 'diode', value: 0.7, label: 'D1' }] },
+  { category: 'A/C Circuits', name: 'AC resistive load', description: 'AC supply with a resistive load', source: 'ac', voltage: 12, frequency: 60, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }] },
+  { category: 'A/C Circuits', name: 'Series RC circuit', description: 'Observe resistor and capacitor at AC', source: 'ac', voltage: 12, frequency: 60, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'capacitor', value: 10e-6, label: 'C1' }] },
+  { category: 'A/C Circuits', name: 'Series RL circuit', description: 'Observe resistor and inductor at AC', source: 'ac', voltage: 12, frequency: 60, parts: [{ kind: 'resistor', value: 470, label: 'R1' }, { kind: 'inductor', value: 10e-3, label: 'L1' }] },
+  { category: 'A/C Circuits', name: 'Series RLC circuit', description: 'Explore AC behavior of R, L, and C together', source: 'ac', voltage: 12, frequency: 60, parts: [{ kind: 'resistor', value: 100, label: 'R1' }, { kind: 'inductor', value: 10e-3, label: 'L1' }, { kind: 'capacitor', value: 100e-6, label: 'C1' }] },
+  { category: 'Passive Filters', name: 'RC low-pass example', description: 'Simple series RC filter for AC study', source: 'ac', voltage: 5, frequency: 100, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'capacitor', value: 1e-6, label: 'C1' }] },
+  { category: 'Passive Filters', name: 'RC high-pass example', description: 'Series capacitor and resistor at AC', source: 'ac', voltage: 5, frequency: 1000, parts: [{ kind: 'capacitor', value: 100e-9, label: 'C1' }, { kind: 'resistor', value: 10000, label: 'R1' }] },
+  { category: 'Passive Filters', name: 'RL filter example', description: 'Series resistor and inductor at AC', source: 'ac', voltage: 5, frequency: 500, parts: [{ kind: 'resistor', value: 470, label: 'R1' }, { kind: 'inductor', value: 47e-3, label: 'L1' }] },
+  { category: 'Diodes', name: 'Diode forward-bias circuit', description: 'DC source and diode operating point', source: 'dc', voltage: 5, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'diode', value: 0.7, label: 'D1' }] },
+]
 const defaultCircuitOptions: CircuitOptions = { showCurrent: true, showVoltage: true, showPower: false, showValues: true, smallGrid: false, toolbar: true, cursorCrosshair: false, europeanResistors: false, showOhmUnit: true, whiteBackground: false, conventionalCurrent: true, disableEditing: false, editValuesWithMouseWheel: true }
 
 const W = 1120
@@ -48,6 +64,17 @@ function exampleCircuit(): Circuit {
       { id: 'w3', from: pinId(ground, 'g'), to: pinId(source, 'b') },
     ],
   }
+}
+function buildPresetCircuit(preset: CircuitPreset): Circuit {
+  const source: Part = { id: makeId(), kind: preset.source === 'ac' ? 'ac-source' : 'source', x: 190, y: 300, value: preset.voltage, label: preset.source === 'ac' ? 'VAC1' : 'V1', on: true, ...(preset.source === 'ac' ? { frequency: preset.frequency ?? 60 } : {}) }
+  const parts: Part[] = [source, ...preset.parts.map((item, index) => ({ id: makeId(), kind: item.kind, x: 410 + index * 185, y: 300, value: item.value, label: item.label, on: true }))]
+  const ground: Part = { id: makeId(), kind: 'ground', x: 190, y: 485, value: 0, label: 'GND', on: true }
+  const wires: Wire[] = [{ id: makeId(), from: pinId(source, 'a'), to: pinId(parts[1], 'a') }]
+  for (let index = 1; index < parts.length - 1; index++) wires.push({ id: makeId(), from: pinId(parts[index], 'b'), to: pinId(parts[index + 1], 'a') })
+  const last = parts[parts.length - 1]
+  wires.push({ id: makeId(), from: pinId(source, 'b'), to: pinId(ground, 'g'), points: [{ x: 238, y: 300 }, { x: 238, y: 462 }, { x: 190, y: 462 }] })
+  wires.push({ id: makeId(), from: pinId(last, 'b'), to: pinId(ground, 'g'), points: [{ x: last.x + 48, y: 300 }, { x: last.x + 70, y: 300 }, { x: last.x + 70, y: 462 }, { x: 220, y: 462 }] })
+  return { parts: [...parts, ground], wires, drawings: [] }
 }
 function loadCircuit(): Circuit {
   try {
@@ -292,7 +319,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null)
   const [drawingDrag, setDrawingDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
-  const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | 'draw' | 'options' | 'tools' | null>(null)
+  const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | 'draw' | 'options' | 'tools' | 'circuits' | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [clipboard, setClipboard] = useState<{ parts: Part[]; wires: Wire[] }>({ parts: [], wires: [] })
   const [zoom, setZoom] = useState(1)
@@ -310,6 +337,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [options, setOptions] = useState<CircuitOptions>(() => { try { return { ...defaultCircuitOptions, ...JSON.parse(localStorage.getItem('ozoo:circuit-options') ?? '{}') } } catch { return defaultCircuitOptions } })
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
+  const [circuitSearch, setCircuitSearch] = useState('')
   const toggleOption = (key: keyof CircuitOptions) => setOptions((current) => ({ ...current, [key]: !current[key] }))
   const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [simulationActive, setSimulationActive] = useState(false)
@@ -645,6 +673,13 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener('keydown', keydown)
   }, [circuit, selectedPart, selectedParts, selectedWire, selectedDrawing, clipboard])
   const newCircuit = () => { setCircuit({ parts: [], wires: [], drawings: [] }); setSimulation(null); setError(''); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }
+  const loadCircuitPreset = (preset: CircuitPreset) => {
+    if (options.disableEditing) return
+    const nextCircuit = buildPresetCircuit(preset)
+    setCircuit(nextCircuit)
+    try { setSimulation(solveCircuit(nextCircuit.parts, nextCircuit.wires)) } catch { setSimulation(null) }
+    setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setWireStart(null); setWirePoints([]); setWireCursor(null); setError(`${preset.name} loaded · ${preset.description}`); setOpenMenu(null); setCircuitSearch('')
+  }
   const downloadSvg = () => {
     const svg = svgRef.current
     if (!svg) return
@@ -665,6 +700,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         <div className="circuit-menu-wrap"><button className={openMenu === 'draw' ? 'open' : ''} aria-expanded={openMenu === 'draw'} onClick={() => setOpenMenu(openMenu === 'draw' ? null : 'draw')}>Draw <span>⌄</span></button>{openMenu === 'draw' && <div className="circuit-menu-popover" role="menu"><div className="circuit-menu-label">ANNOTATIONS & PICTURES</div><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('image')}>▧ Insert image…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('text')}>T Add text label…</button><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('arrow')}>↗ Add arrow</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('rectangle')}>▱ Add rectangle</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('ellipse')}>◯ Add ellipse</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'tools' ? 'open' : ''} aria-expanded={openMenu === 'tools'} onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}>Tools <span>⌄</span></button>{openMenu === 'tools' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" aria-pressed={dmmActive} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setOpenMenu(null) }}>▦ {dmmActive ? 'Close multimeter' : 'Digital multimeter'}</button><button role="menuitem" disabled={options.disableEditing} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.'); setOpenMenu(null) }}>⌁ Wire tool</button><button role="menuitemcheckbox" aria-checked={gridVisible} onClick={() => setGridVisible((visible) => !visible)}>▧ {gridVisible ? 'Hide grid' : 'Show grid'}</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div>{(['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} disabled={options.disableEditing} onClick={() => { setPlacement(kind); setDrawMode(null); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'circuits' ? 'open' : ''} aria-expanded={openMenu === 'circuits'} onClick={() => setOpenMenu(openMenu === 'circuits' ? null : 'circuits')}>Circuits <span>⌄</span></button>{openMenu === 'circuits' && <div className="circuit-menu-popover circuit-presets-popover" role="menu"><label className="circuit-preset-search"><span>PREMADE CIRCUITS</span><input value={circuitSearch} onChange={(event) => setCircuitSearch(event.target.value)} placeholder="Search circuits…" /></label><div className="circuit-preset-groups">{Array.from(new Set(circuitPresets.map((preset) => preset.category))).map((category, index) => { const presets = circuitPresets.filter((preset) => preset.category === category && (!circuitSearch || `${preset.name} ${preset.description} ${preset.category}`.toLowerCase().includes(circuitSearch.toLowerCase()))); return presets.length ? <details key={category} open={!!circuitSearch || index === 0}><summary>{category}<span>{presets.length}</span></summary><div>{presets.map((preset) => <button key={preset.name} role="menuitem" disabled={options.disableEditing} onClick={() => loadCircuitPreset(preset)}><strong>{preset.name}</strong><small>{preset.description}</small></button>)}</div></details> : null })}{!circuitPresets.some((preset) => `${preset.name} ${preset.description} ${preset.category}`.toLowerCase().includes(circuitSearch.toLowerCase())) && <p className="circuit-preset-empty">No matching circuits. Try a different search.</p>}</div><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>＋ Blank circuit</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'options' ? 'open' : ''} aria-expanded={openMenu === 'options'} onClick={() => setOpenMenu(openMenu === 'options' ? null : 'options')}>Options <span>⌄</span></button>{openMenu === 'options' && <div className="circuit-menu-popover circuit-options-popover" role="menu">
           <div className="circuit-menu-label">DISPLAY</div>
           {([['showCurrent','Show Current'],['showVoltage','Show Voltage'],['showPower','Show Power'],['showValues','Show Values'],['smallGrid','Small Grid'],['toolbar','Toolbar'],['cursorCrosshair','Show Cursor Crosshair'],['europeanResistors','European Resistors'],['showOhmUnit','Show Ω Unit'],['whiteBackground','White Background'],['conventionalCurrent','Conventional Current Motion'],['disableEditing','Disable Editing'],['editValuesWithMouseWheel','Edit Values With Mouse Wheel']] as [keyof CircuitOptions,string][]).map(([key,label]) => <button key={key} role="menuitemcheckbox" aria-checked={options[key]} onClick={() => toggleOption(key)}><span className="option-check">{options[key] ? '✓' : ''}</span>{label}</button>)}
