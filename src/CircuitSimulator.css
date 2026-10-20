@@ -79,7 +79,6 @@
 .circuit-tools .circuit-meter-panel{flex:1 1 220px;max-width:440px;display:grid;grid-template-columns:auto minmax(120px,1fr);align-items:center;gap:7px;margin:0;padding:7px 9px;}
 .circuit-tools .circuit-meter-panel output{grid-column:1/-1;min-height:28px;}
 .physical-dmm{margin:10px 0 16px;padding:13px;border:1px solid #252b30;border-radius:16px;background:linear-gradient(145deg,#42484b,#202528 72%);box-shadow:inset 0 1px 0 #ffffff24,0 7px 20px #15201924;color:#f5f6ed}.dmm-topline{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font:800 11px ui-monospace,monospace;letter-spacing:.14em;color:#f0c94d}.dmm-topline small{font-size:8px;letter-spacing:.08em;color:#b8c0bd}.dmm-screen{min-height:82px;padding:10px;border:4px solid #171b1d;border-radius:8px;background:linear-gradient(135deg,#d5e3b0,#b4cb87);box-shadow:inset 0 2px 6px #26331b55;color:#182016;display:flex;flex-direction:column;justify-content:space-between}.dmm-screen small,.dmm-screen>span{font:700 8px ui-monospace,monospace;letter-spacing:.1em;opacity:.7}.dmm-screen output{display:block;font:700 15px/1.25 ui-monospace,monospace;overflow-wrap:anywhere}.dmm-mode-label{margin:12px 0 5px;color:#bec5c2;font:700 8px ui-monospace,monospace;letter-spacing:.14em}.dmm-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.dmm-modes button{height:32px;border:1px solid #697276;border-radius:8px;background:#303638;color:#e8ece7;font:700 13px ui-monospace,monospace;cursor:pointer}.dmm-modes button.active{border-color:#f4cf4e;background:#f0cb43;color:#24271d;box-shadow:0 0 0 2px #f0cb4338}.dmm-leads{display:grid;gap:7px;margin-top:12px}.dmm-lead{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:7px;min-height:34px;padding:0 9px;border:1px solid #596165;border-radius:8px;background:#292f32;color:#e3e8e4;text-align:left;font:700 8px ui-monospace,monospace;letter-spacing:.04em;cursor:pointer}.dmm-lead i{width:9px;height:9px;border-radius:50%;background:#eb4545;box-shadow:0 0 0 2px #ffffff1a}.dmm-lead.black i{background:#151719;border:1px solid #9ba4a2}.dmm-lead b{color:#b6bfbb;font-size:8px}.dmm-lead.red.chosen{border-color:#ff6666;box-shadow:0 0 0 2px #ff666633}.dmm-lead.black.chosen{border-color:#c3cdca;box-shadow:0 0 0 2px #c3cdca33}.dmm-hint{margin:10px 1px 1px;color:#c3ccca;font-size:9px;line-height:1.45}
-.component-graph{margin:14px 0;padding:10px;border:1px solid var(--c-line);border-radius:10px;background:color-mix(in srgb,var(--c-panel) 90%,var(--c-bg))}.component-graph header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px;margin-bottom:7px}.component-graph header strong{font-size:10px;color:var(--c-ink)}.component-graph header small{font-size:8px;color:var(--c-muted)}.component-graph svg{display:block;width:100%;height:auto;border-radius:6px;background:color-mix(in srgb,var(--c-bg) 55%,var(--c-panel))}.component-graph-grid{fill:none;stroke:var(--c-line);stroke-width:.7}.component-graph-voltage,.component-graph-current{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.component-graph-voltage{stroke:#8c58dd}.component-graph-current{stroke:#e69038}.component-graph-legend{display:grid;gap:4px;margin-top:7px;color:var(--c-muted);font-size:8px}.component-graph-legend span{display:flex;align-items:center;gap:5px}.component-graph-legend i{width:8px;height:3px;border-radius:4px;background:#8c58dd}.component-graph-legend span+span i{background:#e69038}
 .circuit-part .component-plate{stroke-width:3.4;}
 .circuit-part .diode-triangle{fill:#fbfcfb;}
 .circuit-wire path.current-live{stroke:#f0c928;stroke-width:2.2;stroke-dasharray:1 9;animation:circuit-current-flow .75s linear infinite;}
@@ -119,4 +118,23 @@
 
 .circuit-canvas .wire-preview-handle{fill:#f7fff8;stroke:#258d4b;stroke-width:2;pointer-events:none;vector-effect:non-scaling-stroke}
 .circuit-workspace[data-theme="purple"] .wire-preview-handle,.circuit-workspace[data-theme="red-black"] .wire-preview-handle,.circuit-workspace[data-theme="doom"] .wire-preview-handle,.circuit-workspace[data-theme="white-purple"] .wire-preview-handle,.circuit-workspace[data-theme="red-white"] .wire-preview-handle{stroke:var(--c-accent)}
+
+.component-scope{min-width:0;padding:12px 14px 10px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-panel);color:var(--c-ink);box-shadow:0 3px 14px #17231b08}
+.component-scope>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.component-scope>header>div{display:flex;align-items:center;gap:9px;min-width:0}
+.component-scope>header strong{font-size:13px}
+.component-scope>header small,.scope-part-name{color:var(--c-muted);font-size:10px}
+.scope-part-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scope-live-dot{width:8px;height:8px;flex:none;border-radius:50%;background:#61c98b;box-shadow:0 0 0 4px #61c98b22}
+.component-scope>svg{display:block;width:100%;height:auto;max-height:190px;border-radius:7px;background:#101213}
+.component-scope>svg text{fill:#bac2bd;font:10px ui-monospace,monospace}
+.scope-grid{fill:none;stroke:#ffffff24;stroke-width:1}
+.scope-voltage,.scope-current{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.scope-voltage{stroke:#f3df40}.scope-current{stroke:#62df68}
+.component-scope>footer{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding-top:8px;color:var(--c-ink);font-size:10px}
+.component-scope>footer span{display:flex;align-items:center;gap:6px;font-weight:700}
+.component-scope>footer i{width:10px;height:3px;border-radius:3px;background:#f3df40}
+.component-scope>footer .scope-key-current{background:#62df68}
+.component-scope>footer small{color:var(--c-muted);font-size:9px}
+@media(max-width:680px){.component-scope{padding:9px}.component-scope>header{align-items:flex-start}.component-scope>header>div{flex-wrap:wrap;gap:6px}.component-scope>footer{gap:7px 12px}.component-scope>footer small{flex-basis:100%}}
 
