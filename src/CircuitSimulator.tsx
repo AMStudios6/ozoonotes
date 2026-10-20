@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as Rea
 import './CircuitSimulator.css'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
-type Kind = 'source' | 'ac-source' | 'resistor' | 'capacitor' | 'inductor' | 'diode' | 'switch' | 'ground'
+type Kind = 'source' | 'ac-source' | 'resistor' | 'capacitor' | 'inductor' | 'diode' | 'switch' | 'ground' | 'junction'
 type MeterMode = 'voltage' | 'current' | 'resistance'
 type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; frequency?: number; rotation?: number; mirrorX?: boolean; mirrorY?: boolean }
 type Point = { x: number; y: number }
 type Wire = { id: string; from: string; to: string; points?: Point[] }
 type WireHandle = { wireId: string; index: number }
+type WireSnap = { partId: string; wireId: string; pinId: string; point: Point; x: number; y: number; segmentIndex: number }
 type Pin = { id: string; x: number; y: number; label: string }
 type Reading = { id: string; label: string; voltage: number; current: number; power: number; voltagePhase?: number; currentPhase?: number }
 type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; nodePhasors?: Record<string, { re: number; im: number }>; frequency?: number; ac?: boolean; message: string }
@@ -24,6 +25,7 @@ const rotatePoint = (part: Part, x: number, y: number) => {
 }
 const pinsFor = (part: Part): Pin[] => {
   if (part.kind === 'ground') { const point = rotatePoint(part, 0, -23); return [{ id: pinId(part, 'g'), ...point, label: 'GND' }] }
+  if (part.kind === 'junction') return [{ id: pinId(part, 'j'), x: part.x, y: part.y, label: 'J' }]
   const a = rotatePoint(part, -48, 0), b = rotatePoint(part, 48, 0)
   return [
     { id: pinId(part, 'a'), ...a, label: part.kind === 'source' || part.kind === 'ac-source' ? '+' : '1' },
@@ -112,7 +114,7 @@ function solveAcCircuit(parts: Part[], wires: Wire[]): Simulation {
   const phasors: Record<string, Complex> = { [groundRoot]: complex() }
   roots.forEach((root, index) => { phasors[root] = rhs[index] })
   const nodePhasors = Object.fromEntries(allPins.map((pin) => [pin.id, voltage(pin.id)]))
-  const readings = parts.filter((part) => part.kind !== 'ground').map((part) => {
+  const readings = parts.filter((part) => part.kind !== 'ground' && part.kind !== 'junction').map((part) => {
     const a = pinId(part, 'a'), b = pinId(part, 'b'), v = cSub(voltage(a), voltage(b))
     const admittance = part.kind === 'resistor' ? complex(1 / Math.max(0.001, part.value))
       : part.kind === 'switch' ? complex(part.on ? 50 : 1e-10)
@@ -209,7 +211,7 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
   const nodeVoltages: Record<string, number> = { [groundRoot]: 0 }
   roots.forEach((root, index) => { nodeVoltages[root] = solved[index] })
   const voltageOf = (id: string) => nodeVoltages[find(id)] ?? 0
-  const readings = parts.filter((part) => part.kind !== 'ground').map((part) => {
+  const readings = parts.filter((part) => part.kind !== 'ground' && part.kind !== 'junction').map((part) => {
     const a = voltageOf(pinId(part, 'a')), b = voltageOf(pinId(part, 'b'))
     const voltage = a - b
     const current = part.kind === 'source' ? solved[roots.length + voltageSources.findIndex((source) => source.id === part.id)]
@@ -227,8 +229,8 @@ const fmt = (value: number, unit: string) => {
   const [scaled, prefix] = abs >= 1e6 ? [value / 1e6, 'M'] : abs >= 1e3 ? [value / 1e3, 'k'] : abs >= 1 ? [value, ''] : abs >= 1e-3 ? [value * 1e3, 'm'] : [value * 1e6, 'µ']
   return (Math.abs(scaled) < 10 ? scaled.toFixed(3) : scaled.toFixed(2)) + ' ' + prefix + unit
 }
-const partNames: Record<Kind, string> = { source: 'DC source', 'ac-source': 'AC supply', resistor: 'Resistor', capacitor: 'Capacitor', inductor: 'Inductor', diode: 'Diode', switch: 'Switch', ground: 'Ground' }
-const partGlyph: Record<Kind, string> = { source: '＋', 'ac-source': '∿', resistor: '▱', capacitor: '║', inductor: '∿', diode: '▷', switch: '⌁', ground: '⏚' }
+const partNames: Record<Kind, string> = { source: 'DC source', 'ac-source': 'AC supply', resistor: 'Resistor', capacitor: 'Capacitor', inductor: 'Inductor', diode: 'Diode', switch: 'Switch', ground: 'Ground', junction: 'Wire junction' }
+const partGlyph: Record<Kind, string> = { source: '＋', 'ac-source': '∿', resistor: '▱', capacitor: '║', inductor: '∿', diode: '▷', switch: '⌁', ground: '⏚', junction: '●' }
 function componentTracePath(reading: Reading, simulation: Simulation, current = false) {
   const magnitude = current ? reading.current : reading.voltage
   const phase = current ? reading.currentPhase ?? 0 : reading.voltagePhase ?? 0
@@ -238,12 +240,19 @@ function componentTracePath(reading: Reading, simulation: Simulation, current = 
 }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
+const nearestPointOnSegment = (point: Point, a: Point, b: Point) => {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const lengthSquared = dx * dx + dy * dy
+  const t = lengthSquared ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared)) : 0
+  const projected = { x: a.x + t * dx, y: a.y + t * dy }
+  return { point: projected, distance: Math.hypot(point.x - projected.x, point.y - projected.y) }
+}
 function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, voltageMap }: {
   part: Part; selected: boolean; onPointerDown: (event: ReactPointerEvent<SVGGElement>, part: Part) => void
   onPin: (pin: Pin) => void; onPinPointerDown: (event: ReactPointerEvent<SVGGElement>, pin: Pin) => void; voltageMap?: Record<string, number>
 }) {
   const pins = symbolPinsText(part)
-  const localPinOffset = (pin: Pin) => part.kind === 'ground' ? { x: 0, y: -23 } : { x: pin.id.endsWith(':a') ? -48 : 48, y: 0 }
+  const localPinOffset = (pin: Pin) => part.kind === 'ground' ? { x: 0, y: -23 } : part.kind === 'junction' ? { x: 0, y: 0 } : { x: pin.id.endsWith(':a') ? -48 : 48, y: 0 }
   const voltageLabel = (pin: Pin) => voltageMap ? fmt(voltageMap[pin.id] ?? 0, 'V') : pin.label
   return <g transform={'translate(' + part.x + ' ' + part.y + ') rotate(' + (part.rotation ?? 0) + ') scale(' + (part.mirrorX ? -1 : 1) + ' ' + (part.mirrorY ? -1 : 1) + ')'} className={'circuit-part ' + (selected ? 'selected' : '')} onPointerDown={(event) => onPointerDown(event, part)}>
     {part.kind === 'resistor' && <>
@@ -267,8 +276,8 @@ function PartSymbol({ part, selected, onPointerDown, onPin, onPinPointerDown, vo
         <text x={local.x} y={local.y - 12} className="pin-label">{voltageLabel(pin)}</text>
       </g>
     })}
-    <text x="0" y="39" className="part-label">{part.label}</text>
-    {part.kind !== 'ground' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'ac-source' ? fmt(part.value, 'V rms') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.kind === 'capacitor' ? fmt(part.value, 'F') : part.kind === 'inductor' ? fmt(part.value, 'H') : part.kind === 'diode' ? 'Vf ' + fmt(part.value, 'V') : part.on ? 'Closed' : 'Open'}</text>}
+    {part.kind !== 'ground' && part.kind !== 'junction' && <text x="0" y="39" className="part-label">{part.label}</text>}
+    {part.kind !== 'ground' && part.kind !== 'junction' && <text x="0" y="56" className="part-value">{part.kind === 'source' ? fmt(part.value, 'V') : part.kind === 'ac-source' ? fmt(part.value, 'V rms') : part.kind === 'resistor' ? fmt(part.value, 'Ω') : part.kind === 'capacitor' ? fmt(part.value, 'F') : part.kind === 'inductor' ? fmt(part.value, 'H') : part.kind === 'diode' ? 'Vf ' + fmt(part.value, 'V') : part.on ? 'Closed' : 'Open'}</text>}
   </g>
 }
 export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
@@ -298,6 +307,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [dragPoint, setDragPoint] = useState<WireHandle | null>(null)
   const [wirePoints, setWirePoints] = useState<Point[]>([])
   const [wireCursor, setWireCursor] = useState<Point | null>(null)
+  const [wireSnapPreview, setWireSnapPreview] = useState<WireSnap | null>(null)
   const wireDrag = useRef<{ from: string; x: number; y: number; moved: boolean } | null>(null)
   const suppressPinClick = useRef(false)
   const undoStack = useRef<Circuit[]>([])
@@ -313,6 +323,51 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const viewWidth = W / zoom, viewHeight = H / zoom
   const viewBox = `${viewCenter.x - viewWidth / 2} ${viewCenter.y - viewHeight / 2} ${viewWidth} ${viewHeight}`
   const pinLookup = Object.fromEntries(circuit.parts.flatMap(pinsFor).map((pin) => [pin.id, pin]))
+  const findWireSnap = (part: Part, x: number, y: number): WireSnap | null => {
+    if (part.kind === 'junction') return null
+    const movedPart = { ...part, x, y }
+    const candidatePins = pinsFor(movedPart)
+    // A dragged symbol should snap when its body reaches a wire; the chosen terminal
+    // may be a short distance from the wire before it is translated into place.
+    let closest: WireSnap | null = null, bestDistance = 58
+    for (const wire of circuit.wires) {
+      if (wire.from.startsWith(part.id + ':') || wire.to.startsWith(part.id + ':')) continue
+      const a = pinLookup[wire.from], b = pinLookup[wire.to]
+      if (!a || !b) continue
+      const vertices = [a, ...(wire.points ?? []), b]
+      for (const pin of candidatePins) for (let index = 0; index < vertices.length - 1; index++) {
+        const projection = nearestPointOnSegment(pin, vertices[index], vertices[index + 1])
+        if (projection.distance >= bestDistance) continue
+        bestDistance = projection.distance
+        closest = { partId: part.id, wireId: wire.id, pinId: pin.id, point: projection.point, x: x + projection.point.x - pin.x, y: y + projection.point.y - pin.y, segmentIndex: index }
+      }
+    }
+    return closest
+  }
+  const attachPartToWire = (snap: WireSnap) => {
+    const junctionId = makeId(), junctionPin = pinId({ id: junctionId } as Part, 'j')
+    setCircuit((current) => {
+      const target = current.wires.find((wire) => wire.id === snap.wireId)
+      const moving = current.parts.find((part) => part.id === snap.partId)
+      if (!target || !moving) return current
+      const a = current.parts.flatMap(pinsFor).find((pin) => pin.id === target.from)
+      const b = current.parts.flatMap(pinsFor).find((pin) => pin.id === target.to)
+      if (!a || !b) return current
+      const vertices = [a, ...(target.points ?? []), b]
+      const leftPoints = vertices.slice(1, snap.segmentIndex + 1).map(({ x, y }) => ({ x, y }))
+      const rightPoints = vertices.slice(snap.segmentIndex + 1, -1).map(({ x, y }) => ({ x, y }))
+      const junction: Part = { id: junctionId, kind: 'junction', x: snap.point.x, y: snap.point.y, value: 0, label: 'J', on: true }
+      const updatedMoving = { ...moving, x: snap.x, y: snap.y }
+      const wires = current.wires.filter((wire) => wire.id !== target.id)
+      wires.push(
+        { id: makeId(), from: target.from, to: junctionPin, points: leftPoints },
+        { id: makeId(), from: junctionPin, to: target.to, points: rightPoints },
+        { id: makeId(), from: snap.pinId, to: junctionPin },
+      )
+      return { parts: [...current.parts.map((part) => part.id === updatedMoving.id ? updatedMoving : part), junction], wires }
+    })
+    setSelectedPart(snap.partId); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Component snapped to wire and connected.'); setWireSnapPreview(null)
+  }
   useEffect(() => { try { localStorage.setItem('ozoo:circuit', JSON.stringify(circuit)) } catch {} }, [circuit])
   useEffect(() => {
     if (historyAction.current) { historyAction.current = false; lastCircuit.current = circuit; return }
@@ -327,12 +382,18 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
   }, [circuit, simulationActive])
   const screenPoint = (event: { clientX: number; clientY: number }) => {
-    const rect = svgRef.current?.getBoundingClientRect()
-    const view = svgRef.current?.viewBox.baseVal
-    return rect && view ? { x: view.x + (event.clientX - rect.left) * view.width / rect.width, y: view.y + (event.clientY - rect.top) * view.height / rect.height } : { x: W / 2, y: H / 2 }
+    const svg = svgRef.current
+    const matrix = svg?.getScreenCTM()
+    if (svg && matrix) {
+      const point = svg.createSVGPoint()
+      point.x = event.clientX; point.y = event.clientY
+      const local = point.matrixTransform(matrix.inverse())
+      return { x: local.x, y: local.y }
+    }
+    return { x: W / 2, y: H / 2 }
   }
   const addPartAt = (kind: Kind, x: number, y: number) => {
-    const labels: Record<Kind, string> = { source: 'V', 'ac-source': 'VAC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', switch: 'S', ground: 'GND' }
+    const labels: Record<Kind, string> = { source: 'V', 'ac-source': 'VAC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', switch: 'S', ground: 'GND', junction: 'J' }
     const value = kind === 'source' || kind === 'ac-source' ? 5 : kind === 'resistor' ? 1000 : kind === 'capacitor' ? 100e-6 : kind === 'inductor' ? 10e-3 : kind === 'diode' ? 0.7 : 0
     const label = kind === 'ground' ? 'GND' : labels[kind] + (circuit.parts.filter((part) => part.kind === kind).length + 1)
     const part: Part = { id: makeId(), kind, x: Math.max(64, Math.min(W - 64, x)), y: Math.max(90, Math.min(H - 62, y)), value, label, on: true, ...(kind === 'ac-source' ? { frequency: 60 } : {}) }
@@ -377,6 +438,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       setSelectedPart(null); setSelectedWire(null); return
     }
     const point = screenPoint(event)
+    setWireSnapPreview(null)
     if (!selectedParts.includes(part.id)) { setSelectedPart(part.id); setSelectedParts([]) }
     else setSelectedPart(part.id)
     setSelectedWire(null)
@@ -550,14 +612,19 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit}><span className="palette-symbol">＋</span><span>New</span></button></div>
       </section>
       <section className="circuit-main">
-        <div className="circuit-canvas-head"><span><i /> Schematic</span><span className="circuit-canvas-controls"><span>{placement ? 'Click to place · Esc to cancel' : wireStart ? 'Drag to a pin or click the destination terminal' : 'Drag parts to arrange · drag a pin to wire'}</span><div className="circuit-zoom-controls"><button title="Zoom out" aria-label="Zoom out" onClick={() => setZoomBy(1 / 1.2)}>−</button><output>{Math.round(zoom * 100)}%</output><button title="Zoom in" aria-label="Zoom in" onClick={() => setZoomBy(1.2)}>+</button><button title="Center circuit" onClick={centerCircuit}>Center</button></div></span></div>
+        <div className="circuit-canvas-head"><span><i /> Schematic</span><span className="circuit-canvas-controls"><span>{wireSnapPreview ? 'Release to connect component to wire' : placement ? 'Click to place · Esc to cancel' : wireStart ? 'Drag to a pin or click the destination terminal' : 'Drag parts to arrange · drag a pin to wire'}</span><div className="circuit-zoom-controls"><button title="Zoom out" aria-label="Zoom out" onClick={() => setZoomBy(1 / 1.2)}>−</button><output>{Math.round(zoom * 100)}%</output><button title="Zoom in" aria-label="Zoom in" onClick={() => setZoomBy(1.2)}>+</button><button title="Center circuit" onClick={centerCircuit}>Center</button></div></span></div>
         <svg ref={svgRef} viewBox={viewBox} className={'circuit-canvas ' + (placement ? 'placing' : '')} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
           const point = screenPoint(event)
           if (wireDrag.current) { const state = wireDrag.current; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(point) }
           else if (wireStart) setWireCursor(point)
-          if (dragPoint) { setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
+          if (dragPoint) { setWireSnapPreview(null); setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
           if (!drag) return
-          setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === drag.id ? { ...part, x: Math.max(55, Math.min(W - 55, point.x - drag.dx)), y: Math.max(70, Math.min(H - 45, point.y - drag.dy)) } : part) }))
+          const movingPart = circuit.parts.find((part) => part.id === drag.id)
+          if (!movingPart) return
+          const rawX = Math.max(55, Math.min(W - 55, point.x - drag.dx)), rawY = Math.max(70, Math.min(H - 45, point.y - drag.dy))
+          const snap = findWireSnap(movingPart, rawX, rawY)
+          setWireSnapPreview(snap)
+          setCircuit((current) => ({ ...current, parts: current.parts.map((part) => part.id === drag.id ? { ...part, x: snap?.x ?? rawX, y: snap?.y ?? rawY } : part) }))
         }} onPointerUp={(event) => {
           if (wireDrag.current) {
             const state = wireDrag.current
@@ -568,7 +635,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             } else if (state.moved) { const point = screenPoint(event); setWirePoints((value) => [...value, point]); setWireCursor(point) }
             suppressPinClick.current = true; window.setTimeout(() => { suppressPinClick.current = false }, 0); wireDrag.current = null
           }
-          if (drag || dragPoint) { setDrag(null); setDragPoint(null); setSimulation(null) }
+          if (drag && wireSnapPreview) attachPartToWire(wireSnapPreview)
+          if (drag || dragPoint) { setDrag(null); setDragPoint(null); if (!wireSnapPreview) setSimulation(null) }
+          if (!drag) setWireSnapPreview(null)
           try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {}
         }}>
           <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern></defs>
@@ -586,6 +655,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             </g>
           })}
           {wireStart && wireCursor && pinLookup[wireStart] && <><path className="wire-preview" d={wirePath(pinLookup[wireStart], wireCursor, wirePoints)} />{wirePoints.map((point, index) => <circle key={'route-' + index} className="wire-preview-handle" cx={point.x} cy={point.y} r="4" />)}</>}
+          {wireSnapPreview && pinLookup[wireSnapPreview.pinId] && <g className="wire-snap-indicator" pointerEvents="none"><circle cx={wireSnapPreview.point.x} cy={wireSnapPreview.point.y} r="9" /><path d={`M ${wireSnapPreview.point.x - 13} ${wireSnapPreview.point.y} H ${wireSnapPreview.point.x + 13} M ${wireSnapPreview.point.x} ${wireSnapPreview.point.y - 13} V ${wireSnapPreview.point.y + 13}`} /></g>}
           {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={simulation?.nodeVoltages} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · Drag parts to move them · drag terminals to connect wires · Simulate to show voltages and current</span>}</div>
