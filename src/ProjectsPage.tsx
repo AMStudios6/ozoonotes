@@ -263,7 +263,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     if (!equation.trim()) return
     insertHtml(`<span class="project-equation">${escapeHtml(equation.trim())}</span>&nbsp;`)
   }
-  const insertTable = () {
+  const insertTable = () => {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
     if (!rows || !columns) return
