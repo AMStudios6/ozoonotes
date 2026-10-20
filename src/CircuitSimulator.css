@@ -143,6 +143,23 @@
 .component-scope>footer span{display:flex;align-items:center;gap:6px;font-weight:700}
 .component-scope>footer i{width:10px;height:3px;border-radius:3px;background:#f3df40}
 .component-scope>footer .scope-key-current{background:#62df68}
+.component-scope>footer .scope-key-power{background:#b981ff}
 .component-scope>footer small{color:var(--c-muted);font-size:9px}
 @media(max-width:680px){.component-scope{padding:9px}.component-scope>header{align-items:flex-start}.component-scope>header>div{flex-wrap:wrap;gap:6px}.component-scope>footer{gap:7px 12px}.component-scope>footer small{flex-basis:100%}}
+.circuit-options-popover{width:280px;max-height:min(75vh,620px)}
+.circuit-options-popover>button[role="menuitemcheckbox"]{min-height:31px;font-size:10px}
+.circuit-options-popover>button small{margin-left:auto;color:var(--c-muted);font-size:9px}
+.option-check{display:inline-grid;place-items:center;width:15px;height:15px;flex:none;border:1px solid var(--c-line);border-radius:3px;color:var(--c-accent);font-size:11px}
+.circuit-canvas.crosshair{cursor:crosshair}
+.circuit-wire path.current-live.reverse{animation-direction:reverse}
+.circuit-workspace[data-white-background="true"] .circuit-canvas{background:#fff!important}
+.circuit-workspace[data-white-background="true"] .circuit-canvas pattern circle{fill:#dce5df!important}
+.circuit-dialog-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:18px;background:#09080cb3;backdrop-filter:blur(4px)}
+.circuit-options-dialog{position:relative;width:min(440px,100%);max-height:85vh;overflow:auto;padding:24px;border:1px solid var(--c-line);border-radius:16px;background:var(--c-panel);color:var(--c-ink);box-shadow:0 24px 80px #0005}
+.circuit-options-dialog h2{margin:0 36px 15px 0;font-size:20px}
+.circuit-options-dialog p,.circuit-options-dialog li{color:var(--c-muted);font-size:12px;line-height:1.6}
+.circuit-options-dialog ul{display:grid;gap:7px;padding-left:19px}
+.circuit-options-dialog kbd{padding:2px 5px;border:1px solid var(--c-line);border-radius:4px;background:color-mix(in srgb,var(--c-bg) 85%,var(--c-panel));color:var(--c-ink);font-size:10px}
+.circuit-dialog-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border:1px solid var(--c-line);border-radius:8px;background:transparent;color:var(--c-ink);font-size:20px;cursor:pointer}
+.circuit-reset-options{padding:9px 12px;border:1px solid var(--c-line);border-radius:8px;background:color-mix(in srgb,var(--c-accent) 12%,var(--c-panel));color:var(--c-ink);font-weight:700;cursor:pointer}
 
