@@ -84,7 +84,7 @@ async function removeProject(id: string) {
   })
 }
 
-const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
+const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'SUP', 'SUB', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
 function sanitizeHtml(value: string) {
   const parsed = new DOMParser().parseFromString(value, 'text/html')
   const cleanNode = (node: Node): Node | null => {
@@ -96,6 +96,7 @@ function sanitizeHtml(value: string) {
       return fragment
     }
     const clean = document.createElement(node.tagName.toLowerCase())
+    if (node.tagName === 'SPAN' && node.classList.contains('project-equation')) clean.className = 'project-equation'
     if (['SPAN', 'P', 'DIV'].includes(node.tagName)) {
       const style = node.style
       const color = style.color
@@ -149,7 +150,8 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedSelection = useRef<Range | null>(null)
   const [showMarks, setShowMarks] = useState(false)
-  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert'>('home')
+  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert' | 'math'>('home')
+  const [equationDraft, setEquationDraft] = useState('')
   const [wordCount, setWordCount] = useState(0)
   const [characterCount, setCharacterCount] = useState(0)
   const imageInput = useRef<HTMLInputElement>(null)
@@ -257,7 +259,11 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     queueSave()
   }
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
-  const insertTable = () => {
+  const insertEquation = (equation: string) => {
+    if (!equation.trim()) return
+    insertHtml(`<span class="project-equation">${escapeHtml(equation.trim())}</span>&nbsp;`)
+  }
+  const insertTable = () {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
     if (!rows || !columns) return
@@ -351,9 +357,10 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     <div className="project-ribbon-tabs" role="tablist" aria-label="Project document tools">
       <button type="button" role="tab" aria-selected={ribbonTab === 'home'} className={ribbonTab === 'home' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('home')}>Home</button>
       <button type="button" role="tab" aria-selected={ribbonTab === 'insert'} className={ribbonTab === 'insert' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('insert')}>Insert</button>
+      <button type="button" role="tab" aria-selected={ribbonTab === 'math'} className={ribbonTab === 'math' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('math')}>Math</button>
     </div>
     <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(event) => addImageFile(event.target.files?.[0])} />
-    <div className="project-format-toolbar" role="toolbar" aria-label={ribbonTab === 'home' ? 'Text formatting' : 'Insert project content'}>
+    <div className="project-format-toolbar" role="toolbar" aria-label={ribbonTab === 'home' ? 'Text formatting' : ribbonTab === 'insert' ? 'Insert project content' : 'Math tools'}>
       {ribbonTab === 'home' ? <>
       <div className="project-ribbon-group project-clipboard-group" aria-label="Clipboard">
         <button type="button" title="Paste text from clipboard" aria-label="Paste" onMouseDown={(event) => void pasteText(event)}><span className="project-ribbon-symbol">▣</span><small>Paste</small></button>
@@ -406,7 +413,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         <button type="button" title="Quote" aria-label="Quote" onMouseDown={run('formatBlock', 'blockquote')}>❝</button>
         <button type="button" title="Add link to selected text" aria-label="Add link to selected text" onMouseDown={addInlineLink}>↗</button>
       </div>
-      </> : <>
+      </> : ribbonTab === 'insert' ? <>
         <div className="project-ribbon-group project-insert-group" aria-label="Pages and tables">
           <button type="button" title="Insert cover page" onMouseDown={(event) => { event.preventDefault(); insertHtml(`<h1>${escapeHtml(project.title)}</h1><p>${escapeHtml(project.description)}</p><hr><p><br></p>`) }}>▤<small>Cover Page</small></button>
           <button type="button" title="Insert a blank page break" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>▯<small>Blank Page</small></button>
@@ -436,6 +443,23 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
           <button type="button" title="Insert a project footer" onMouseDown={(event) => { event.preventDefault(); insertHeaderFooter('Footer') }}>↧<small>Footer</small></button>
           <button type="button" title="Insert a page number label" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p style="text-align: right">Page 1</p>') }}>#<small>Page Number</small></button>
           <button type="button" title="Insert a signature line" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p>Signature: ______________________________</p>') }}>✎<small>Signature</small></button>
+        </div>
+      </> : <>
+        <div className="project-math-entry">
+          <label htmlFor="project-equation-input">Equation</label>
+          <input id="project-equation-input" value={equationDraft} onChange={(event) => setEquationDraft(event.target.value)} onMouseDown={rememberSelection} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') } }} placeholder="Type an equation, e.g. y = mx + b" />
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') }}>Insert</button>
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group" aria-label="Equation structures">
+          {[
+            ['Fraction', '□ / □'], ['Power', 'xⁿ'], ['Subscript', 'xₙ'], ['Square root', '√(□)'],
+            ['Integral', '∫ f(x) dx'], ['Summation', '∑'],
+          ].map(([label, value]) => <button key={label} type="button" title={`Insert ${label.toLowerCase()} template`} onMouseDown={(event) => { event.preventDefault(); insertEquation(value) }}>{value}<small>{label}</small></button>)}
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group project-math-symbols" aria-label="Math symbols">
+          {['±', '×', '÷', '≤', '≥', '≠', '≈', '∞', 'π', 'θ', 'α', 'β', 'Δ', '√', '∫', '∑', '→', '°'].map((symbol) => <button key={symbol} type="button" title={`Insert ${symbol}`} onMouseDown={(event) => { event.preventDefault(); insertEquation(symbol) }}>{symbol}</button>)}
         </div>
       </>}
     </div>
