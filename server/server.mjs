@@ -26,6 +26,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS team_board_access (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('view','edit')), PRIMARY KEY(team_id,board_id));
   CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS roadmaps (id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, summary TEXT NOT NULL, category TEXT NOT NULL, tags_json TEXT NOT NULL, content_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS teacher_students (teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','declined')), permission TEXT NOT NULL DEFAULT 'view' CHECK(permission IN ('view','edit')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(teacher_id,student_id), CHECK(teacher_id<>student_id));
   CREATE INDEX IF NOT EXISTS roadmaps_updated_at_idx ON roadmaps(updated_at DESC);
 `)
 const accessColumns = db.prepare('PRAGMA table_info(board_access)').all().map((column) => column.name)
@@ -42,6 +43,8 @@ if (!userColumns.includes('password_enabled')) {
   db.exec('UPDATE users SET password_enabled=0 WHERE google_sub IS NOT NULL OR github_id IS NOT NULL')
 }
 if (!userColumns.includes('plan')) db.exec("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'normal' CHECK(plan IN ('normal','pro'))")
+if (!userColumns.includes('account_type')) db.exec("ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'student' CHECK(account_type IN ('student','teacher','business','employee'))")
+if (!userColumns.includes('business_plan')) db.exec('ALTER TABLE users ADD COLUMN business_plan INTEGER NOT NULL DEFAULT 0 CHECK(business_plan IN (0,1))')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
@@ -181,7 +184,7 @@ const sessionUser = (req) => {
   if (!sessionId) return null
   const hash = sessionTokenHash(sessionId)
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
-  const user = db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword, users.plan FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now())
+  const user = db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword, users.plan, users.business_plan AS businessPlan, users.account_type AS accountType FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now())
   return user ? { ...user, isAdmin: adminUsernames.has(String(user.username).toLowerCase()) } : null
 }
 const notifyBoard = (boardId, type) => {
@@ -243,10 +246,14 @@ const boardRole = (boardId, userId) => {
   if (board.owner_id === userId) return { board, role: 'owner', canDownload: true }
   const access = db.prepare('SELECT role,can_download FROM board_access WHERE board_id = ? AND user_id = ?').get(boardId, userId)
   const teamAccess = db.prepare('SELECT tba.role FROM team_board_access tba JOIN team_members tm ON tm.team_id=tba.team_id WHERE tba.board_id=? AND tm.user_id=? ORDER BY CASE tba.role WHEN \'edit\' THEN 0 ELSE 1 END LIMIT 1').get(boardId, userId)
-  const role = access?.role === 'edit' || teamAccess?.role === 'edit' ? 'edit' : access?.role ?? teamAccess?.role
+  const classroomAccess = db.prepare("SELECT ts.permission AS role FROM teacher_students ts JOIN users teacher ON teacher.id=ts.teacher_id WHERE ts.student_id=? AND ts.teacher_id=? AND ts.status='accepted' AND teacher.account_type='teacher'").get(board.owner_id, userId)
+  const role = access?.role === 'edit' || teamAccess?.role === 'edit' || classroomAccess?.role === 'edit' ? 'edit' : access?.role ?? teamAccess?.role ?? classroomAccess?.role
   return role ? { board, role, canDownload: Boolean(access?.can_download) } : null
 }
 const shapeBoard = (row) => ({ id: row.id, ownerId: row.owner_id, ownerName: db.prepare('SELECT username FROM users WHERE id = ?').get(row.owner_id)?.username, folderId: row.folder_id, name: row.name, state: JSON.parse(decryptAtRest(row.state_json)), updatedAt: row.updated_at })
+const normalizeBoardName = (name) => String(name ?? '').trim().normalize('NFKC').toLowerCase()
+const boardNameConflict = (ownerId, name, exceptId = null) => db.prepare('SELECT id,name FROM boards WHERE owner_id=?').all(ownerId)
+  .some((board) => board.id !== exceptId && normalizeBoardName(board.name) === normalizeBoardName(name))
 
 async function handler(req, res) {
   const origin = req.headers.origin
@@ -450,7 +457,7 @@ async function handler(req, res) {
       if (user.email && !user.email_verified_at) return sendJson(res, 403, { error: 'Verify your email before signing in.', code: 'EMAIL_NOT_VERIFIED' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
-      const loggedInUser = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan FROM users WHERE id=?').get(user.id)
+      const loggedInUser = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType FROM users WHERE id=?').get(user.id)
       return sendJson(res, 200, { user: { ...loggedInUser, isAdmin: adminUsernames.has(String(loggedInUser.username).toLowerCase()) } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/logout' && method === 'POST') {
@@ -478,6 +485,42 @@ async function handler(req, res) {
     const user = sessionUser(req)
     if (route === '/api/me' && method === 'GET') return user ? sendJson(res, 200, { user }) : sendJson(res, 200, { user: null })
     if (!user) return sendJson(res, 401, { error: 'Sign in to use cloud features.' })
+    if (route === '/api/classroom/links' && method === 'GET') {
+      const accountType = db.prepare('SELECT account_type FROM users WHERE id=?').get(user.id)?.account_type
+      if (accountType === 'teacher') {
+        const links = db.prepare('SELECT ts.student_id AS userId,u.username,ts.permission,ts.status FROM teacher_students ts JOIN users u ON u.id=ts.student_id WHERE ts.teacher_id=? ORDER BY ts.created_at DESC').all(user.id)
+        return sendJson(res, 200, { links })
+      }
+      if (accountType === 'student') {
+        const links = db.prepare('SELECT ts.teacher_id AS userId,u.username,ts.permission,ts.status FROM teacher_students ts JOIN users u ON u.id=ts.teacher_id WHERE ts.student_id=? ORDER BY ts.created_at DESC').all(user.id)
+        return sendJson(res, 200, { links })
+      }
+      return sendJson(res, 403, { error: 'Classroom access is available for student and teacher accounts.' })
+    }
+    if (route === '/api/classroom/links' && method === 'POST') {
+      const accountType = db.prepare('SELECT account_type FROM users WHERE id=?').get(user.id)?.account_type
+      if (accountType !== 'teacher') return sendJson(res, 403, { error: 'Only teacher accounts can invite students.' })
+      const { username, permission } = await readBody(req, 5_000)
+      if (!['view','edit'].includes(permission)) return sendJson(res, 400, { error: 'Choose view or edit access.' })
+      const student = db.prepare("SELECT id FROM users WHERE username=? AND account_type='student'").get(String(username ?? '').trim())
+      if (!student) return sendJson(res, 404, { error: 'No student account with that username was found.' })
+      if (student.id === user.id) return sendJson(res, 400, { error: 'You cannot invite your own account.' })
+      db.prepare("INSERT INTO teacher_students(teacher_id,student_id,status,permission) VALUES(?,?,'pending',?) ON CONFLICT(teacher_id,student_id) DO UPDATE SET status='pending',permission=excluded.permission,created_at=CURRENT_TIMESTAMP").run(user.id, student.id, permission)
+      return sendJson(res, 201, { ok: true })
+    }
+    const classroomLink = route.match(/^\/api\/classroom\/links\/(\d+)$/)
+    if (classroomLink && method === 'PATCH') {
+      const accountType = db.prepare('SELECT account_type FROM users WHERE id=?').get(user.id)?.account_type
+      const { status } = await readBody(req, 5_000)
+      if (accountType !== 'student' || !['accepted','declined'].includes(status)) return sendJson(res, 403, { error: 'Only a student can accept or decline a teacher invitation.' })
+      const result = db.prepare("UPDATE teacher_students SET status=? WHERE teacher_id=? AND student_id=? AND status='pending'").run(status, Number(classroomLink[1]), user.id)
+      return result.changes ? sendJson(res, 200, { ok: true }) : sendJson(res, 404, { error: 'That pending invitation could not be found.' })
+    }
+    if (classroomLink && method === 'DELETE') {
+      const otherUserId = Number(classroomLink[1])
+      const result = db.prepare('DELETE FROM teacher_students WHERE (teacher_id=? AND student_id=?) OR (teacher_id=? AND student_id=?)').run(user.id, otherUserId, otherUserId, user.id)
+      return result.changes ? sendJson(res, 200, { ok: true }) : sendJson(res, 404, { error: 'That classroom connection could not be found.' })
+    }
     if (route === '/api/roadmaps' && method === 'POST') {
       const { title, summary, category, tags, content } = await readBody(req, 12 * 1024 * 1024)
       const cleanTitle = String(title ?? '').trim().slice(0, 120)
@@ -517,26 +560,29 @@ async function handler(req, res) {
       if (!user.isAdmin) return sendJson(res, 403, { error: 'Admin access is not enabled for this account.' })
       if (route === '/api/admin/overview' && method === 'GET') {
         const totals = db.prepare('SELECT COUNT(*) AS users, SUM(CASE WHEN plan=\'pro\' THEN 1 ELSE 0 END) AS proUsers FROM users').get()
-        const users = db.prepare('SELECT u.id,u.username,u.email,u.plan,u.created_at AS createdAt,COUNT(DISTINCT b.id) AS cloudBoards FROM users u LEFT JOIN boards b ON b.owner_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 250').all()
+        const users = db.prepare('SELECT u.id,u.username,u.email,u.plan,u.business_plan AS businessPlan,u.account_type AS accountType,u.created_at AS createdAt,COUNT(DISTINCT b.id) AS cloudBoards FROM users u LEFT JOIN boards b ON b.owner_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 250').all()
         return sendJson(res, 200, { totals: { users: Number(totals.users ?? 0), proUsers: Number(totals.proUsers ?? 0) }, users })
       }
       const planRoute = route.match(/^\/api\/admin\/users\/(\d+)\/plan$/)
       if (planRoute && method === 'PATCH') {
         const { plan } = await readBody(req, 5_000)
-        if (plan !== 'normal' && plan !== 'pro') return sendJson(res, 400, { error: 'Choose the Normal or Pro plan.' })
-        const result = db.prepare('UPDATE users SET plan=? WHERE id=?').run(plan, Number(planRoute[1]))
+        if (!['normal','pro','standard','class_plus','business'].includes(plan)) return sendJson(res, 400, { error: 'Choose Standard, Class Plus, or Business.' })
+        const normalizedPlan = plan === 'standard' || plan === 'normal' ? 'normal' : 'pro'
+        const businessPlan = plan === 'business' ? 1 : 0
+        const result = db.prepare('UPDATE users SET plan=?,business_plan=? WHERE id=?').run(normalizedPlan, businessPlan, Number(planRoute[1]))
         if (!result.changes) return sendJson(res, 404, { error: 'That account was not found.' })
-        return sendJson(res, 200, { ok: true, plan })
+        return sendJson(res, 200, { ok: true, plan: normalizedPlan, businessPlan: Boolean(businessPlan) })
       }
       return sendJson(res, 404, { error: 'Admin endpoint not found.' })
     }
     if (route === '/api/me/profile' && method === 'PUT') {
-      const { displayName, avatar } = await readBody(req, 2 * 1024 * 1024)
+      const { displayName, avatar, accountType = 'student' } = await readBody(req, 2 * 1024 * 1024)
       const cleanName = String(displayName ?? '').trim()
       if (!cleanName || cleanName.length > 60) return sendJson(res, 400, { error: 'Choose a display name from 1 to 60 characters.' })
+      if (!['student','teacher','business','employee'].includes(accountType)) return sendJson(res, 400, { error: 'Choose a valid account type.' })
       if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
-      db.prepare('UPDATE users SET display_name=?,avatar_data=? WHERE id=?').run(cleanName, avatar || null, user.id)
-      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan FROM users WHERE id=?').get(user.id)
+      db.prepare('UPDATE users SET display_name=?,avatar_data=?,account_type=? WHERE id=?').run(cleanName, avatar || null, accountType, user.id)
+      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType FROM users WHERE id=?').get(user.id)
       return sendJson(res, 200, { user: { ...updated, isAdmin: adminUsernames.has(String(updated.username).toLowerCase()) } })
     }
     if (route === '/api/me/password' && method === 'POST') {
@@ -565,7 +611,7 @@ async function handler(req, res) {
       return sendJson(res, 201, { id: Number(result.lastInsertRowid), name: cleanName })
     }
     if (route === '/api/boards' && method === 'GET') {
-      const rows = db.prepare('SELECT DISTINCT b.* FROM boards b LEFT JOIN board_access a ON a.board_id=b.id LEFT JOIN team_board_access tba ON tba.board_id=b.id LEFT JOIN team_members tm ON tm.team_id=tba.team_id WHERE b.owner_id=? OR a.user_id=? OR tm.user_id=? ORDER BY b.updated_at DESC').all(user.id, user.id, user.id)
+      const rows = db.prepare("SELECT DISTINCT b.* FROM boards b LEFT JOIN board_access a ON a.board_id=b.id LEFT JOIN team_board_access tba ON tba.board_id=b.id LEFT JOIN team_members tm ON tm.team_id=tba.team_id WHERE b.owner_id=? OR a.user_id=? OR tm.user_id=? OR EXISTS(SELECT 1 FROM teacher_students ts JOIN users teacher ON teacher.id=ts.teacher_id WHERE ts.teacher_id=? AND ts.student_id=b.owner_id AND ts.status='accepted' AND teacher.account_type='teacher') ORDER BY b.updated_at DESC").all(user.id, user.id, user.id, user.id)
       return sendJson(res, 200, { boards: rows.map((row) => {
         const permission = boardRole(row.id, user.id)
         return { ...shapeBoard(row), role: permission?.role, canDownload: permission?.canDownload ?? false }
@@ -575,6 +621,7 @@ async function handler(req, res) {
       const { name, folderId, state } = await readBody(req)
       const cleanName = String(name ?? '').trim().slice(0, 120)
       if (!cleanName || !state || typeof state !== 'object') return sendJson(res, 400, { error: 'Board name and board data are required.' })
+      if (boardNameConflict(user.id, cleanName)) return sendJson(res, 409, { error: 'A file with this name already exists. Choose a different name.' })
       const ownedBoardCount = db.prepare('SELECT COUNT(*) AS count FROM boards WHERE owner_id=?').get(user.id).count
       if (user.plan !== 'pro' && ownedBoardCount >= 1) return sendJson(res, 403, { error: 'Normal accounts can keep one cloud board for collaboration. Your other boards remain saved locally.' })
       if (folderId && !db.prepare('SELECT id FROM folders WHERE id=? AND owner_id=?').get(folderId, user.id)) return sendJson(res, 400, { error: 'That folder does not exist.' })
@@ -606,8 +653,11 @@ async function handler(req, res) {
         if (permission.role === 'view') return sendJson(res, 403, { error: 'This board is read-only for your account.' })
         const { name, folderId, state } = await readBody(req)
         if (!state || typeof state !== 'object') return sendJson(res, 400, { error: 'Board data is required.' })
+        const cleanName = String(name ?? permission.board.name).trim().slice(0, 120)
+        if (!cleanName) return sendJson(res, 400, { error: 'Board name is required.' })
+        if (boardNameConflict(permission.board.owner_id, cleanName, id)) return sendJson(res, 409, { error: 'A file with this name already exists. Choose a different name.' })
         if (folderId && !db.prepare('SELECT id FROM folders WHERE id=? AND owner_id=?').get(folderId, permission.board.owner_id)) return sendJson(res, 400, { error: 'That folder does not exist for this board owner.' })
-        db.prepare('UPDATE boards SET name=?,folder_id=?,state_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(String(name ?? permission.board.name).slice(0, 120), folderId || null, encryptAtRest(JSON.stringify(state)), id)
+        db.prepare('UPDATE boards SET name=?,folder_id=?,state_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(cleanName, folderId || null, encryptAtRest(JSON.stringify(state)), id)
         notifyBoard(id, 'board-updated')
         return sendJson(res, 200, { board: shapeBoard(db.prepare('SELECT * FROM boards WHERE id=?').get(id)) })
       }

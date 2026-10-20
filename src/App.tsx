@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent, type CSSProperties, type FormEvent } from 'react'
 import './App.css'
 import './WorkspacePolish.css'
 import notesPng from './assets/notes.png'
@@ -13,25 +13,27 @@ import ProjectStudio from './ProjectsPage'
 import RoadmapsPage from './RoadmapsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
-import { AdminPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
+import { AdminPage, ContactPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
+import './ResponsiveLayout.css'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
 type IconName = 'brush' | 'pencil' | 'pen' | 'marker' | 'highlighter' | 'hand' | 'select' | 'shape' | 'text' | 'line' | 'eraser' | 'image' | 'graph' | 'settings' | 'undo' | 'redo' | 'delete' | 'duplicate' | 'layer' | 'addPage' | 'portrait' | 'landscape' | 'zoomIn' | 'zoomOut' | 'next' | 'previous' | 'notes' | 'study' | 'lesson' | 'worksheet' | 'diagram' | 'share' | 'cloud' | 'sun' | 'moon' | 'close' | 'menu' | 'pdf' | 'chevronDown'
-type AudienceRole = 'student' | 'teacher'
+type AudienceRole = 'student' | 'teacher' | 'business'
+type AccountType = 'student' | 'teacher' | 'business' | 'employee'
 type ColorTheme = 'purple' | 'white-purple'
 type ShapeKind = 'Rectangle' | 'Ellipse' | 'Triangle' | 'Diamond' | 'Arrow'
 type RulerUnit = 'mm' | 'cm' | 'in'
 type PageSize = 'Infinite' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
-type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart' | 'Mood board' | 'Coding notes'
+type PageTemplate = 'Blank' | 'Lined notes' | 'Graph paper' | 'Cornell notes' | 'Weekly planner' | 'Lesson plan' | 'Worksheet' | 'Class diagram' | 'Exit ticket' | 'Rubric' | 'Seating chart' | 'Mood board' | 'Coding notes' | 'Meeting notes' | 'Project brief' | 'SWOT analysis' | 'Weekly update'
 type SectionTitle = { id: string; title: string; page: number }
 type LayerName = 'writing' | 'text' | 'images'
 type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
-type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; isAdmin?: boolean }
+type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; businessPlan?: boolean; accountType?: AccountType; isAdmin?: boolean }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
-type CloudBoard = { id: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; canDownload?: boolean; ownerName?: string }
+type CloudBoard = { id: number; ownerId?: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; canDownload?: boolean; ownerName?: string }
 type CloudComment = { id: number; username: string; body: string; createdAt: string }
 type LibraryItem = { id: string; name: string; strokes: Stroke[] }
 type Point = { x: number; y: number }
@@ -139,6 +141,25 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
       const x = 14 + column * gapX, y = 40 + row * gapY
       lines.push(line(x, y, x + gapX - 7, y, accent, 48, 0.8), line(x, y, x, y + gapY - 8, accent, 48, 0.8), line(x + gapX - 7, y, x + gapX - 7, y + gapY - 8, accent, 48, 0.8), line(x, y + gapY - 8, x + gapX - 7, y + gapY - 8, accent, 48, 0.8))
     }
+  } else if (template === 'Meeting notes') {
+    lines.push(text('MEETING NOTES', 14, 10, 3.7), text('DATE / TIME', 14, 27, 2.2), line(45, 33, widthMm * 0.52, 33), text('ATTENDEES', widthMm * 0.56, 27, 2.2), line(widthMm * 0.76, 33, widthMm - 14, 33), line(14, 40, widthMm - 14, 40, accent, 55, 0.9))
+    const sections = [['AGENDA', 48], ['DISCUSSION NOTES', 82], ['DECISIONS', 150], ['ACTION ITEMS · OWNER · DUE DATE', 204]] as const
+    for (const [label, y] of sections) { if (y < heightMm - 16) { lines.push(text(label, 14, y, 2.4)); for (let row = 0; row < 2 && y + 12 + row * 11 < heightMm - 10; row++) lines.push(line(14, y + 10 + row * 11, widthMm - 14, y + 10 + row * 11, soft, 39, 0.65)) } }
+  } else if (template === 'Project brief') {
+    lines.push(text('PROJECT BRIEF', 14, 10, 3.7), text('GOAL', 14, 29, 2.4), line(14, 37, widthMm - 14, 37, accent, 47, 0.8), text('SCOPE & DELIVERABLES', 14, 49, 2.4), text('MILESTONES', 14, 95, 2.4), text('PEOPLE & RESOURCES', 14, 139, 2.4), text('RISKS / OPEN QUESTIONS', 14, 181, 2.4))
+    for (let y = 57; y < heightMm - 15; y += 11) lines.push(line(14, y, widthMm - 14, y, soft, 38, 0.65))
+  } else if (template === 'SWOT analysis') {
+    const gap = 8, left = 14, top = 30, boxW = (widthMm - 28 - gap) / 2, boxH = Math.min(78, (heightMm - 48 - gap) / 2)
+    lines.push(text('SWOT ANALYSIS', 14, 10, 3.7))
+    ;[['STRENGTHS', left, top], ['WEAKNESSES', left + boxW + gap, top], ['OPPORTUNITIES', left, top + boxH + gap], ['THREATS', left + boxW + gap, top + boxH + gap]].forEach(([label, x, y]) => {
+      const px = Number(x), py = Number(y)
+      lines.push(text(String(label), px + 4, py + 4, 2.3), line(px, py, px + boxW, py, accent, 54), line(px + boxW, py, px + boxW, py + boxH, accent, 45), line(px + boxW, py + boxH, px, py + boxH, accent, 45), line(px, py + boxH, px, py, accent, 45))
+      for (let row = 0; row < 3; row++) lines.push(line(px + 4, py + 17 + row * 13, px + boxW - 4, py + 17 + row * 13, soft, 38, 0.65))
+    })
+  } else if (template === 'Weekly update') {
+    lines.push(text('WEEKLY TEAM UPDATE', 14, 10, 3.7), text('WEEK OF', 14, 28, 2.2), line(39, 34, widthMm - 14, 34, soft, 44, 0.8))
+    const sections = ['WINS & PROGRESS', 'CURRENT PRIORITIES', 'BLOCKERS / SUPPORT NEEDED', 'NEXT WEEK']
+    sections.forEach((label, index) => { const y = 47 + index * Math.max(38, (heightMm - 68) / 4); lines.push(text(label, 14, y, 2.4), line(14, y + 13, widthMm - 14, y + 13, soft, 38, 0.65), line(14, y + 25, widthMm - 14, y + 25, soft, 38, 0.65)) })
   } else if (template === 'Mood board') {
     const portrait = heightMm >= widthMm
     const columns = portrait ? 2 : 3
@@ -220,6 +241,35 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data
 }
 
+type ClassroomLink = { userId: number; username: string; permission: 'view' | 'edit'; status: 'pending' | 'accepted' | 'declined' }
+function ClassroomAccessPanel({ accountType }: { accountType: AccountType }) {
+  const [links, setLinks] = useState<ClassroomLink[]>([])
+  const [username, setUsername] = useState('')
+  const [permission, setPermission] = useState<'view' | 'edit'>('view')
+  const [message, setMessage] = useState('')
+  const refresh = async () => {
+    try { const result = await apiRequest<{ links: ClassroomLink[] }>('/api/classroom/links'); setLinks(result.links); setMessage('') }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Could not load classroom access.') }
+  }
+  useEffect(() => { void refresh() }, [accountType])
+  const invite = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    try {
+      await apiRequest('/api/classroom/links', { method: 'POST', body: JSON.stringify({ username, permission }) })
+      setUsername(''); setMessage('Invitation sent. The student must accept before you can see their cloud notes.'); await refresh()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not send invitation.') }
+  }
+  const respond = async (link: ClassroomLink, status: 'accepted' | 'declined') => {
+    try { await apiRequest(`/api/classroom/links/${link.userId}`, { method: 'PATCH', body: JSON.stringify({ status }) }); await refresh() }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Could not update this invitation.') }
+  }
+  const remove = async (link: ClassroomLink) => {
+    try { await apiRequest(`/api/classroom/links/${link.userId}`, { method: 'DELETE' }); await refresh() }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Could not remove classroom access.') }
+  }
+  return <section className="classroom-access-panel"><h3>{accountType === 'teacher' ? 'Student accounts' : 'Teacher access'}</h3>{accountType === 'teacher' ? <><p>Invite a student by username. Accepted students let you access their cloud-saved notes with the permission you choose.</p><form onSubmit={(event) => { void invite(event) }}><label className="dialog-label">Student username<input required value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter their username" /></label><label className="dialog-label">Access<select value={permission} onChange={(event) => setPermission(event.target.value as 'view' | 'edit')}><option value="view">Observe · view notes</option><option value="edit">Can edit notes</option></select></label><button className="dialog-create full-button">Send invitation</button></form></> : <p>Teachers can only access your cloud-saved notes after you accept an invitation. You can remove access at any time.</p>}{links.length > 0 && <div className="classroom-link-list">{links.map((link) => <article key={link.userId}><span><strong>@{link.username}</strong><small>{link.status === 'accepted' ? `${link.permission === 'edit' ? 'Can edit' : 'Can view'} · ${accountType === 'teacher' ? 'Student' : 'Teacher'}` : `Invitation ${link.status}`}</small></span>{accountType === 'student' && link.status === 'pending' ? <span><button type="button" onClick={() => void respond(link, 'accepted')}>Accept</button><button type="button" onClick={() => void respond(link, 'declined')}>Decline</button></span> : <button type="button" onClick={() => void remove(link)}>{link.status === 'pending' ? 'Cancel' : 'Remove'}</button>}</article>)}</div>}{message && <p className="cloud-message" role="status">{message}</p>}</section>
+}
+
 function isEncryptedBoardState(state: BoardState | EncryptedBoardState): state is EncryptedBoardState {
   return 'encrypted' in state && state.encrypted === 'doomnotes-aes-gcm' && state.version === 1
 }
@@ -277,7 +327,16 @@ function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
   const abD = cross(a, b, d)
   const cdA = cross(c, d, a)
   const cdB = cross(c, d, b)
-  return abC * abD <= 0 && cdA * cdB <= 0
+  const epsilon = 1e-7
+  const onSegment = (start: Point, point: Point, end: Point) =>
+    point.x >= Math.min(start.x, end.x) - epsilon && point.x <= Math.max(start.x, end.x) + epsilon &&
+    point.y >= Math.min(start.y, end.y) - epsilon && point.y <= Math.max(start.y, end.y) + epsilon
+  if (((abC > epsilon && abD < -epsilon) || (abC < -epsilon && abD > epsilon)) &&
+      ((cdA > epsilon && cdB < -epsilon) || (cdA < -epsilon && cdB > epsilon))) return true
+  return (Math.abs(abC) <= epsilon && onSegment(a, c, b)) ||
+    (Math.abs(abD) <= epsilon && onSegment(a, d, b)) ||
+    (Math.abs(cdA) <= epsilon && onSegment(c, a, d)) ||
+    (Math.abs(cdB) <= epsilon && onSegment(c, b, d))
 }
 
 function shapeGeometry(kind: ShapeKind, first: Point, last: Point, cornerRadius = 0) {
@@ -640,6 +699,7 @@ const toolIcons: Record<Tool, IconName> = { Brush: 'brush', Pencil: 'pencil', Pe
 const roleTemplates: Record<AudienceRole, PageTemplate[]> = {
   student: ['Blank', 'Lined notes', 'Cornell notes', 'Graph paper', 'Weekly planner', 'Coding notes', 'Mood board'],
   teacher: ['Blank', 'Lesson plan', 'Worksheet', 'Class diagram', 'Exit ticket', 'Rubric', 'Seating chart', 'Weekly planner', 'Lined notes', 'Graph paper', 'Coding notes', 'Mood board'],
+  business: ['Blank', 'Meeting notes', 'Project brief', 'SWOT analysis', 'Weekly update', 'Weekly planner', 'Mood board'],
 }
 const roleStarters: Record<AudienceRole, { title: string; description: string; fileName: string; template: PageTemplate; icon: IconName }[]> = {
   student: [
@@ -661,6 +721,14 @@ const roleStarters: Record<AudienceRole, { title: string; description: string; f
     { title: 'Lesson outline', description: 'Map objectives, materials, and lesson flow.', fileName: 'Lesson outline', template: 'Lesson plan', icon: 'lesson' },
     { title: 'Mood board', description: 'Collect visual references for a class project.', fileName: 'Class mood board', template: 'Mood board', icon: 'image' },
     { title: 'Code walkthrough', description: 'Pair sample code with teaching notes and tests.', fileName: 'Code walkthrough', template: 'Coding notes', icon: 'diagram' },
+  ],
+  business: [
+    { title: 'Meeting notes', description: 'Capture agenda items, decisions, and action owners.', fileName: 'Meeting notes', template: 'Meeting notes', icon: 'notes' },
+    { title: 'Project brief', description: 'Set out goals, scope, milestones, and risks.', fileName: 'Project brief', template: 'Project brief', icon: 'duplicate' },
+    { title: 'SWOT analysis', description: 'Map strengths, weaknesses, opportunities, and threats.', fileName: 'SWOT analysis', template: 'SWOT analysis', icon: 'diagram' },
+    { title: 'Weekly team update', description: 'Share progress, priorities, and blockers.', fileName: 'Weekly update', template: 'Weekly update', icon: 'lesson' },
+    { title: 'Team planner', description: 'Organize work and key dates for the week.', fileName: 'Team planner', template: 'Weekly planner', icon: 'worksheet' },
+    { title: 'Business mood board', description: 'Gather visual references for a product or campaign.', fileName: 'Business mood board', template: 'Mood board', icon: 'image' },
   ],
 }
 
@@ -733,7 +801,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
   return 'home'
 }
 
@@ -914,7 +982,7 @@ function App() {
   const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -934,7 +1002,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -959,7 +1027,11 @@ function App() {
     const mode = new URLSearchParams(window.location.search).get('simulator')
     return mode === 'cpp' || mode === 'python' || mode === 'java' || mode === 'web' ? mode : null
   })
-  const [landingAudience, setLandingAudience] = useState<AudienceRole>('student')
+  const [accountType, setAccountType] = useState<AccountType>(() => {
+    const saved = localStorage.getItem('ozoo:account-type')
+    return saved === 'teacher' || saved === 'business' || saved === 'employee' ? saved : 'student'
+  })
+  const [landingAudience, setLandingAudience] = useState<AudienceRole>(() => localStorage.getItem('ozoo:account-type') === 'teacher' ? 'teacher' : ['business','employee'].includes(localStorage.getItem('ozoo:account-type') ?? '') ? 'business' : 'student')
   const [landingPageSize, setLandingPageSize] = useState<PageSize>('A4')
   const [landingTemplate, setLandingTemplate] = useState<PageTemplate>('Cornell notes')
   const [activeColor, setActiveColor] = useState(penColors[0])
@@ -1011,6 +1083,7 @@ function App() {
   const [folderName, setFolderName] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [cloudBoardIds, setCloudBoardIds] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem('doomnotes:cloud-board-ids') ?? '{}') as Record<string, number>)
+  const cloudBoardOriginalNames = useRef<Record<string, string>>({})
   const [accountOpen, setAccountOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(() => new URLSearchParams(window.location.search).get('page') === 'profile')
   const [profileDisplayName, setProfileDisplayName] = useState('')
@@ -1072,6 +1145,7 @@ function App() {
   const [erasePreviewIndices, setErasePreviewIndices] = useState<number[]>([])
   const [textEditor, setTextEditor] = useState<{ point: Point; value: string } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [presentationMode, setPresentationMode] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   const [findOpen, setFindOpen] = useState(false)
@@ -1081,6 +1155,10 @@ function App() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [renameError, setRenameError] = useState('')
+  const [fileSettingsTarget, setFileSettingsTarget] = useState<string | null>(null)
+  const [fileSettingsNotebook, setFileSettingsNotebook] = useState('Inbox')
+  const [fileSettingsTags, setFileSettingsTags] = useState('')
+  const [fileSettingsFavorite, setFileSettingsFavorite] = useState(false)
   const [timerMinutes, setTimerMinutes] = useState(25)
   const [timerSeconds, setTimerSeconds] = useState(25 * 60)
   const [timerRunning, setTimerRunning] = useState(false)
@@ -1101,7 +1179,8 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [addPageMenuOpen, setAddPageMenuOpen] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
-  const [autoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveError, setAutoSaveError] = useState('')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
   const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
@@ -1114,6 +1193,11 @@ function App() {
     window.addEventListener('ozoo:open-shortcuts', openShortcuts)
     return () => window.removeEventListener('ozoo:open-shortcuts', openShortcuts)
   }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && presentationMode) setPresentationMode(false) }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [presentationMode])
   useEffect(() => {
     if (!timerRunning) return
     const interval = window.setInterval(() => setTimerSeconds((seconds) => {
@@ -1399,7 +1483,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!inkTools.includes(activeTool)) setShowSettingsPanel(false)
+    if (!inkTools.includes(activeTool) && activeTool !== 'Eraser') setShowSettingsPanel(false)
   }, [activeTool])
 
   useEffect(() => {
@@ -1444,7 +1528,8 @@ function App() {
       const [{ boards: remote }, { folders: remoteFolders }] = await Promise.all([apiRequest<{ boards: CloudBoard[] }>('/api/boards'), apiRequest<{ folders: { id: number; name: string }[] }>('/api/folders')])
       setCloudBoards(remote)
       setCloudFolders(remoteFolders)
-      const ids = Object.fromEntries(remote.map((item) => [item.name, item.id]))
+      const ids = Object.fromEntries(remote.map((item) => [item.ownerId && item.ownerId !== cloudUser?.id ? `${item.ownerName || 'Student'} — ${item.name}` : item.name, item.id]))
+      cloudBoardOriginalNames.current = Object.fromEntries(remote.filter((item) => item.ownerId && item.ownerId !== cloudUser?.id).map((item) => [`${item.ownerName || 'Student'} — ${item.name}`, item.name]))
       setCloudBoardIds(ids)
       localStorage.setItem('doomnotes:cloud-board-ids', JSON.stringify(ids))
     } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not load cloud boards.') }
@@ -1464,12 +1549,13 @@ function App() {
   useEffect(() => {
     if (sitePage === 'admin' && authStatus === 'signed-in') void refreshAdminOverview()
   }, [sitePage, authStatus])
-  const updateAdminPlan = async (id: number, plan: 'normal' | 'pro') => {
+  const updateAdminPlan = async (id: number, plan: 'normal' | 'pro' | 'business') => {
     try {
-      await apiRequest(`/api/admin/users/${id}/plan`, { method: 'PATCH', body: JSON.stringify({ plan }) })
-      const previousPlan = adminUsers.find((user) => user.id === id)?.plan
-      setAdminUsers((users) => users.map((user) => user.id === id ? { ...user, plan } : user))
-      if (previousPlan !== plan) setAdminTotals((totals) => ({ ...totals, proUsers: totals.proUsers + (plan === 'pro' ? 1 : -1) }))
+      const updated = await apiRequest<{ plan: 'normal' | 'pro'; businessPlan: boolean }>(`/api/admin/users/${id}/plan`, { method: 'PATCH', body: JSON.stringify({ plan: plan === 'normal' ? 'standard' : plan === 'pro' ? 'class_plus' : 'business' }) })
+      const previousPremium = adminUsers.find((user) => user.id === id)?.plan === 'pro'
+      setAdminUsers((users) => users.map((user) => user.id === id ? { ...user, plan: updated.plan, businessPlan: updated.businessPlan } : user))
+      const nextPremium = updated.plan === 'pro'
+      if (previousPremium !== nextPremium) setAdminTotals((totals) => ({ ...totals, proUsers: totals.proUsers + (nextPremium ? 1 : -1) }))
     } catch (error) { setAdminError(error instanceof Error ? error.message : 'Could not update this plan.') }
   }
 
@@ -1543,7 +1629,7 @@ function App() {
       if (passphrase && passphrase.length < 12) throw new Error('Use an encryption passphrase with at least 12 characters.')
       const savedState = encryptionKey ? await encryptBoardState(state, encryptionKey) : state
       const result = existingId
-        ? await apiRequest<{ board: CloudBoard }>(`/api/boards/${existingId}`, { method: 'PUT', body: JSON.stringify({ name: currentBoard.name, folderId: selectedFolderId, state: savedState }) })
+        ? await apiRequest<{ board: CloudBoard }>(`/api/boards/${existingId}`, { method: 'PUT', body: JSON.stringify({ name: cloudBoardOriginalNames.current[currentBoard.name] ?? currentBoard.name, folderId: selectedFolderId, state: savedState }) })
         : await apiRequest<{ board: CloudBoard }>('/api/boards', { method: 'POST', body: JSON.stringify({ name: currentBoard.name, folderId: selectedFolderId, state: savedState }) })
       const nextIds = { ...cloudBoardIds, [currentBoard.name]: result.board.id }
       if (encryptionKey) cloudKeys.current[result.board.id] = encryptionKey
@@ -1567,7 +1653,8 @@ function App() {
       try { state = await decryptBoardState(remote.state, passphrase); cloudKeys.current[remote.id] = passphrase }
       catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not unlock this board.'); return }
     } else state = remote.state
-    setBoards((current) => [...current, { name: remote.name, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground, hiddenLayers: state.hiddenLayers ?? [] }])
+    const displayName = remote.ownerId && remote.ownerId !== cloudUser?.id ? `${remote.ownerName || 'Student'} — ${remote.name}` : remote.name
+    setBoards((current) => [...current, { name: displayName, pages: state.pages, pageSize: state.pageSize ?? 'A4', infinite: state.infinite ?? false, orientation: state.orientation, pageOrientations: state.pageOrientations, pageBackground: state.pageBackground, hiddenLayers: state.hiddenLayers ?? [] }])
     setActiveBoard(newIndex)
     setPage(1)
     setIndexView(false)
@@ -1579,7 +1666,8 @@ function App() {
     setGridEnabled(state.gridEnabled ?? false)
     setShowScale(state.showScale ?? false)
     setStrokesByPage((current) => ({ ...current, ...Object.fromEntries(state.pageStrokes.map((items, index) => [`${newIndex}:${index + 1}`, items])) }))
-    const ids = { ...cloudBoardIds, [remote.name]: remote.id }
+    if (displayName !== remote.name) cloudBoardOriginalNames.current[displayName] = remote.name
+    const ids = { ...cloudBoardIds, [displayName]: remote.id }
     setCloudBoardIds(ids)
     localStorage.setItem('doomnotes:cloud-board-ids', JSON.stringify(ids))
     setSelectedFolderId(remote.folderId)
@@ -1727,14 +1815,18 @@ function App() {
   }
 
   const openProfileEditor = () => {
-    if (!cloudUser) return
-    setProfileDisplayName(cloudUser.displayName || cloudUser.username)
-    setProfileAvatar(cloudUser.avatar ?? null)
+    setProfileDisplayName(cloudUser?.displayName || cloudUser?.username || '')
+    setProfileAvatar(cloudUser?.avatar ?? null)
     setProfileCurrentPassword('')
     setProfileNewPassword('')
     setCloudMessage('')
     profileMenuRef.current?.removeAttribute('open')
     setProfileOpen(true)
+  }
+
+  const closeProfileEditor = () => {
+    setProfileOpen(false)
+    if (sitePage === 'profile') navigatePage('dashboard')
   }
 
   const chooseProfilePhoto = async (file?: File) => {
@@ -1760,12 +1852,28 @@ function App() {
 
   const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    localStorage.setItem('ozoo:account-type', accountType)
     try {
-      const { user } = await apiRequest<{ user: CloudUser }>('/api/me/profile', { method: 'PUT', body: JSON.stringify({ displayName: profileDisplayName, avatar: profileAvatar }) })
-      setCloudUser(user)
+      if (cloudUser) {
+        const { user } = await apiRequest<{ user: CloudUser }>('/api/me/profile', { method: 'PUT', body: JSON.stringify({ displayName: profileDisplayName, avatar: profileAvatar, accountType }) })
+        setCloudUser(user)
+      }
       setCloudMessage('Profile updated.')
     } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not update your profile.') }
   }
+
+  useEffect(() => {
+    if (!cloudUser?.accountType) return
+    setAccountType(cloudUser.accountType)
+    setLandingAudience(cloudUser.accountType === 'teacher' ? 'teacher' : cloudUser.accountType === 'business' || cloudUser.accountType === 'employee' ? 'business' : 'student')
+    localStorage.setItem('ozoo:account-type', cloudUser.accountType)
+  }, [cloudUser?.id, cloudUser?.accountType])
+
+  useEffect(() => {
+    localStorage.setItem('ozoo:account-type', accountType)
+    setLandingAudience(accountType === 'teacher' ? 'teacher' : accountType === 'business' || accountType === 'employee' ? 'business' : 'student')
+    setLandingTemplate(accountType === 'teacher' ? 'Lesson plan' : accountType === 'business' || accountType === 'employee' ? 'Meeting notes' : 'Cornell notes')
+  }, [accountType])
 
   const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1812,6 +1920,65 @@ function App() {
   }, [strokes, orientation, pageSize, selectedIndices, erasePreviewIndices, eraserHover, activeTool, infinitePage, cameraOffset.x, cameraOffset.y, selectionBox, hiddenLayers])
 
   useEffect(() => { strokesByPageRef.current = strokesByPage }, [strokesByPage])
+  useEffect(() => {
+    if (!boards.length) return
+    setAutoSaveStatus('saving')
+    setAutoSaveError('')
+    const persist = () => {
+      try {
+        const names = [...new Set(boards.map((board) => board.name).filter(Boolean))]
+        const snapshots = boards.map((board, boardIndex) => {
+          const existing = (() => { try { return JSON.parse(localStorage.getItem(`doomnotes:${board.name}`) ?? '{}') as Record<string, unknown> } catch { return {} } })()
+          const pageStrokes = Array.from({ length: board.pages }, (_, pageIndex) => strokesByPage[`${boardIndex}:${pageIndex + 1}`] ?? [])
+          const saved = {
+            ...existing,
+            name: board.name,
+            pages: board.pages,
+            pageSize: board.pageSize,
+            infinite: board.infinite,
+            orientation: board.orientation,
+            pageOrientations: board.pageOrientations,
+            pageBackground: boardIndex === activeBoard ? pageBackground : board.pageBackground,
+            notebook: board.notebook ?? 'Inbox',
+            tags: board.tags ?? [],
+            titles: board.titles ?? [],
+            hiddenLayers: board.hiddenLayers ?? [],
+            gridEnabled: boardIndex === activeBoard ? gridEnabled : Boolean(existing.gridEnabled),
+            showScale: boardIndex === activeBoard ? showScale : Boolean(existing.showScale),
+            pageStrokes,
+            savedAt: new Date().toISOString(),
+          }
+          return { name: board.name, value: JSON.stringify(saved) }
+        })
+        const workspaceSnapshot = JSON.stringify({ names, activeBoard, page: Math.max(1, page), savedAt: new Date().toISOString() })
+        const prioritizedSnapshots = [...snapshots].sort((a, b) => Number(b.name === boards[activeBoard]?.name) - Number(a.name === boards[activeBoard]?.name))
+        prioritizedSnapshots.forEach(({ name, value }) => localStorage.setItem(`doomnotes:${name}`, value))
+        localStorage.setItem(openWorkspaceStorageKey, workspaceSnapshot)
+        setRecentFiles((current) => [...new Set([...names, ...current])])
+        setAutoSaveStatus('saved')
+        setAutoSaveError('')
+      } catch (error) {
+        setAutoSaveStatus('error')
+        const quotaExceeded = error instanceof DOMException && (error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014)
+        setAutoSaveError(quotaExceeded
+          ? 'Browser storage is full. Export a backup, then remove large images or unused files before continuing.'
+          : error instanceof Error ? error.message : 'The browser could not write this note to local storage.')
+      }
+    }
+    const timer = window.setTimeout(persist, 650)
+    const flushPendingSave = () => {
+      window.clearTimeout(timer)
+      persist()
+    }
+    const flushWhenHidden = () => { if (document.visibilityState === 'hidden') flushPendingSave() }
+    window.addEventListener('pagehide', flushPendingSave)
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', flushPendingSave)
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+    }
+  }, [boards, strokesByPage, activeBoard, page, pageBackground, gridEnabled, showScale])
 
   useEffect(() => { setSelectedIndices([]); refreshHistoryState(pageKey) }, [pageKey])
   useEffect(() => { const active = boards[activeBoard]; if (active) setOrientation(active.pageOrientations?.[page - 1] ?? active.orientation ?? 'portrait') }, [activeBoard, page, boards])
@@ -1945,11 +2112,17 @@ function App() {
     return () => window.removeEventListener('paste', handlePaste)
   }, [pageKey])
 
-  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
+  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement> | ReactMouseEvent<HTMLCanvasElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - bounds.left) / bounds.width + (infinitePage ? cameraOffset.x : 0), y: (event.clientY - bounds.top) / bounds.height + (infinitePage ? cameraOffset.y : 0) }
   }
   const eraserCanTarget = (stroke: Stroke, index: number) => !hiddenLayers.includes(strokeLayer(stroke)) && (!selectedIndices.length || selectedIndices.includes(index))
+  const openTextEditorAt = (point: Point) => {
+    if (!canEditActiveBoard) return
+    lastTextPoint.current = point
+    cancelTextRef.current = false
+    setTextEditor({ point, value: '' })
+  }
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!canEditActiveBoard && activeTool !== 'Hand' && activeTool !== 'Select') return
     setDrawingToolsOpen(false)
@@ -1963,9 +2136,7 @@ function App() {
       return
     }
     if (!hardwareEraser && activeTool === 'Text') {
-      lastTextPoint.current = point
-      cancelTextRef.current = false
-      setTextEditor({ point, value: '' })
+      openTextEditorAt(point)
       return
     }
     if (!hardwareEraser && activeTool === 'Select') {
@@ -2128,7 +2299,7 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
   const startScreenRecording = async () => {
-    if (!isProUser) { window.alert('Screen recording is included in Fun Plan.'); return }
+    if (!isProUser) { window.alert('Screen recording is included in Class Plus.'); return }
     setScreenRecordingError('')
     if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
       setScreenRecordingError('Screen recording is not supported in this browser. Try the latest version of Chrome or Edge.')
@@ -2205,7 +2376,7 @@ function App() {
     }
   }
   const startVoiceRecording = async () => {
-    if (!isProUser) { window.alert('Voice recording is included in Fun Plan.'); return }
+    if (!isProUser) { window.alert('Voice recording is included in Class Plus.'); return }
     setVoiceRecordingError('')
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setVoiceRecordingError('Voice recording is not supported in this browser. Try the latest version of Chrome or Edge.')
@@ -2478,7 +2649,7 @@ function App() {
       }
       const documentData = JSON.parse(await file.text()) as { format?: string; version?: number; name?: string; pages?: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; gridEnabled?: boolean; showScale?: boolean; titles?: SectionTitle[]; hiddenLayers?: LayerName[]; pageStrokes?: Stroke[][] }
       if (documentData.format !== 'doomnotes' || documentData.version !== 1 || typeof documentData.name !== 'string' || !Number.isInteger(documentData.pages) || (documentData.pages ?? 0) < 1 || !Array.isArray(documentData.pageStrokes) || documentData.pageStrokes.length !== documentData.pages) throw new Error('That file is not a valid OzooNotes document.')
-      if (!isProUser && !(documentData.infinite ?? documentData.pageSize === 'Infinite') && countSavedDocuments() >= normalDocumentLimit) throw new Error(`The Normal plan includes up to ${normalDocumentLimit} note documents.`)
+      if (!isProUser && !(documentData.infinite ?? documentData.pageSize === 'Infinite') && countSavedDocuments() >= normalDocumentLimit) throw new Error(`Standard includes up to ${normalDocumentLimit} note documents.`)
       if (documentData.pageSize !== undefined && !['Infinite', 'A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'].includes(documentData.pageSize)) throw new Error('That OzooNotes file uses an unsupported page size.')
       const boardIndex = boards.length
       const importedSize = documentData.pageSize ?? 'A4'
@@ -2772,7 +2943,7 @@ function App() {
       if (saved?.date === today && saved.counts) usage = saved
     } catch { /* Start a fresh daily allowance when browser data cannot be read. */ }
     if ((usage.counts[tool] ?? 0) >= normalSimulationsPerToolPerDay) {
-      window.alert(`The Normal plan includes ${normalSimulationsPerToolPerDay} ${tool} simulator launches per day. Fun Plan removes this limit.`)
+      window.alert(`Standard includes ${normalSimulationsPerToolPerDay} ${tool} simulator launches per day. Class Plus removes this limit.`)
       return false
     }
     usage.counts[tool] = (usage.counts[tool] ?? 0) + 1
@@ -2829,7 +3000,7 @@ function App() {
   const addBoard = (name?: string, template?: PageTemplate, size: PageSize = 'A4') => {
     const savedDocuments = countSavedDocuments()
     if (!isProUser && size !== 'Infinite' && savedDocuments >= normalDocumentLimit) {
-      window.alert(`The Normal plan includes up to ${normalDocumentLimit} note documents. Your files remain available locally; upgrade access is managed separately.`)
+      window.alert(`Standard includes up to ${normalDocumentLimit} note documents. Your files remain available locally; plan access is managed separately.`)
       return
     }
     setDraftName(name ?? `File ${nextFileNumber}`)
@@ -2876,6 +3047,15 @@ function App() {
       setRecentFiles((current) => [...current])
     } catch { setSaveNotice('Could not save notebook or tags') }
   }
+  const openFileSettings = (name: string) => {
+    let meta: { notebook?: string; tags?: string[] } = {}
+    try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') }
+    catch { /* Keep settings usable if optional organization metadata is malformed. */ }
+    setFileSettingsTarget(name)
+    setFileSettingsNotebook(meta.notebook ?? 'Inbox')
+    setFileSettingsTags((meta.tags ?? []).filter((tag) => tag.toLowerCase().replace(/^#/, '') !== 'favorite').join(', '))
+    setFileSettingsFavorite((meta.tags ?? []).some((tag) => tag.toLowerCase().replace(/^#/, '') === 'favorite'))
+  }
   const createNotebook = () => {
     const name = newNotebookName.trim()
     if (!name) return
@@ -2883,16 +3063,32 @@ function App() {
     setNewNotebookName('')
   }
   const addScratchItem = () => { const text = scratchText.trim(); if (!text) return; setScratchItems((items) => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, done: false }, ...items]); setScratchText('') }
+  const isBoardNameTaken = (candidate: string, exceptName?: string) => {
+    const normalized = normalizeBoardName(candidate)
+    if (!normalized) return false
+    const isExcepted = (name: string) => exceptName !== undefined && normalizeBoardName(name) === normalizeBoardName(exceptName)
+    if (boards.some((board) => !isExcepted(board.name) && normalizeBoardName(board.name) === normalized)) return true
+    if (recentFiles.some((name) => !isExcepted(name) && normalizeBoardName(name) === normalized)) return true
+    if (cloudBoards.some((board) => !isExcepted(board.name) && normalizeBoardName(board.name) === normalized)) return true
+    try {
+      const prefix = 'doomnotes:'
+      return Object.keys(localStorage).some((key) => {
+        if (!key.startsWith(prefix) || key === 'doomnotes:cloud-board-ids') return false
+        const storedName = key.slice(prefix.length)
+        return !isExcepted(storedName) && normalizeBoardName(storedName) === normalized
+      })
+    } catch { return false }
+  }
   const createBoard = () => {
     const isInfinite = draftSize === 'Infinite'
     const name = draftName.trim() || `File ${nextFileNumber}`
     const savedDocuments = countSavedDocuments()
     if (!isProUser && !isInfinite && savedDocuments >= normalDocumentLimit) {
-      window.alert(`The Normal plan includes up to ${normalDocumentLimit} note documents. Fun Plan is not available for purchase yet.`)
+      window.alert(`Standard includes up to ${normalDocumentLimit} note documents. Class Plus billing is not available yet.`)
       setShowNewFileDialog(false)
       return
     }
-    if (boards.some((board) => normalizeBoardName(board.name) === normalizeBoardName(name)) || recentFiles.some((file) => normalizeBoardName(file) === normalizeBoardName(name)) || localStorage.getItem(`doomnotes:${name}`) !== null) {
+    if (isBoardNameTaken(name)) {
       setDraftNameError('A file with this name already exists. Choose a different name.')
       return
     }
@@ -2925,7 +3121,7 @@ function App() {
     if (!renameTarget) return
     const nextName = renameDraft.trim()
     if (!nextName) { setRenameError('Enter a file name.'); return }
-    if (boards.some((board) => board.name !== renameTarget && normalizeBoardName(board.name) === normalizeBoardName(nextName)) || recentFiles.some((name) => name !== renameTarget && normalizeBoardName(name) === normalizeBoardName(nextName)) || (localStorage.getItem(`doomnotes:${nextName}`) !== null && normalizeBoardName(nextName) !== normalizeBoardName(renameTarget))) {
+    if (isBoardNameTaken(nextName, renameTarget)) {
       setRenameError('A file with this name already exists. Choose another name.')
       return
     }
@@ -3000,6 +3196,15 @@ function App() {
       setActiveBoard(activeBoard - 1)
     }
   }
+  const removeSavedFile = (name: string) => {
+    if (!window.confirm(`Remove “${name}” from saved files on this device?`)) return
+    const openIndex = boards.findIndex((board) => board.name === name)
+    if (openIndex >= 0) closeBoard(openIndex)
+    try { localStorage.removeItem(`doomnotes:${name}`) }
+    catch { setSaveNotice('Could not remove the saved file from this browser'); return }
+    setRecentFiles((current) => current.filter((file) => file !== name))
+    setFileSettingsTarget(null)
+  }
   const addPage = (newOrientation: 'portrait' | 'landscape') => {
     const updated = boards.map((board, index) => {
       if (index !== activeBoard) return board
@@ -3013,6 +3218,7 @@ function App() {
   }
 
   const newFileDialog = showNewFileDialog && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewFileDialog(false) }}><section className="new-file-dialog" role="dialog" aria-modal="true" aria-labelledby="new-file-title"><button className="dialog-close" aria-label="Close new file settings" onClick={() => setShowNewFileDialog(false)}><Icon name="close" size={16} /></button><p className="eyebrow">NEW BOARD</p><h2 id="new-file-title">Set up your page</h2><label className="dialog-label">File name<input value={draftName} aria-invalid={Boolean(draftNameError)} aria-describedby={draftNameError ? "draft-name-error" : undefined} onChange={(event) => { setDraftName(event.target.value); setDraftNameError("") }} placeholder={`File ${nextFileNumber}`} /></label>{draftNameError && <p className="field-error" id="draft-name-error" role="alert">{draftNameError}</p>}<fieldset className="page-size-picker"><legend>Page size</legend><div className="page-size-options">{(['A1', 'A2', 'A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Infinite'] as PageSize[]).map((size) => <button type="button" key={size} aria-pressed={draftSize === size} className={`page-size-option ${draftSize === size ? 'chosen' : ''} ${size === 'Infinite' ? 'infinite-choice' : ''}`} onClick={() => setDraftSize(size)}>{size === 'Infinite' ? '∞ Infinite' : size}</button>)}</div></fieldset><label className="dialog-label">Starter template<select value={draftTemplate} onChange={(event) => setDraftTemplate(event.target.value as PageTemplate)}><option>Blank</option><option>Lined notes</option><option>Graph paper</option><option>Cornell notes</option><option>Weekly planner</option>{isProUser && <><option>Lesson plan</option><option>Worksheet</option><option>Class diagram</option><option>Exit ticket</option><option>Rubric</option><option>Seating chart</option><option>Mood board</option><option>Coding notes</option></>}</select></label>{draftTemplate !== 'Blank' && <p className="template-note">The layout is made from editable objects on the first page.</p>}{draftSize !== 'Infinite' ? <><label className="dialog-label">Orientation<select value={draftOrientation} onChange={(event) => setDraftOrientation(event.target.value as 'portrait' | 'landscape')}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><fieldset className="page-size-picker"><legend>Page background</legend><div className="dialog-colors">{pageColors.map((color) => <button type="button" key={color} aria-label={pageBackgroundLabel(color)} aria-pressed={draftBackground === color} className={`settings-swatch ${draftBackground === color ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setDraftBackground(color)} />)}<label className="custom-color"><span>Custom</span><input type="color" value={resolvePageBackground(draftBackground, dark, colorTheme)} aria-label="Custom page background" onChange={(event) => setDraftBackground(event.target.value)} /></label></div></fieldset></> : <p className="infinite-note">A large, scrollable board that matches the current theme. PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setShowNewFileDialog(false)}>Cancel</button><button className="dialog-create" onClick={createBoard}>Create board</button></footer></section></div>
+  const fileSettingsDialog = fileSettingsTarget && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFileSettingsTarget(null) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-file-settings-title"><button className="dialog-close" aria-label="Close file settings" onClick={() => setFileSettingsTarget(null)}><Icon name="close" size={16} /></button><p className="eyebrow">SAVED FILE</p><h2 id="saved-file-settings-title">File settings</h2><p className="file-settings-current-name">{fileSettingsTarget}</p><div className="file-settings-actions"><button type="button" className="dialog-create" onClick={() => { const name = fileSettingsTarget; setFileSettingsTarget(null); openRenameDialog(name) }}>Rename file</button><button type="button" className="file-settings-remove" onClick={() => removeSavedFile(fileSettingsTarget)}>Remove saved file</button></div><label className="dialog-label">Notebook<select value={fileSettingsNotebook} onChange={(event) => setFileSettingsNotebook(event.target.value)}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label className="dialog-label">Tags<input value={fileSettingsTags} onChange={(event) => setFileSettingsTags(event.target.value)} placeholder="ideas, article, #active…" /><small>Separate tags with commas.</small></label><label className="file-settings-favorite"><input type="checkbox" checked={fileSettingsFavorite} onChange={(event) => setFileSettingsFavorite(event.target.checked)} /> Add to Favorites</label><footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setFileSettingsTarget(null)}>Cancel</button><button type="button" className="dialog-create" onClick={() => { saveFileOrganization(fileSettingsTarget, fileSettingsNotebook, [fileSettingsTags, fileSettingsFavorite ? 'favorite' : ''].filter(Boolean).join(', ')); setFileSettingsTarget(null) }}>Save settings</button></footer><p className="file-settings-footnote">This saved copy is stored in this browser. Removing it does not delete a cloud copy.</p></section></div>
   const renameDialog = renameTarget && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenameTarget(null) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-file-title"><button className="dialog-close" aria-label="Close rename dialog" onClick={() => setRenameTarget(null)}><Icon name="close" size={16} /></button><p className="eyebrow">FILE OPTIONS</p><h2 id="rename-file-title">Rename file</h2><form onSubmit={renameBoard}><label className="dialog-label">File name<input autoFocus required maxLength={120} value={renameDraft} onChange={(event) => { setRenameDraft(event.target.value); setRenameError('') }} /></label>{renameError && <p className="field-error" role="alert">{renameError}</p>}<footer className="dialog-actions"><button type="button" className="dialog-cancel" onClick={() => setRenameTarget(null)}>Cancel</button><button className="dialog-create">Save name</button></footer></form></section></div>
   const titleDialog = titleDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTitleDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="section-title-heading"><button className="dialog-close" aria-label="Close section titles" onClick={() => setTitleDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">PAGE {page} SECTION</p><h2 id="section-title-heading">Add a section title</h2><p className="infinite-note">Titles appear in a separate contents page before your notes. They never take up or renumber a document page.</p><form onSubmit={(event) => { event.preventDefault(); addSectionTitle() }}><label className="dialog-label">Title for page {page}<input autoFocus maxLength={100} value={sectionTitleDraft} onChange={(event) => setSectionTitleDraft(event.target.value)} placeholder="e.g. Research links" /></label><button className="dialog-create full-button" disabled={!sectionTitleDraft.trim()}>Add title</button></form>{(boards[activeBoard].titles?.length ?? 0) > 0 && <><h3 className="small-heading">Titles in this board</h3><ul className="section-title-list">{boards[activeBoard].titles?.map((item) => <li key={item.id}><span>{item.title}<small>Page {item.page}</small></span><button type="button" aria-label={`Remove ${item.title}`} onClick={() => removeSectionTitle(item.id)}>Remove</button></li>)}</ul></>}</section></div>
   const exportDialog = exportDialogOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportDialogOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title"><button className="dialog-close" aria-label="Close export options" onClick={() => setExportDialogOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">CUSTOM EXPORT</p><h2 id="export-dialog-title">Choose pages to export</h2><label className="dialog-label">Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'pdf' | 'png' | 'svg')}><option value="pdf">PDF document</option><option value="png">PNG images</option><option value="svg">SVG images</option></select></label><label className="dialog-label">Page numbers<input value={exportPageSelection} onChange={(event) => setExportPageSelection(event.target.value)} placeholder="1, 3-5" /><small>Use commas and ranges, for example: 1, 3-5</small></label>{(boards[activeBoard].titles?.length ?? 0) > 1 && <label className="encryption-choice"><input type="checkbox" checked={exportIncludeIndex} onChange={(event) => setExportIncludeIndex(event.target.checked)} /><span><strong>Include contents index</strong><small>Add the title index before the selected note pages.</small></span></label>}{exportFormat !== 'pdf' && <p className="infinite-note">Each selected page downloads as its own {exportFormat.toUpperCase()} file.</p>}{infinitePage && exportFormat === 'pdf' && <p className="field-error">PDF export is unavailable for infinite boards.</p>}<footer className="dialog-actions"><button className="dialog-cancel" onClick={() => setExportDialogOpen(false)}>Cancel</button><button className="dialog-create" disabled={infinitePage && exportFormat === 'pdf'} onClick={() => void exportSelectedPages()}>Export</button></footer></section></div>
@@ -3076,7 +3282,7 @@ function App() {
     <footer className="dialog-actions"><button className="dialog-create" onClick={() => setShortcutsOpen(false)}>Done</button></footer>
   </section></div>
 
-  const profileDialog = profileOpen && cloudUser && <div className="new-file-overlay profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) navigatePage('dashboard') }}><section className="new-file-dialog compact-dialog profile-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button className="dialog-close" aria-label="Close profile settings" onClick={() => navigatePage('dashboard')}><Icon name="close" size={16} /></button><p className="eyebrow">YOUR ACCOUNT</p><h2 id="profile-editor-title">Edit profile</h2><form onSubmit={(event) => { void saveProfile(event) }}><div className="profile-photo-row">{profileAvatar ? <img className="profile-photo-preview" src={profileAvatar} alt="Profile preview" /> : <span className="profile-photo-preview profile-photo-fallback">{(profileDisplayName || cloudUser.username).slice(0, 1).toUpperCase()}</span>}<div><label className="dialog-create profile-upload">Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseProfilePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} /></label><button className="text-button profile-remove-photo" type="button" disabled={!profileAvatar} onClick={() => setProfileAvatar(null)}>Remove photo</button><small>PNG, JPEG, or WebP. Resized to 512 × 512.</small></div></div><label className="dialog-label">Display name<input required maxLength={60} value={profileDisplayName} onChange={(event) => setProfileDisplayName(event.target.value)} /></label><label className="dialog-label">Username<input value={cloudUser.username} disabled /><small>This stays your sign-in and sharing name.</small></label><button className="dialog-create full-button">Save profile</button></form><div className="profile-password-section"><h3>Change password</h3>{cloudUser.hasPassword ? <form onSubmit={(event) => { void changePassword(event) }}><label className="dialog-label">Current password<input required type="password" autoComplete="current-password" value={profileCurrentPassword} onChange={(event) => setProfileCurrentPassword(event.target.value)} /></label><label className="dialog-label">New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={profileNewPassword} onChange={(event) => setProfileNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="dialog-create full-button">Update password</button></form> : <p className="empty-hint">This account signs in with Google or GitHub. Change its password with that provider.</p>}</div>{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
+  const profileDialog = profileOpen && <div className="new-file-overlay profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProfileEditor() }}><section className="new-file-dialog compact-dialog profile-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button type="button" className="dialog-close" aria-label="Close profile settings" onClick={closeProfileEditor}><Icon name="close" size={16} /></button><p className="eyebrow">YOUR ACCOUNT</p><h2 id="profile-editor-title">Edit profile</h2><form onSubmit={(event) => { void saveProfile(event) }}><label className="dialog-label">I am a<select value={accountType} onChange={(event) => setAccountType(event.target.value as AccountType)}><option value="student">Student</option><option value="teacher">Teacher</option><option value="business">Business</option><option value="employee">Employee</option></select><small>Your choice is saved to this browser and your account when signed in.</small></label>{cloudUser && <><div className="profile-photo-row">{profileAvatar ? <img className="profile-photo-preview" src={profileAvatar} alt="Profile preview" /> : <span className="profile-photo-preview profile-photo-fallback">{(profileDisplayName || cloudUser.username).slice(0, 1).toUpperCase()}</span>}<div><label className="dialog-create profile-upload">Upload photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseProfilePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} /></label><button className="text-button profile-remove-photo" type="button" disabled={!profileAvatar} onClick={() => setProfileAvatar(null)}>Remove photo</button><small>PNG, JPEG, or WebP. Resized to 512 × 512.</small></div></div><label className="dialog-label">Display name<input required maxLength={60} value={profileDisplayName} onChange={(event) => setProfileDisplayName(event.target.value)} /></label><label className="dialog-label">Username<input value={cloudUser.username} disabled /><small>This stays your sign-in and sharing name.</small></label></>}<button className="dialog-create full-button">Save profile</button></form>{cloudUser && <>{(accountType === 'student' || accountType === 'teacher') && <ClassroomAccessPanel key={`${cloudUser.id}-${accountType}`} accountType={accountType} />}<div className="profile-password-section"><h3>Change password</h3>{cloudUser.hasPassword ? <form onSubmit={(event) => { void changePassword(event) }}><label className="dialog-label">Current password<input required type="password" autoComplete="current-password" value={profileCurrentPassword} onChange={(event) => setProfileCurrentPassword(event.target.value)} /></label><label className="dialog-label">New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={profileNewPassword} onChange={(event) => setProfileNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="dialog-create full-button">Update password</button></form> : <p className="empty-hint">This account signs in with Google or GitHub. Change its password with that provider.</p>}</div></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
   const accountDialog = accountOpen && <div className="new-file-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false) }}><section className="new-file-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="dialog-close" aria-label="Close account" onClick={() => setAccountOpen(false)}><Icon name="close" size={16} /></button><p className="eyebrow">OZOONOTES ACCOUNT</p><h2 id="account-title">{cloudUser ? `Hello, ${cloudUser.username}` : authMode === 'register' ? 'Create your account' : 'Sign in to OzooNotes'}</h2>{cloudUser ? <><p className="infinite-note">Your boards are saved on the OzooNotes server you run.</p><form className="share-form folder-form" onSubmit={(event) => { void createCloudFolder(event) }}><label className="dialog-label">New folder<input required value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="Folder name" /></label><button className="dialog-create">Create folder</button></form><label className="dialog-label">Save boards in<select value={selectedFolderId ?? ''} onChange={(event) => setSelectedFolderId(Number(event.target.value) || null)}><option value="">No folder</option>{cloudFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><button className="dialog-create full-button" onClick={() => { void logout() }}>Sign out</button></> : <><form onSubmit={(event) => { void submitAccount(event) }}>{authMode === 'register' && <label className="dialog-label">Email address<input required type="email" maxLength={254} autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>}<label className="dialog-label">{authMode === 'register' ? 'Username' : 'Email or username'}<input required minLength={authMode === 'register' ? 3 : 1} maxLength={authMode === 'register' ? 32 : 254} autoComplete={authMode === 'register' ? 'username' : 'username'} value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} placeholder={authMode === 'register' ? 'Choose a username' : 'you@example.com'} /></label><label className="dialog-label">Password<input required minLength={authMode === 'register' ? 12 : 1} maxLength={256} type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 12 characters' : ''} /></label>{authMode === 'register' && <p className="auth-account-note">Your email is used for sign-in. Email verification and password recovery are not enabled yet.</p>}<button className="dialog-create full-button">{authMode === 'register' ? 'Create account' : 'Sign in'}</button><button className="text-button" type="button" onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setCloudMessage('') }}>{authMode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></form></>}{cloudMessage && <p className="cloud-message" role="status">{cloudMessage}</p>}</section></div>
 
@@ -3217,6 +3423,7 @@ function App() {
   if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
   if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
@@ -3249,26 +3456,27 @@ function App() {
                     {cloudUser.avatar ? <img className="profile-avatar profile-avatar-large profile-avatar-photo" src={cloudUser.avatar} alt="" /> : <span className="profile-avatar profile-avatar-large" aria-hidden="true">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase() || 'O'}</span>}
                     <span className="profile-identity"><small>Signed in to OzooNotes</small><strong>{cloudUser.displayName || cloudUser.username}</strong><small>@{cloudUser.username}</small><span className="profile-status"><i /> Account active</span></span>
                   </div>
+                  <div className="profile-plan-card"><span>Current plan</span><strong className={cloudUser.businessPlan ? 'profile-plan-pro' : 'profile-plan-normal'}>{cloudUser.businessPlan ? 'Business' : cloudUser.plan === 'pro' ? 'Class Plus' : 'Standard'}</strong><small>{cloudUser.businessPlan ? 'Business access is enabled for this account.' : cloudUser.plan === 'pro' ? 'Class Plus access is enabled for this account.' : 'Free workspace plan'}</small></div>
                   <div className="profile-stat-grid">
                     <div className="profile-stat"><strong>{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).length}</strong><span>Device files</span></div>
                     <div className="profile-stat"><strong>{cloudBoards.length}</strong><span>Cloud boards</span></div>
                   </div>
                   <div className="profile-data-list">
-                    <div className="profile-data-row"><span>Workspace</span><strong>{landingAudience === 'student' ? 'Student' : 'Teacher'}</strong></div>
+                    <div className="profile-data-row"><span>Account type</span><strong>{accountType[0].toUpperCase() + accountType.slice(1)}</strong></div>
                     <div className="profile-data-row"><span>Theme</span><strong>{colorThemes.find((theme) => theme.id === colorTheme)?.name ?? 'Custom'}</strong></div>
-                    {landingAudience === 'student' && studentProfileSummary && <div className="profile-study-summary"><span>Study profile</span><strong>{studentProfileSummary.field === 'Other' ? (studentProfileSummary.otherField || 'Other') : (studentProfileSummary.field || 'Student')}</strong><small>{studentProfileSummary.stage === 'Other' ? (studentProfileSummary.otherStage || 'Study level not set') : (studentProfileSummary.stage || 'Study level not set')}{studentProfileSummary.degree ? ` · ${studentProfileSummary.degree}` : ''}</small></div>}
+                    {accountType === 'student' && studentProfileSummary && <div className="profile-study-summary"><span>Study profile</span><strong>{studentProfileSummary.field === 'Other' ? (studentProfileSummary.otherField || 'Other') : (studentProfileSummary.field || 'Student')}</strong><small>{studentProfileSummary.stage === 'Other' ? (studentProfileSummary.otherStage || 'Study level not set') : (studentProfileSummary.stage || 'Study level not set')}{studentProfileSummary.degree ? ` · ${studentProfileSummary.degree}` : ''}</small></div>}
                   </div>
                   <div className="profile-menu-actions">
                     <button type="button" className="profile-edit-action" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); openProfileEditor(); navigatePage('profile') }}><Icon name="settings" size={15} /> Edit profile</button>
                     {cloudUser.isAdmin && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); navigatePage('admin') }}><Icon name="settings" size={15} /> Admin dashboard</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="notes" size={15} /> My files</button>
-                    {landingAudience === 'student' && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="study" size={15} /> Study space</button>}
+                    {accountType === 'student' && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="study" size={15} /> Study space</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setProjectsPageOpen(true) }}><Icon name="duplicate" size={15} /> Projects</button>
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setAccountOpen(true) }}><Icon name="cloud" size={15} /> Account & storage</button>
                     <button type="button" className="profile-signout" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); void logout() }}><Icon name="close" size={15} /> Sign out</button>
                   </div>
                 </div>
-              </details> : <button className="account-button" onClick={() => navigatePage('signin')}><Icon name="cloud" size={16} /> Sign in</button>)}
+              </details> : <><button className="account-button" onClick={openProfileEditor}><Icon name="settings" size={16} /> Profile</button><button className="account-button" onClick={() => navigatePage('signin')}><Icon name="cloud" size={16} /> Sign in</button></>)}
               <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             </div>
           </header>
@@ -3290,7 +3498,6 @@ function App() {
                   <div className="landing-value-point"><strong>Saved on your device</strong><span>Export a copy when you need one.</span></div>
                 </div>
                 <div className="landing-quick-setup" aria-label="Board setup options">
-                  <label htmlFor="landing-audience"><span>Make this for</span><select id="landing-audience" value={landingAudience} onChange={(event) => { const role = event.target.value as AudienceRole; setLandingAudience(role); setLandingTemplate(role === 'student' ? 'Cornell notes' : 'Lesson plan') }}><option value="student">Student</option><option value="teacher">Teacher</option></select></label>
                   <label htmlFor="landing-page-size"><span>Paper size</span><select id="landing-page-size" value={landingPageSize} onChange={(event) => setLandingPageSize(event.target.value as PageSize)}>{pageSizes.map((size) => <option key={size} value={size}>{size === 'Infinite' ? '∞ Infinite' : size}</option>)}</select></label>
                   <label htmlFor="landing-template"><span>Starter template</span><select id="landing-template" value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value as PageTemplate)}>{roleTemplates[landingAudience].map((template) => <option key={template} value={template}>{template}</option>)}</select></label>
                 </div>
@@ -3308,12 +3515,12 @@ function App() {
               </div>
             </section>
             <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
-              <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : 'TEACHER STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
-              <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : 'Teacher board starters'}>
+              <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : landingAudience === 'teacher' ? 'TEACHER STARTERS' : 'BUSINESS STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
+              <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : landingAudience === 'teacher' ? 'Teacher board starters' : 'Business board starters'}>
                 {roleStarters[landingAudience].map((starter) => <button key={starter.title} type="button" className="starter-card" onClick={() => addBoard(starter.fileName, starter.template, landingPageSize)}><span className="starter-icon">{starter.icon === 'notes' ? <ThemeIcon source={notesPng} size={21} /> : <Icon name={starter.icon} size={21} />}</span><span className="starter-card-copy"><strong>{starter.title}</strong><small>{starter.description}</small></span><Icon name="next" size={17} /></button>)}
               </div>
             </section>
-            {landingAudience === 'student' && <StudentSpace />}
+            {accountType === 'student' && <StudentSpace />}
             <section className="landing-tools" id="landing-tools">
               <div className="landing-section-heading"><span>MAKE IT YOURS</span><h2>Simple tools. Room to explore.</h2></div>
               <div className="landing-feature-grid">
@@ -3353,13 +3560,15 @@ function App() {
               </div>
               <form className="notebook-create" onSubmit={(event) => { event.preventDefault(); createNotebook() }}><input aria-label="New notebook name" placeholder="Create a notebook…" value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} /><button className="landing-new-small" type="submit">＋ Add notebook</button><small>Notebooks group related files; add several tags separated by commas.</small></form>
               
-              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-rename" onClick={() => openRenameDialog(name)}>Rename file</button><div className="library-file-meta"><label>Notebook<select aria-label={`Notebook for ${name}`} value={meta.notebook ?? 'Inbox'} onChange={(event) => saveFileOrganization(name, event.target.value, (meta.tags ?? []).join(', '))}><option value="Inbox">Inbox</option>{notebooks.map((book) => <option key={book}>{book}</option>)}</select></label><label>Tags<input aria-label={`Tags for ${name}`} defaultValue={(meta.tags ?? []).join(', ')} placeholder="ideas, article, #active…" onBlur={(event) => saveFileOrganization(name, meta.notebook ?? 'Inbox', event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
-              {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.name}<small>{board.ownerName ? `Shared by ${board.ownerName}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
+              {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const noteText = ((meta as { pageStrokes?: { text?: string }[][] }).pageStrokes ?? []).flat().map((stroke) => stroke.text ?? '').join(' '); const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')} ${noteText}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-settings" onClick={() => openFileSettings(name)}><Icon name="settings" size={15} /> File settings</button>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
+              {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.ownerId && board.ownerId !== cloudUser.id ? `${board.ownerName || 'Student'} — ${board.name}` : board.name}<small>{board.ownerId && board.ownerId !== cloudUser.id ? `Student note · ${board.role === 'edit' ? 'edit access' : 'view access'}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
 <footer className="landing-footer">
             <div className="landing-brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div>
             <span>Don’t Doomscroll, just OzooNotes</span>
             <div className="landing-footer-socials">
+              <a className="landing-footer-contact" href="/?page=contact" onClick={(event) => { event.preventDefault(); navigatePage('contact') }}>Contact</a>
+              <a className="landing-footer-feedback" href="https://github.com/AMStudios6/ozoonotes/issues/new" target="_blank" rel="noreferrer">Feedback</a>
               <a className="landing-footer-instagram" href="https://www.instagram.com/ozoonotes/" target="_blank" rel="noreferrer" aria-label="OzooNotes on Instagram" title="OzooNotes on Instagram">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="17.5" cy="6.5" r="1.25" fill="currentColor" /></svg>
               </a>
@@ -3370,6 +3579,7 @@ function App() {
         </section>
         {newFileDialog}
         {renameDialog}
+        {fileSettingsDialog}
         {quickStartDialog}
       {shortcutsDialog}
         {shortcutsDialog}
@@ -3380,12 +3590,13 @@ function App() {
   }
 
   return (
-    <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
+    <main className={`app ${dark ? 'dark' : 'light'} ${presentationMode ? 'presentation-mode' : ''}`} data-theme={colorTheme}>
       <div className="window">
         <header className="window-top">
           <nav className="file-tabs" aria-label="Whiteboard files">
             {boards.map((board, index) => <div key={board.name} className={`file-tab ${index === activeBoard ? 'selected' : ''}`}>
               <button className="tab-open" title="Double-click to rename" onClick={() => activateBoard(index)} onDoubleClick={() => openRenameDialog(board.name)}>{board.name}</button>
+              <button className="tab-rename" aria-label={`Rename ${board.name}`} title={`Rename ${board.name}`} onClick={(event) => { event.stopPropagation(); openRenameDialog(board.name) }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.9L19 8.3a2.1 2.1 0 0 0-3-3L5.2 16.1 4 20Z" /></svg></button>
               <button className="tab-close" aria-label={`Close ${board.name}`} title={`Close ${board.name}`} onClick={() => closeBoard(index)}><Icon name="close" size={13} /></button>
             </div>)}
             <button className="add-file" onClick={() => addBoard()} aria-label="Create new file"><Icon name="addPage" size={18} /></button>
@@ -3403,7 +3614,7 @@ function App() {
               <div className="more-feature-section theme-feature"><span className="more-feature-label">APPEARANCE</span><label className="theme-toggle theme-picker"><span>Color theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>{!localOnly && <button className="account-button feature-account" onClick={() => setAccountOpen(true)}><Icon name="cloud" size={16} /> {cloudUser ? cloudUser.username : 'Sign in'}</button>}</div>
               <div className="more-feature-section screen-recording-section"><span className="more-feature-label">SCREEN RECORDING</span><p className="screen-recording-hint">Capture a screen, window, or tab. The video downloads to your device as a WebM file.</p>{screenRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${screenRecordingState}`} /><strong>{screenRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(screenRecordingSeconds / 60)).padStart(2, '0')}:{String(screenRecordingSeconds % 60).padStart(2, '0')}</time></div>}{screenRecordingError && <p className="screen-recording-error" role="alert">{screenRecordingError}</p>}<div className="screen-recording-actions">{screenRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startScreenRecording() }}><span className="recording-button-dot" /> Record screen</button> : <><button onClick={toggleScreenRecordingPause}>{screenRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopScreenRecording}>Stop & save</button></>}</div></div>
 <div className="more-feature-section voice-recording-section"><span className="more-feature-label">VOICE RECORDING</span><p className="screen-recording-hint">Record spoken notes from your microphone. The audio downloads to your device.</p>{voiceRecordingState !== 'idle' && <div className="screen-recording-status"><span className={`recording-indicator ${voiceRecordingState}`} /><strong>{voiceRecordingState === 'paused' ? 'Paused' : 'Recording'}</strong><time>{String(Math.floor(voiceRecordingSeconds / 60)).padStart(2, '0')}:{String(voiceRecordingSeconds % 60).padStart(2, '0')}</time></div>}{voiceRecordingError && <p className="screen-recording-error" role="alert">{voiceRecordingError}</p>}<div className="screen-recording-actions">{voiceRecordingState === 'idle' ? <button className="recording-start" onClick={() => { void startVoiceRecording() }}><span className="recording-button-dot" /> Record voice</button> : <><button onClick={toggleVoiceRecordingPause}>{voiceRecordingState === 'paused' ? 'Resume' : 'Pause'}</button><button className="recording-stop" onClick={stopVoiceRecording}>Stop & save</button></>}</div></div>
-              <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (!isProUser) { window.alert('The focus timer is included in Fun Plan.'); return }; if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
+              <div className="more-feature-section timer-section"><span className="more-feature-label">FOCUS TIMER</span><div className="timer-readout" aria-live="polite">{String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:{String(timerSeconds % 60).padStart(2, '0')}</div><label className="timer-duration">Minutes<input type="number" min={1} max={240} value={timerMinutes} disabled={timerRunning} onChange={(event) => { const value = Math.max(1, Math.min(240, Number(event.target.value) || 1)); setTimerMinutes(value); setTimerSeconds(value * 60) }} /></label><div className="timer-actions"><button onClick={() => { if (!isProUser) { window.alert('The focus timer is included in Class Plus.'); return }; if (timerSeconds <= 0) setTimerSeconds(timerMinutes * 60); setTimerRunning((running) => !running) }}>{timerRunning ? 'Pause' : timerSeconds === 0 ? 'Start again' : 'Start'}</button><button onClick={() => { setTimerRunning(false); setTimerSeconds(timerMinutes * 60) }}>Reset</button></div></div>
             </section>}
           </div>
         </header>
@@ -3428,7 +3639,7 @@ function App() {
                 <section className="board-menu-group" aria-label="Collaboration">
                   <p className="menu-title">Collaboration</p>
                   <button onClick={() => { setMenuOpen(false); void openShareManager() }}><Icon name="share" size={17} /> <span>Live collaboration…</span></button>
-                  <button onClick={() => { setMenuOpen(false); if (!isProUser) { window.alert('Comments are included in Fun Plan.'); return }; if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this note to the cloud first.') } }}><Icon name="notes" size={17} /> <span>Comments…</span></button>
+                  <button onClick={() => { setMenuOpen(false); if (!isProUser) { window.alert('Comments are included in Class Plus.'); return }; if (!cloudUser) setAccountOpen(true); else { setCommentOpen(true); const id = cloudBoardIds[boards[activeBoard].name]; if (id) void loadComments(id).catch((error) => setCloudMessage(error.message)); else setCloudMessage('Save this note to the cloud first.') } }}><Icon name="notes" size={17} /> <span>Comments…</span></button>
                   <details className="board-menu-expand"><summary>Team tools</summary><button onClick={() => { setMenuOpen(false); if (!cloudUser) setAccountOpen(true); else { setTeamOpen(true); void apiRequest<{ teams: { id: number; name: string }[] }>('/api/teams').then(({ teams: result }) => setTeams(result)).catch((error) => setCloudMessage(error.message)) } }}><Icon name="diagram" size={17} /> <span>Manage teams…</span></button></details>
                 </section>
               </>}
@@ -3440,6 +3651,7 @@ function App() {
                 <button onClick={() => { setMenuOpen(false); openTitleDialog() }}><Icon name="notes" size={17} /> <span>Add a page title</span></button>
                 <label className="menu-option"><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /> Show grid</label>
                 <label className="menu-option"><input type="checkbox" disabled={infinitePage} checked={showScale && !infinitePage} onChange={(event) => setShowScale(event.target.checked)} /> Show page scale</label>
+                <button onClick={() => { setPresentationMode((active) => !active); setMenuOpen(false) }}><Icon name="next" size={17} /> <span>Presentation mode</span><kbd>Esc to exit</kbd></button>
                 {showScale && !infinitePage && <label className="menu-option ruler-unit-option">Ruler units<select value={rulerUnit} onChange={(event) => setRulerUnit(event.target.value as RulerUnit)}><option value="mm">Millimeters (mm)</option><option value="cm">Centimeters (cm)</option><option value="in">Inches (in)</option></select></label>}
                 <button disabled={!canEditActiveBoard || !strokes.length} onClick={() => { if (!window.confirm('Clear everything on this page? You can undo this action.')) return; editCurrentPage(() => []); setSelectedIndices([]); setMenuOpen(false) }}><Icon name="delete" size={17} /> <span>Clear this page</span></button>
               </section>
@@ -3479,7 +3691,7 @@ function App() {
           <input ref={imageInputRef} className="image-file-input" type="file" accept="image/*" aria-label="Choose an image to import" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImageBlob(file); event.currentTarget.value = '' }} />
           <input ref={documentInputRef} className="image-file-input" type="file" accept=".ozoonotes,.doomnotes,.json,application/json,application/pdf,.pdf" aria-label="Open a OzooNotes or PDF file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openBoardFile(file); event.currentTarget.value = '' }} />
                     {showSettingsPanel && <aside id="drawing-settings" ref={settingsPanelRef} className="stroke-panel" aria-label="Selection and drawing settings">
-            {inkTools.includes(activeTool) && <><div className="settings-group"><label className="settings-heading" htmlFor="drawing-tool-choice">Brush & pen tool</label><select id="drawing-tool-choice" className="drawing-style-select" value={activeTool} onChange={(event) => { const tool = event.target.value as Tool; setActiveTool(tool); lastDrawingTool.current = tool }}><option value="Brush">Brush</option><option value="Pen">Pen</option><option value="Pencil">Pencil</option><option value="Marker">Marker</option><option value="Highlighter">Highlighter</option></select></div><div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div></>}
+            {(inkTools.includes(activeTool) || activeTool === 'Eraser') && <><div className="settings-group"><label className="settings-heading" htmlFor="drawing-tool-choice">Brush & pen tool</label><select id="drawing-tool-choice" className="drawing-style-select" value={activeTool} onChange={(event) => { const tool = event.target.value as Tool; setActiveTool(tool); lastDrawingTool.current = tool }}><option value="Brush">Brush</option><option value="Pen">Pen</option><option value="Pencil">Pencil</option><option value="Marker">Marker</option><option value="Highlighter">Highlighter</option><option value="Eraser">Eraser</option></select></div>{inkTools.includes(activeTool) && <div className="settings-group"><label className="settings-heading" htmlFor="drawing-style">Brush & pen style</label><select id="drawing-style" className="drawing-style-select" value={drawingStyle} onChange={(event) => { const style = event.target.value as DrawingStyle; setDrawingStyle(style); changeSelection({ drawingStyle: style }) }}><option value="solid">Solid</option><option value="handwriting">Handwriting · smooth</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="calligraphy">Calligraphy</option></select></div>}</>}
             {inkTools.includes(activeTool) && <div className="settings-group"><div className="settings-heading">Color</div><div className="selection-colors">{penColors.concat(['#cf78e9','#d99c3d','#188c73','#e43141']).map((color) => <button key={color} type="button" aria-label={`Stroke color ${color}`} aria-pressed={activeColor.toLowerCase() === color.toLowerCase()} className={`selection-color ${activeColor.toLowerCase() === color.toLowerCase() ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); setHexColorDraft(color); changeSelection({ color }) }} />)}</div>{recentStrokeColors.length > 0 && <div className="stroke-recent-colors"><span>Recent custom colors</span>{recentStrokeColors.map((color) => <button key={color} type="button" aria-label={`Recent stroke color ${color}`} title={color} className={`selection-color ${activeColor.toLowerCase() === color.toLowerCase() ? 'chosen' : ''}`} style={{ backgroundColor: color }} onClick={() => { setActiveColor(color); setHexColorDraft(color); changeSelection({ color }) }} />)}</div>}<div className="stroke-hex-controls"><input aria-label="Stroke color hex code" value={hexColorDraft} maxLength={7} spellCheck={false} placeholder="#8b5cf6" onChange={(event) => { const value = event.target.value.startsWith('#') ? event.target.value : `#${event.target.value}`; setHexColorDraft(value); if (/^#[0-9a-f]{6}$/i.test(value)) { setActiveColor(value); changeSelection({ color: value }) } }} onBlur={() => { if (/^#[0-9a-f]{6}$/i.test(hexColorDraft)) setRecentStrokeColors((colors) => [hexColorDraft.toLowerCase(), ...colors.filter((color) => color.toLowerCase() !== hexColorDraft.toLowerCase())].slice(0, 6)); else setHexColorDraft(activeColor) }} /><input type="color" aria-label="Choose a custom stroke color" value={/^#[0-9a-f]{6}$/i.test(hexColorDraft) ? hexColorDraft : activeColor} onChange={(event) => { const color = event.target.value; setHexColorDraft(color); setActiveColor(color); changeSelection({ color }); setRecentStrokeColors((colors) => [color, ...colors.filter((item) => item.toLowerCase() !== color.toLowerCase())].slice(0, 6)) }} /></div></div>}
             {!infinitePage && <div className="settings-group"><div className="settings-heading">Background</div><div className="settings-swatches">{pageColors.map((color) => <button key={color} type="button" aria-label={pageBackgroundLabel(color)} aria-pressed={isBackgroundChoiceSelected(pageBackground, color)} className={`settings-swatch ${isBackgroundChoiceSelected(pageBackground, color) ? 'chosen' : ''}`} style={pageBackgroundSwatchStyle(color)} onClick={() => setActiveBackground(color)} />)}</div></div>}
             <div className="settings-group opacity-group"><label className="settings-heading" htmlFor="stroke-width">Stroke width</label><input id="stroke-width" type="range" min="1" max="16" step="1" value={strokeWidth} onChange={(event) => { const width = Number(event.target.value); setStrokeWidth(width); changeSelection({ width }) }} /><div className="opacity-labels"><span>1</span><span>{strokeWidth}px</span><span>16</span></div><div className="stroke-sizes">{[['S',2],['M',4],['L',7],['XL',12]].map(([name,width]) => <button key={name} className={strokeWidth === width ? 'selected' : ''} onClick={() => { setStrokeWidth(width as number); changeSelection({ width: width as number }) }}>{name}</button>)}</div></div>
@@ -3492,8 +3704,8 @@ function App() {
           <div ref={workspaceRef} className={`workspace ${zoom > 100 ? 'zoomed' : ''} ${infinitePage ? 'infinite-workspace' : ''}`} onWheel={(event) => { if (infinitePage) { event.preventDefault(); setInfiniteCameraByPage((current) => ({ ...current, [cameraKey]: { x: (current[cameraKey]?.x ?? 0) + event.deltaX / (canvasWidth * zoom / 100), y: (current[cameraKey]?.y ?? 0) + event.deltaY / (canvasHeight * zoom / 100) } })) } }}>
             <div className={`paper ${orientation} ${infinitePage ? 'infinite' : ''} ${gridEnabled ? 'grid-enabled' : ''} ${showScale ? 'scale-enabled' : ''}`} style={{ zoom: zoom / 100, ...(infinitePage ? { width: '3600px', aspectRatio: '1 / 1', backgroundPosition: `${-cameraOffset.x * canvasWidth}px ${-cameraOffset.y * canvasHeight}px` } : { backgroundColor: resolvePageBackground(pageBackground, dark, colorTheme), aspectRatio: `${orientedPageMm[0]} / ${orientedPageMm[1]}`, transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }) }} aria-label={infinitePage ? 'Infinite whiteboard' : `${pageSize} ${orientation} page`}>
               {showScale && !infinitePage && <div className="rulers" aria-label={`Ruler in ${rulerUnit}`} aria-hidden="true"><div className="ruler-top">{rulerTicks(orientedPageMm[0], rulerUnit).map((tick, index) => <span key={index} style={{ left: `${tick.position}%` }}>{tick.label}</span>)}</div><div className="ruler-left">{rulerTicks(orientedPageMm[1], rulerUnit).map((tick, index) => <span key={index} style={{ top: `${tick.position}%` }}>{tick.label}</span>)}</div></div>}
-              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here…" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor({ ...textEditor, value: event.target.value })} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) event.currentTarget.blur() }} />}
-              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
+              {textEditor && <textarea className="text-editor" autoFocus aria-label="Text to add to page" placeholder="Type here… (Enter to finish, Shift+Enter for a new line)" title="Press Enter to add text, or Shift+Enter to start a new line" value={textEditor.value} style={{ left: `${(textEditor.point.x - (infinitePage ? cameraOffset.x : 0)) * 100}%`, top: `${(textEditor.point.y - (infinitePage ? cameraOffset.y : 0)) * 100}%`, color: activeColor, fontSize: `${Math.max(8, strokeWidth * pageContentScale(pageSize) * 5)}px` }} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onBlur={() => { if (!cancelTextRef.current) commitText(); cancelTextRef.current = false }} onKeyDown={(event) => { if (event.key === 'Escape') { cancelTextRef.current = true; setTextEditor(null) } else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.blur() } }} />}
+              <canvas ref={canvasRef} className={`drawing-canvas ${activeTool === 'Hand' ? 'hand-cursor' : activeTool === 'Select' ? 'move-cursor' : activeTool === 'Eraser' ? 'erase-cursor' : ''}`} width={canvasWidth} height={canvasHeight} onClick={(event) => { if (activeTool === 'Text' && !textEditor) { setDrawingToolsOpen(false); openTextEditorAt(pointFromEvent(event)) } }} onPointerDown={startStroke} onPointerMove={continueStroke} onPointerUp={finishStroke} onPointerCancel={finishStroke} onPointerLeave={() => { if (!activeStroke.current) { setEraserHover(null); setErasePreviewIndices([]) } }} aria-label="Drawing canvas" />
               {indexView && indexPageCount > 0 && <section className="title-index-page" aria-label={`Contents index page ${indexPage} of ${indexPageCount}`}><div className="title-index-kicker">CONTENTS · {boards[activeBoard].name}</div><h1>Page index</h1><p>Choose a title to jump to that page.</p><ol>{(boards[activeBoard].titles ?? []).slice((indexPage - 1) * 20, indexPage * 20).map((item) => <li key={item.id}><button type="button" onClick={() => { setPage(item.page); setIndexView(false) }}><span>{item.title}</span><i /><b>Page {item.page}</b></button></li>)}</ol><small>Contents page {indexPage} of {indexPageCount} · your notes start on page 1</small></section>}
             </div>
           </div>
@@ -3517,7 +3729,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div className={`tool-status autosave-${autoSaveStatus}`} role="status"><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · use Save' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
+          <div className={`tool-status autosave-${autoSaveStatus}`} role="status" title={autoSaveError || undefined} aria-label={autoSaveError ? `Auto-save error: ${autoSaveError}` : undefined}><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · hover for details' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
         </section>
       </div>
       {newFileDialog}

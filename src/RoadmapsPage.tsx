@@ -70,11 +70,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data
 }
 
-function RoadmapBlockView({ block, index }: { block: RoadmapBlock; index: number }) {
+function RoadmapBlockView({ block, index, done, onToggle }: { block: RoadmapBlock; index: number; done?: boolean; onToggle?: () => void }) {
   if (block.kind === 'map') return <section className="roadmap-map-block"><h3>{block.title || 'Concept map'}</h3><p>Explore the ideas and how they connect. Select an object to read its notes.</p><RoadmapMap block={block} editable={false} /></section>
   if (block.kind === 'image') return <figure className="roadmap-image-block"><img src={block.url} alt={block.title || `Roadmap illustration ${index + 1}`} /><figcaption>{block.title}</figcaption></figure>
   if (block.kind === 'link' || block.kind === 'video') return <a className="roadmap-link-block" href={block.url} target="_blank" rel="noreferrer"><span aria-hidden="true">{block.kind === 'video' ? '▶' : '↗'}</span><span><strong>{block.title || block.url}</strong><small>{block.url}</small></span></a>
-  return <section className={`roadmap-content-block roadmap-block-${block.kind}`}>{block.kind === 'step' && <span className="roadmap-step-number">{index + 1}</span>}<div>{block.title && <h3>{block.title}</h3>}<p>{block.body}</p></div></section>
+  return <section className={`roadmap-content-block roadmap-block-${block.kind} ${done ? 'is-complete' : ''}`}>{block.kind === 'step' && <button type="button" className="roadmap-step-number" aria-label={`${done ? 'Mark incomplete' : 'Mark complete'}: ${block.title || `step ${index + 1}`}`} aria-pressed={done} onClick={onToggle}>{done ? '✓' : index + 1}</button>}<div>{block.title && <h3>{block.title}</h3>}<p>{block.body}</p></div></section>
 }
 
 export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme: string; user: { username: string } | null; onBack: () => void; onSignIn: () => void }) {
@@ -91,6 +91,7 @@ export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme:
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({})
 
   const refresh = async () => {
     setLoading(true)
@@ -109,9 +110,19 @@ export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme:
   const categories = useMemo(() => ['All topics', ...allCategories], [allCategories])
   const openRoadmap = async (id: number) => {
     setError(''); setNotice('')
-    try { const result = await request<{ roadmap: Roadmap }>(`/api/roadmaps/${id}`); setSelected(result.roadmap); setEditing(false); setCreateOpen(false) }
+    try { const result = await request<{ roadmap: Roadmap }>(`/api/roadmaps/${id}`); setSelected(result.roadmap); setEditing(false); setCreateOpen(false); const url = new URL(window.location.href); url.searchParams.set('roadmap', String(id)); window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`); try { setCompletedSteps(JSON.parse(localStorage.getItem(`ozoo:roadmap-progress:${id}`) ?? '{}') as Record<string, boolean>) } catch { setCompletedSteps({}) } }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open that roadmap.') }
   }
+  const copyRoadmapLink = async () => {
+    if (!selected) return
+    const url = new URL(window.location.href); url.searchParams.set('page', 'roadmaps'); url.searchParams.set('roadmap', String(selected.id))
+    try { await navigator.clipboard.writeText(url.toString()); setNotice('Share link copied.') } catch { setNotice(url.toString()) }
+  }
+  const toggleStep = (blockId: string) => {
+    if (!selected) return
+    setCompletedSteps((current) => { const next = { ...current, [blockId]: !current[blockId] }; try { localStorage.setItem(`ozoo:roadmap-progress:${selected.id}`, JSON.stringify(next)) } catch { /* Progress is optional when storage is full. */ } return next })
+  }
+  useEffect(() => { const id = Number(new URLSearchParams(window.location.search).get('roadmap')); if (Number.isInteger(id) && id > 0) void openRoadmap(id) }, [])
   const startCreate = () => {
     if (!user) { onSignIn(); return }
     setSelected(null); setEditing(true); setCreateOpen(true); setError(''); setNotice('')
@@ -162,10 +173,10 @@ export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme:
       <aside className="roadmap-sidebar"><div className="roadmap-sidebar-heading"><span className="roadmap-eyebrow">COMMUNITY LIBRARY</span><h1>Find a path<br />to what’s next.</h1><p>Explore learning plans shared by people using OzooNotes around the world.</p></div><label className="roadmap-search"><span aria-hidden="true">⌕</span><input aria-label="Search roadmaps" placeholder="Search topics, skills, tags…" value={search} onChange={(event) => setSearch(event.target.value)} /><kbd>/</kbd></label><div className="roadmap-filter-heading">TOPICS</div><div className="roadmap-categories">{categories.map((category) => <button type="button" key={category} className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}<span>{category === 'All topics' ? roadmaps.length : roadmaps.filter((roadmap) => roadmap.category === category).length}</span></button>)}</div><div className="roadmap-sidebar-note"><span>✦</span><p>Have a path that helped you learn? Share it so someone else can get started.</p><button onClick={startCreate}>Make a roadmap <b>→</b></button></div></aside>
       <section className="roadmap-main">
         {selected && !editing ? <>
-          <button className="roadmap-small-back" onClick={() => { setSelected(null); setNotice('') }}>← All roadmaps</button>
-          <div className="roadmap-detail-head"><div><span className="roadmap-category-pill">{selected.category}</span><h2>{selected.title}</h2><p>{selected.summary}</p><div className="roadmap-byline">Shared by <b>@{selected.author}</b><span>·</span> Updated {new Date(selected.updatedAt).toLocaleDateString()}</div></div>{selected.isOwner && <button className="roadmap-secondary" disabled={Boolean(selected.nextUpdateAt && Date.parse(selected.nextUpdateAt) > Date.now())} onClick={editRoadmap} title={selected.nextUpdateAt ? `Next update available ${new Date(selected.nextUpdateAt).toLocaleDateString()}` : ''}>Edit roadmap</button>}</div>
+          <button className="roadmap-small-back" onClick={() => { setSelected(null); setNotice(''); const url = new URL(window.location.href); url.searchParams.delete('roadmap'); window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`) }}>← All roadmaps</button>
+          <div className="roadmap-detail-head"><div><span className="roadmap-category-pill">{selected.category}</span><h2>{selected.title}</h2><p>{selected.summary}</p><div className="roadmap-byline">Shared by <b>@{selected.author}</b><span>·</span> Updated {new Date(selected.updatedAt).toLocaleDateString()}</div></div><div className="roadmap-detail-actions"><button className="roadmap-secondary" onClick={() => { void copyRoadmapLink() }}>Share link</button><button className="roadmap-secondary" onClick={() => window.print()}>Print / PDF</button>{selected.isOwner && <button className="roadmap-secondary" disabled={Boolean(selected.nextUpdateAt && Date.parse(selected.nextUpdateAt) > Date.now())} onClick={editRoadmap} title={selected.nextUpdateAt ? `Next update available ${new Date(selected.nextUpdateAt).toLocaleDateString()}` : ''}>Edit roadmap</button>}</div></div>
           {selected.tags.length > 0 && <div className="roadmap-tags">{selected.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>}
-          <div className="roadmap-content">{selected.content.map((block, index) => <RoadmapBlockView key={block.id} block={block} index={index} />)}</div>
+          <div className="roadmap-progress-summary">{Object.values(completedSteps).filter(Boolean).length} of {selected.content.filter((block) => block.kind === 'step').length} learning steps completed · saved in this browser</div><div className="roadmap-content">{selected.content.map((block, index) => <RoadmapBlockView key={block.id} block={block} index={index} done={completedSteps[block.id]} onToggle={() => toggleStep(block.id)} />)}</div>
           {selected.isOwner && selected.nextUpdateAt && <p className="roadmap-edit-hint">You can make your next update {new Date(selected.nextUpdateAt).toLocaleDateString()}.</p>}
         </> : editing ? <>
           <button className="roadmap-small-back" onClick={() => { setEditing(false); setCreateOpen(false); setSelected(null) }}>← Browse roadmaps</button>

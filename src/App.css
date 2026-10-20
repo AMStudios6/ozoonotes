@@ -55,6 +55,9 @@
 .file-tab.selected {background:var(--panel); box-shadow:0 -2px 0 var(--accent) inset}
 .tab-open {flex:1;align-self:stretch;min-width:0;padding:0 3px;border:0;background:transparent;color:var(--muted);text-align:left;white-space:nowrap;cursor:pointer;font-size:13px}
 .file-tab.selected .tab-open {color:var(--accent)}
+.tab-rename {display:grid;place-items:center;flex:none;width:22px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);cursor:pointer}
+.tab-rename svg {width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab-rename:hover {background:var(--accent-soft);color:var(--accent)}
 .tab-close {display:grid;place-items:center;width:20px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:16px;line-height:1;opacity:.65;cursor:pointer}
 .file-tab:hover .tab-close{opacity:1}.tab-close:hover{background:var(--panel-raised);color:var(--ink)}
 .add-file {align-self:center; width:32px; height:32px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:23px; cursor:pointer}.add-file:hover,.theme-toggle:hover{background:var(--panel-raised);color:var(--ink)}
@@ -487,7 +490,16 @@
 .screen-recording-actions {display:flex;gap:7px}.screen-recording-actions button {flex:1;min-width:0;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel-raised);color:var(--ink);font-size:10px;font-weight:700;cursor:pointer}.screen-recording-actions button:hover {border-color:var(--accent);color:var(--accent)}.screen-recording-actions .recording-start {display:flex;align-items:center;justify-content:center;gap:7px;border-color:color-mix(in srgb,#e65353 60%,var(--line));background:color-mix(in srgb,#e65353 12%,var(--panel));color:var(--ink)}.screen-recording-actions .recording-start:hover {border-color:#e65353;color:#e65353}.screen-recording-actions .recording-stop {border-color:#e65353;background:#e65353;color:#fff}.screen-recording-actions .recording-stop:hover {filter:brightness(1.1);color:#fff}
 .screen-recording-error {margin:8px 0;color:#e65353;font-size:10px;line-height:1.45}
 .drawing-style-select {width:100%;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--workspace);color:var(--ink);font-size:11px}.drawing-style-select option {background:var(--panel);color:var(--ink)}
-.library-file-rename {width:100%;padding:7px 11px;border:0;border-bottom:1px solid var(--line);background:var(--panel);color:var(--accent);text-align:right;font-size:10px;font-weight:650;cursor:pointer}.library-file-rename:hover {background:var(--accent-soft)}
+.library-file-settings {width:100%;min-height:36px;display:flex;align-items:center;justify-content:flex-end;gap:7px;padding:6px 12px;border:0;border-bottom:1px solid var(--line);background:var(--panel);color:var(--accent);font-size:12px;font-weight:650;cursor:pointer}
+.library-file-settings:hover {background:var(--accent-soft)}
+.file-settings-current-name {margin:-13px 0 16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--workspace);color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.file-settings-actions {display:flex;gap:8px;margin:0 0 8px}
+.file-settings-actions button {flex:1;min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-raised);color:var(--ink);font-size:11px;font-weight:650;cursor:pointer}
+.file-settings-actions .dialog-create {border-color:var(--accent);background:var(--accent);color:#160e20}
+.file-settings-actions .file-settings-remove {border-color:color-mix(in srgb,#e65353 50%,var(--line));color:#e65353}
+.file-settings-favorite {display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--ink);font-size:12px}
+.file-settings-favorite input {width:16px;height:16px;accent-color:var(--accent)}
+.file-settings-footnote {margin:14px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:850px) {.more-features-trigger {width:36px;justify-content:center;padding:0;font-size:0;gap:0}.more-features-trigger svg:last-child {display:none}.more-features-trigger::after {content:"More";font-size:9px}.more-features-wrap {margin-left:2px}.window-top {gap:7px;padding:0 8px}.file-tabs {gap:2px}.theme-picker select {max-width:88px}}
 @media(max-width:600px) {.more-features-panel {position:fixed;top:58px;right:8px}.more-features-trigger::after {content:""}.more-features-trigger {width:32px;height:32px}.window-top .brand-mark {width:100px}}
 
@@ -811,3 +823,4 @@
 .stroke-cap-options i { display: block; width: 13px; height: 5px; background: currentColor; }
 .stroke-cap-options .cap-round { border-radius: 999px; }
 .stroke-cap-options .cap-square { border-radius: 0; }
+.presentation-mode{padding:0!important}.presentation-mode .window{width:100vw;height:100dvh;min-height:100dvh;border:0;border-radius:0}.presentation-mode .window-top,.presentation-mode .board-menu-wrap,.presentation-mode .quick-actions,.presentation-mode .toolbar,.presentation-mode .color-palette,.presentation-mode .stroke-panel,.presentation-mode .page-navigation,.presentation-mode .bottom-controls,.presentation-mode .tool-status{display:none!important}.presentation-mode .board-area{height:100dvh;min-height:100dvh;padding:0}.presentation-mode .workspace{min-height:100dvh;margin:0;padding:0;overflow:auto}

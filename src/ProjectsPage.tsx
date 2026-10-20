@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type FormEvent, type CSSProperties } from 'react'
 import './ProjectsPage.css'
 
 type ProjectTheme = 'forest' | 'purple' | 'white-purple' | 'red-white' | 'red-black' | 'doom'
@@ -18,6 +18,7 @@ type ProjectDocument = {
   description: string
   bodyHtml: string
   assets: ProjectAsset[]
+  appearance?: { paper: string; accent: string; font: string; size: number; width: number }
   createdAt: number
   updatedAt: number
 }
@@ -84,7 +85,7 @@ async function removeProject(id: string) {
   })
 }
 
-const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
+const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'SUP', 'SUB', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
 function sanitizeHtml(value: string) {
   const parsed = new DOMParser().parseFromString(value, 'text/html')
   const cleanNode = (node: Node): Node | null => {
@@ -96,6 +97,17 @@ function sanitizeHtml(value: string) {
       return fragment
     }
     const clean = document.createElement(node.tagName.toLowerCase())
+    if (node.tagName === 'SPAN') {
+      const classes = []
+      if (node.classList.contains('project-equation')) classes.push('project-equation')
+      if (node.classList.contains('project-fraction')) classes.push('project-fraction')
+      if (node.classList.contains('project-math-slot')) {
+        classes.push('project-math-slot')
+        clean.setAttribute('contenteditable', 'true')
+        clean.setAttribute('tabindex', '0')
+      }
+      clean.className = classes.join(' ')
+    }
     if (['SPAN', 'P', 'DIV'].includes(node.tagName)) {
       const style = node.style
       const color = style.color
@@ -144,22 +156,36 @@ function sanitizeHtml(value: string) {
   return result.innerHTML
 }
 
-function RichTextEditor({ project, onChange }: { project: ProjectDocument; onChange: (bodyHtml: string) => void }) {
+function RichTextEditor({ project, onChange, onAppearanceChange }: { project: ProjectDocument; onChange: (bodyHtml: string) => void; onAppearanceChange: (appearance: NonNullable<ProjectDocument['appearance']>) => void }) {
   const editorRef = useRef<HTMLDivElement>(null)
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedSelection = useRef<Range | null>(null)
   const [showMarks, setShowMarks] = useState(false)
-  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert'>('home')
+  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert' | 'math' | 'personalize'>('home')
+  const [equationDraft, setEquationDraft] = useState('')
+  const [wordCount, setWordCount] = useState(0)
+  const [characterCount, setCharacterCount] = useState(0)
   const imageInput = useRef<HTMLInputElement>(null)
+  const updateCounts = () => {
+    const text = editorRef.current?.innerText ?? ''
+    setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0)
+    setCharacterCount(text.length)
+  }
   useEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
+    if (editorRef.current) {
+      editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
+      updateCounts()
+    }
     savedSelection.current = null
     return () => { if (pendingSave.current) clearTimeout(pendingSave.current) }
   }, [project.id])
   const queueSave = () => {
     if (pendingSave.current) clearTimeout(pendingSave.current)
     pendingSave.current = setTimeout(() => {
-      if (editorRef.current) onChange(sanitizeHtml(editorRef.current.innerHTML))
+      if (editorRef.current) {
+        onChange(sanitizeHtml(editorRef.current.innerHTML))
+        updateCounts()
+      }
       pendingSave.current = null
     }, 450)
   }
@@ -244,6 +270,17 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     queueSave()
   }
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+  const insertEquation = (equation: string) => {
+    if (!equation.trim()) return
+    let markup = escapeHtml(equation.trim())
+    markup = markup.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
+    markup = markup.replace(/(?<![\w/])([A-Za-z0-9]+)\/([A-Za-z0-9]+)(?![\w/])/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
+    markup = markup.replace(/([A-Za-z0-9]+)\^(?:\{([^{}]+)\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => `${base}<sup>${grouped ?? simple}</sup>`)
+    markup = markup.replace(/([A-Za-z0-9]+)_(?:\{([^{}]+)\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => `${base}<sub>${grouped ?? simple}</sub>`)
+    insertHtml(`<span class="project-equation">${markup}</span>&nbsp;`)
+  }
+  const insertFraction = () => insertHtml('<span class="project-equation project-fraction"><span class="project-math-slot"></span><span class="project-math-slot"></span></span>&nbsp;')
+  const hasMathSyntax = (value: string) => /\\frac\{[^{}]+\}\{[^{}]+\}|\^[{]?[A-Za-z0-9]+|_[{]?[A-Za-z0-9]+|[A-Za-z0-9]+\/[A-Za-z0-9]+/.test(value)
   const insertTable = () => {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
@@ -338,9 +375,11 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     <div className="project-ribbon-tabs" role="tablist" aria-label="Project document tools">
       <button type="button" role="tab" aria-selected={ribbonTab === 'home'} className={ribbonTab === 'home' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('home')}>Home</button>
       <button type="button" role="tab" aria-selected={ribbonTab === 'insert'} className={ribbonTab === 'insert' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('insert')}>Insert</button>
+      <button type="button" role="tab" aria-selected={ribbonTab === 'math'} className={ribbonTab === 'math' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('math')}>Math</button>
+      <button type="button" role="tab" aria-selected={ribbonTab === 'personalize'} className={ribbonTab === 'personalize' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('personalize')}>Personalize</button>
     </div>
     <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(event) => addImageFile(event.target.files?.[0])} />
-    <div className="project-format-toolbar" role="toolbar" aria-label={ribbonTab === 'home' ? 'Text formatting' : 'Insert project content'}>
+    <div className="project-format-toolbar" role="toolbar" aria-label={ribbonTab === 'home' ? 'Text formatting' : ribbonTab === 'insert' ? 'Insert project content' : ribbonTab === 'math' ? 'Math tools' : 'Personalize project'}>
       {ribbonTab === 'home' ? <>
       <div className="project-ribbon-group project-clipboard-group" aria-label="Clipboard">
         <button type="button" title="Paste text from clipboard" aria-label="Paste" onMouseDown={(event) => void pasteText(event)}><span className="project-ribbon-symbol">▣</span><small>Paste</small></button>
@@ -370,8 +409,14 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       </div>
       <span className="project-format-divider" />
       <div className="project-ribbon-group project-paragraph-group" aria-label="Paragraph">
+        <select aria-label="Text style" title="Text style" defaultValue="P" onMouseDown={rememberSelection} onChange={(event) => { restoreSelection(); document.execCommand('formatBlock', false, event.target.value); rememberSelection(); queueSave() }}>
+          <option value="P">Normal text</option><option value="H1">Title</option><option value="H2">Heading 1</option><option value="H3">Heading 2</option>
+        </select>
+        <button type="button" title="Undo" aria-label="Undo" onMouseDown={run('undo')}>↶</button>
+        <button type="button" title="Redo" aria-label="Redo" onMouseDown={run('redo')}>↷</button>
         <button type="button" title="Bulleted list" aria-label="Bulleted list" onMouseDown={run('insertUnorderedList')}>• List</button>
         <button type="button" title="Numbered list" aria-label="Numbered list" onMouseDown={run('insertOrderedList')}>1. List</button>
+        <button type="button" title="Add a checklist item" aria-label="Add a checklist item" onMouseDown={(event) => { event.preventDefault(); const task = window.prompt('What do you need to do?', 'New task'); if (task !== null) insertHtml(`<ul><li>☐ ${escapeHtml(task)}</li></ul><p><br></p>`) }}>☐ Task</button>
         <button type="button" title="Decrease indent" aria-label="Decrease indent" onMouseDown={run('outdent')}>⇤</button>
         <button type="button" title="Increase indent" aria-label="Increase indent" onMouseDown={run('indent')}>⇥</button>
         <span className="project-format-divider" />
@@ -387,7 +432,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         <button type="button" title="Quote" aria-label="Quote" onMouseDown={run('formatBlock', 'blockquote')}>❝</button>
         <button type="button" title="Add link to selected text" aria-label="Add link to selected text" onMouseDown={addInlineLink}>↗</button>
       </div>
-      </> : <>
+      </> : ribbonTab === 'insert' ? <>
         <div className="project-ribbon-group project-insert-group" aria-label="Pages and tables">
           <button type="button" title="Insert cover page" onMouseDown={(event) => { event.preventDefault(); insertHtml(`<h1>${escapeHtml(project.title)}</h1><p>${escapeHtml(project.description)}</p><hr><p><br></p>`) }}>▤<small>Cover Page</small></button>
           <button type="button" title="Insert a blank page break" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>▯<small>Blank Page</small></button>
@@ -405,6 +450,8 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         </div>
         <span className="project-format-divider" />
         <div className="project-ribbon-group project-insert-group" aria-label="Links and text">
+          <button type="button" title="Insert a code snippet" onMouseDown={(event) => { event.preventDefault(); const code = window.prompt('Paste or type a code snippet', '// Your code'); if (code !== null) insertHtml(`<pre><code>${escapeHtml(code)}</code></pre><p><br></p>`) }}>⌘<small>Code</small></button>
+          <button type="button" title="Insert a divider" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>―<small>Divider</small></button>
           <button type="button" title="Insert a video link" onMouseDown={(event) => { event.preventDefault(); insertVideoLink() }}>▶<small>Online Video</small></button>
           <button type="button" title="Link selected text" onMouseDown={addInlineLink}>↗<small>Hyperlink</small></button>
           <button type="button" title="Add a comment" onMouseDown={(event) => { event.preventDefault(); const note = window.prompt('Write a comment or review note'); if (note) insertHtml(`<blockquote><strong>Comment:</strong> ${escapeHtml(note)}</blockquote>`) }}>▤<small>Comment</small></button>
@@ -416,26 +463,46 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
           <button type="button" title="Insert a page number label" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p style="text-align: right">Page 1</p>') }}>#<small>Page Number</small></button>
           <button type="button" title="Insert a signature line" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p>Signature: ______________________________</p>') }}>✎<small>Signature</small></button>
         </div>
+      </> : ribbonTab === 'personalize' ? <div className="project-personalize-panel"><span>Make this project yours</span><label>Paper color<select value={project.appearance?.paper ?? '#fffefa'} onChange={(event) => onAppearanceChange({ paper: event.target.value, accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option value="#fffefa">Warm white</option><option value="#ffffff">White</option><option value="#fff5d8">Cream</option><option value="#f0f6ff">Soft blue</option><option value="#f5efff">Lavender</option></select></label><label>Accent color<select value={project.appearance?.accent ?? '#8057d8'} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: event.target.value, font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option value="#8057d8">Purple</option><option value="#207a6a">Teal</option><option value="#2969b0">Blue</option><option value="#b74760">Rose</option><option value="#a66318">Amber</option></select></label><label>Writing font<select value={project.appearance?.font ?? 'Arial'} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: event.target.value, size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Times New Roman</option><option>Courier New</option></select></label><label>Text size<select value={project.appearance?.size ?? 14} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: Number(event.target.value), width: project.appearance?.width ?? 820 })}>{[12,13,14,16,18,20].map((size) => <option key={size} value={size}>{size}px</option>)}</select></label><label>Page width<select value={project.appearance?.width ?? 820} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: Number(event.target.value) })}><option value={680}>Compact</option><option value={820}>Comfortable</option><option value={960}>Wide</option></select></label><button type="button" onClick={() => onAppearanceChange({ paper: '#fffefa', accent: '#8057d8', font: 'Arial', size: 14, width: 820 })}>Reset</button></div> : <>
+        <div className="project-math-entry">
+          <label htmlFor="project-equation-input">Equation</label>
+          <input id="project-equation-input" value={equationDraft} onChange={(event) => setEquationDraft(event.target.value)} onMouseDown={rememberSelection} onKeyDown={(event) => { if (event.key === 'Enter' || (event.key === ' ' && hasMathSyntax(equationDraft))) { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') } }} placeholder="Type an equation, e.g. 1/2 or x^2" />
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') }}>Insert</button>
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group" aria-label="Equation structures">
+          <button type="button" title="Insert a stacked fraction" aria-label="Insert a stacked fraction" onMouseDown={(event) => { event.preventDefault(); insertFraction() }}>□<small>Fraction</small></button>
+          {[
+            ['Power', 'xⁿ'], ['Subscript', 'xₙ'], ['Square root', '√(□)'],
+            ['Integral', '∫ f(x) dx'], ['Summation', '∑'],
+          ].map(([label, value]) => <button key={label} type="button" title={`Insert ${label.toLowerCase()} template`} onMouseDown={(event) => { event.preventDefault(); insertEquation(value) }}>{value}<small>{label}</small></button>)}
+        </div>
+        <span className="project-format-divider" />
+        <div className="project-ribbon-group project-insert-group project-math-symbols" aria-label="Math symbols">
+          {['±', '×', '÷', '≤', '≥', '≠', '≈', '∞', 'π', 'θ', 'α', 'β', 'Δ', '√', '∫', '∑', '→', '°'].map((symbol) => <button key={symbol} type="button" title={`Insert ${symbol}`} onMouseDown={(event) => { event.preventDefault(); insertEquation(symbol) }}>{symbol}</button>)}
+        </div>
       </>}
     </div>
     <div
       ref={editorRef}
       className={`project-rich-editor ${showMarks ? 'project-show-marks' : ''}`}
+      style={{ backgroundColor: project.appearance?.paper ?? '#fffefa', color: '#222222', fontFamily: project.appearance?.font ?? 'Arial', fontSize: `${project.appearance?.size ?? 14}px`, maxWidth: `${project.appearance?.width ?? 820}px`, marginInline: 'auto', width: '100%', '--project-accent': project.appearance?.accent ?? '#8057d8' } as CSSProperties}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
       aria-label={`Write in ${project.title}`}
       aria-multiline="true"
       data-placeholder="Start writing your project notes… Add headings, explanations, plans, and reflections."
-      onInput={() => { rememberSelection(); queueSave() }}
+      onInput={() => { rememberSelection(); updateCounts(); queueSave() }}
       onKeyUp={rememberSelection}
       onMouseUp={rememberSelection}
       onBlur={() => {
         if (pendingSave.current) clearTimeout(pendingSave.current)
-        if (editorRef.current) onChange(sanitizeHtml(editorRef.current.innerHTML))
+        if (editorRef.current) { onChange(sanitizeHtml(editorRef.current.innerHTML)); updateCounts() }
         pendingSave.current = null
       }}
     />
+    <div className="project-editor-status" aria-live="polite"><span>{wordCount.toLocaleString()} words</span><span>{characterCount.toLocaleString()} characters</span><span>About {Math.ceil(wordCount / 200)} min read</span></div>
   </div>
 }
 
@@ -595,7 +662,13 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
     const safeDescription = project.description.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
     const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
     const attachedItems = project.assets.length ? `<section><h2>Project materials</h2><ul>${project.assets.map((asset) => `<li>${asset.kind === 'link' && asset.url ? `<a href="${escape(asset.url)}">${escape(asset.name)}</a>` : escape(asset.name)} — ${escape(asset.kind)}</li>`).join('')}</ul></section>` : ''
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>body{font:11pt Arial,sans-serif;max-width:800px;margin:50px auto;line-height:1.6;color:#222}h1{margin-bottom:4px}table{border-collapse:collapse}td,th{border:1px solid #999;padding:6px}img{max-width:100%;height:auto}blockquote{border-left:3px solid #777;padding-left:12px;color:#555}@media print{body{margin:18mm auto}}</style></head><body><h1>${safeTitle}</h1><p>${safeDescription}</p><hr>${sanitizeHtml(project.bodyHtml)}${attachedItems}</body></html>`
+    const appearance = project.appearance
+    const allowedFonts = ['Arial', 'Georgia', 'Verdana', 'Times New Roman', 'Courier New']
+    const font = allowedFonts.includes(appearance?.font ?? '') ? appearance?.font : 'Arial'
+    const safeColor = (color: string | undefined, fallback: string) => color && /^#[0-9a-f]{6}$/i.test(color) ? color : fallback
+    const paper = safeColor(appearance?.paper, '#fffefa'), accent = safeColor(appearance?.accent, '#8057d8')
+    const size = Math.max(12, Math.min(20, Number(appearance?.size) || 14)), width = Math.max(580, Math.min(960, Number(appearance?.width) || 820))
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>body{font:${size}px ${font},sans-serif;max-width:${width}px;margin:50px auto;padding:24px;background:${paper};line-height:1.7;color:#222}h1,h2,h3{color:${accent}}h1{margin-bottom:4px}table{border-collapse:collapse}td,th{border:1px solid #999;padding:6px}img{max-width:100%;height:auto}blockquote{border-left:3px solid ${accent};padding-left:12px;color:#555}@media print{body{margin:18mm auto}}</style></head><body><h1>${safeTitle}</h1><p>${safeDescription}</p><hr>${sanitizeHtml(project.bodyHtml)}${attachedItems}</body></html>`
   }
   const downloadWord = () => {
     if (!activeProject) return
@@ -645,7 +718,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
             <div className="project-title-fields"><span className="project-eyebrow">PROJECT DOCUMENT</span><input className="project-title-input" aria-label="Project title" value={activeProject.title} onChange={(event) => updateProject(activeProject.id, { title: event.target.value })} placeholder="Give this project a title" /><input className="project-description-input" aria-label="Project summary" value={activeProject.description} onChange={(event) => updateProject(activeProject.id, { description: event.target.value })} placeholder="Add a short summary or goal…" /></div>
             <div className="project-document-actions"><button type="button" className="project-export-button" onClick={() => setExportOpen(true)} aria-haspopup="dialog">⇧ Export</button><button type="button" className="project-delete-button" onClick={() => void deleteProject(activeProject)} title="Delete this project">Delete project</button></div>
           </div>
-          <RichTextEditor key={activeProject.id} project={activeProject} onChange={(bodyHtml) => updateProject(activeProject.id, { bodyHtml })} />
+          <RichTextEditor key={activeProject.id} project={activeProject} onChange={(bodyHtml) => updateProject(activeProject.id, { bodyHtml })} onAppearanceChange={(appearance) => updateProject(activeProject.id, { appearance })} />
           <section className="project-attachments">
             <div className="project-attachments-heading"><div><span className="project-eyebrow">PROJECT MATERIALS</span><h2>Bring it all together</h2><p>Add supporting media, references, and an OzooNotes board file.</p></div><span className="project-material-count">{activeProject.assets.length} item{activeProject.assets.length === 1 ? '' : 's'}</span></div>
             <div className="project-asset-actions">
