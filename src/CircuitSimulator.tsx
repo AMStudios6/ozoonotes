@@ -234,9 +234,9 @@ const partGlyph: Record<Kind, string> = { source: '＋', 'ac-source': '∿', res
 function componentTracePath(reading: Reading, simulation: Simulation, current = false) {
   const magnitude = current ? reading.current : reading.voltage
   const phase = current ? reading.currentPhase ?? 0 : reading.voltagePhase ?? 0
-  const samples = Array.from({ length: 41 }, (_, index) => simulation.ac ? Math.SQRT2 * magnitude * Math.sin(2 * Math.PI * index / 40 + phase) : magnitude)
+  const samples = Array.from({ length: 81 }, (_, index) => simulation.ac ? Math.SQRT2 * magnitude * Math.sin(2 * Math.PI * index / 80 + phase) : magnitude)
   const max = Math.max(...samples.map(Math.abs), 1e-12)
-  return samples.map((sample, index) => `${index ? 'L' : 'M'} ${8 + index * 4.6} ${current ? 77 - sample / max * 11 : 39 - sample / max * 11}`).join(' ')
+  return samples.map((sample, index) => `${index ? 'L' : 'M'} ${54 + index * 11.15} ${current ? 112 - sample / max * 25 : 43 - sample / max * 25}`).join(' ')
 }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
@@ -308,6 +308,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [wirePoints, setWirePoints] = useState<Point[]>([])
   const [wireCursor, setWireCursor] = useState<Point | null>(null)
   const [wireSnapPreview, setWireSnapPreview] = useState<WireSnap | null>(null)
+  const partDragOrigin = useRef<Point | null>(null)
+  const partDragMoved = useRef(false)
   const wireDrag = useRef<{ from: string; x: number; y: number; moved: boolean } | null>(null)
   const suppressPinClick = useRef(false)
   const undoStack = useRef<Circuit[]>([])
@@ -425,6 +427,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
       if (meterMode === 'voltage') { setMeterReading('Voltage mode: select two terminal pins.'); return }
       try {
         const analysis = solveCircuit(circuit.parts, circuit.wires)
+        setSimulation(analysis)
         const result = analysis.readings.find((reading) => reading.id === part.id)
         if (meterMode === 'current') setMeterReading(result ? part.label + ' current: ' + fmt(result.current, analysis.ac ? 'A RMS' : 'A') : 'This component has no current reading.')
         else if (part.kind === 'resistor') setMeterReading(part.label + ' resistance: ' + fmt(part.value, 'Ω'))
@@ -439,9 +442,12 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     }
     const point = screenPoint(event)
     setWireSnapPreview(null)
+    partDragOrigin.current = point
+    partDragMoved.current = false
     if (!selectedParts.includes(part.id)) { setSelectedPart(part.id); setSelectedParts([]) }
     else setSelectedPart(part.id)
     setSelectedWire(null)
+    try { setSimulation(solveCircuit(circuit.parts, circuit.wires)); setError('') } catch { /* The scope stays empty until the circuit can be solved. */ }
     setDrag({ id: part.id, dx: point.x - part.x, dy: point.y - part.y })
     svgRef.current?.setPointerCapture(event.pointerId)
   }
@@ -619,6 +625,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           else if (wireStart) setWireCursor(point)
           if (dragPoint) { setWireSnapPreview(null); setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
           if (!drag) return
+          if (partDragOrigin.current && Math.hypot(point.x - partDragOrigin.current.x, point.y - partDragOrigin.current.y) > 4) partDragMoved.current = true
           const movingPart = circuit.parts.find((part) => part.id === drag.id)
           if (!movingPart) return
           const rawX = Math.max(55, Math.min(W - 55, point.x - drag.dx)), rawY = Math.max(70, Math.min(H - 45, point.y - drag.dy))
@@ -636,7 +643,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             suppressPinClick.current = true; window.setTimeout(() => { suppressPinClick.current = false }, 0); wireDrag.current = null
           }
           if (drag && wireSnapPreview) attachPartToWire(wireSnapPreview)
-          if (drag || dragPoint) { setDrag(null); setDragPoint(null); if (!wireSnapPreview) setSimulation(null) }
+          if (drag || dragPoint) { setDrag(null); setDragPoint(null); if (!wireSnapPreview && (dragPoint || partDragMoved.current)) setSimulation(null) }
+          partDragOrigin.current = null; partDragMoved.current = false
           if (!drag) setWireSnapPreview(null)
           try { svgRef.current?.releasePointerCapture(event.pointerId) } catch {}
         }}>
@@ -659,6 +667,11 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={simulation?.nodeVoltages} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · Drag parts to move them · drag terminals to connect wires · Simulate to show voltages and current</span>}</div>
+        {selected && selectedReading && simulation && <section className="component-scope" aria-label="Selected component scope">
+          <header><div><span className="scope-live-dot" /><strong>Scope</strong><span className="scope-part-name">{selected.label} · {partNames[selected.kind]}</span></div><small>{simulation.ac ? `AC · ${simulation.frequency} Hz · one cycle` : 'DC · steady state'}</small></header>
+          <svg viewBox="0 0 1000 160" role="img" aria-label={`${selected.label} voltage and current scope graph`}><path className="scope-grid" d="M54 10H946M54 43H946M54 77H946M54 112H946M54 145H946M54 10V145M165 10V145M277 10V145M388 10V145M500 10V145M611 10V145M723 10V145M834 10V145M946 10V145"/><path className="scope-voltage" d={componentTracePath(selectedReading, simulation)} /><path className="scope-current" d={componentTracePath(selectedReading, simulation, true)} /><text x="8" y="18">V</text><text x="8" y="87">A</text><text x="54" y="157">0</text><text x="920" y="157">{simulation.ac ? '1 cycle' : 'time'}</text></svg>
+          <footer><span><i className="scope-key-voltage" />Voltage {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.voltage, 'V')}</span><span><i className="scope-key-current" />Current {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.current, 'A')}</span><small>{simulation.ac ? 'AC waveform shown from its steady-state phasor.' : 'Flat trace: DC steady-state does not model transients.'}</small></footer>
+        </section>}
         {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>DC analysis</span></div><div className="circuit-results-table"><div className="circuit-result-row labels"><span>Part</span><span>Voltage</span><span>Current</span><span>Power</span></div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id}><span>{reading.label}</span><span>{fmt(reading.voltage, 'V')}</span><span>{fmt(reading.current, 'A')}</span><span>{fmt(reading.power, 'W')}</span></div>)}</div></div>}
       </section>
       <aside className="circuit-inspector">
@@ -681,7 +694,6 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           <div className="circuit-rotation"><span>Rotate</span><button type="button" title="Rotate counterclockwise 90°" aria-label="Rotate counterclockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 270) % 360 })}>↶</button><output>{selected.rotation ?? 0}°</output><button type="button" title="Rotate clockwise 90°" aria-label="Rotate clockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 90) % 360 })}>↻</button></div>
           <div className="circuit-rotation"><span>Mirror</span><button type="button" className={selected.mirrorX ? 'pressed' : ''} title="Mirror left to right" aria-label="Mirror horizontally" onClick={() => updateSelected({ mirrorX: !selected.mirrorX })}>↔</button><button type="button" className={selected.mirrorY ? 'pressed' : ''} title="Mirror top to bottom" aria-label="Mirror vertically" onClick={() => updateSelected({ mirrorY: !selected.mirrorY })}>↕</button></div>
           <button className="circuit-danger" onClick={() => { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selected.id), wires: value.wires.filter((wire) => !wire.from.startsWith(selected.id + ':') && !wire.to.startsWith(selected.id + ':')) })); setSelectedPart(null); setSimulation(null) }}>Delete component</button>
-          {selectedReading && simulation && <section className="component-graph"><header><strong>Component graph</strong><small>{simulation.ac ? `${simulation.frequency} Hz · one cycle` : 'DC steady-state'}</small></header><svg viewBox="0 0 200 96" role="img" aria-label={`${selected.label} voltage and current graph`}><path className="component-graph-grid" d="M8 12H192M8 48H192M8 84H192M8 12V84M54 12V84M100 12V84M146 12V84M192 12V84"/><path className="component-graph-voltage" d={componentTracePath(selectedReading, simulation)} /><path className="component-graph-current" d={componentTracePath(selectedReading, simulation, true)} /></svg><div className="component-graph-legend"><span><i />Voltage {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.voltage, 'V')}</span><span><i />Current {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.current, 'A')}</span></div></section>}
         </> : selectedParts.length ? <p className="circuit-empty">{selectedParts.length} components selected. Use Edit to duplicate, rotate, mirror, or delete them.</p> : selectedWire ? <><p className="circuit-empty">Wire selected</p><button className="circuit-danger" onClick={() => { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null); setSimulation(null) }}>Delete wire</button></> : <p className="circuit-empty">Select a part or wire to inspect it. Components, values, and circuit files stay in this browser.</p>}
         <div className="circuit-library-note"><strong>Simulator model</strong><p>DC mode solves steady state; AC mode uses RMS phasors for resistors, capacitors, inductors, switches, and sources. AC diode analysis and time-domain transients are not modeled.</p></div>
       </aside>
