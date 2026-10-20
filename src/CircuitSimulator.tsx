@@ -289,6 +289,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [selectedParts, setSelectedParts] = useState<string[]>([])
   const [selectedWire, setSelectedWire] = useState<string | null>(null)
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null)
+  const [drawingDrag, setDrawingDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
   const [openMenu, setOpenMenu] = useState<'file' | 'place' | 'edit' | 'draw' | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [clipboard, setClipboard] = useState<{ parts: Part[]; wires: Wire[] }>({ parts: [], wires: [] })
@@ -657,6 +658,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           const point = screenPoint(event)
           if (wireDrag.current) { const state = wireDrag.current; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(point) }
           else if (wireStart) setWireCursor(point)
+          if (drawingDrag) { setCircuit((current) => ({ ...current, drawings: (current.drawings ?? []).map((item) => item.id === drawingDrag.id ? { ...item, x: point.x - drawingDrag.dx, y: point.y - drawingDrag.dy } : item) })); return }
           if (dragPoint) { setWireSnapPreview(null); setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
           if (!drag) return
           if (partDragOrigin.current && Math.hypot(point.x - partDragOrigin.current.x, point.y - partDragOrigin.current.y) > 4) partDragMoved.current = true
@@ -677,6 +679,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             suppressPinClick.current = true; window.setTimeout(() => { suppressPinClick.current = false }, 0); wireDrag.current = null
           }
           if (drag && wireSnapPreview) attachPartToWire(wireSnapPreview)
+          if (drawingDrag) setDrawingDrag(null)
           if (drag || dragPoint) { setDrag(null); setDragPoint(null); if (!wireSnapPreview && (dragPoint || partDragMoved.current)) setSimulation(null) }
           partDragOrigin.current = null; partDragMoved.current = false
           if (!drag) setWireSnapPreview(null)
@@ -684,7 +687,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         }}>
           <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern><marker id="circuit-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
           {gridVisible && <rect width={W} height={H} fill="url(#circuit-grid)" />}
-          {(circuit.drawings ?? []).map((item) => <g key={item.id} className={'circuit-drawing ' + (selectedDrawing === item.id ? 'selected' : '')} onClick={(event) => { event.stopPropagation(); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null) }}>
+          {(circuit.drawings ?? []).map((item) => <g key={item.id} className={'circuit-drawing ' + (selectedDrawing === item.id ? 'selected' : '')} onPointerDown={(event) => { if (event.button !== 0) return; event.stopPropagation(); const point = screenPoint(event); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setDrawingDrag({ id: item.id, dx: point.x - item.x, dy: point.y - item.y }); svgRef.current?.setPointerCapture(event.pointerId) }} onClick={(event) => { event.stopPropagation(); setSelectedDrawing(item.id); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null) }}>
+            {selectedDrawing === item.id && item.kind === 'image' && <rect className="drawing-selection-frame" x={item.x - 110} y={item.y - 73} width="220" height="146" rx="4" />}
+            {selectedDrawing === item.id && item.kind === 'text' && <rect className="drawing-selection-frame" x={item.x - 94} y={item.y - 24} width="188" height="34" rx="4" />}
             {item.kind === 'image' && item.content && <image href={item.content} x={item.x - 105} y={item.y - 68} width="210" height="136" preserveAspectRatio="xMidYMid meet" />}
             {item.kind === 'text' && <text className="circuit-drawing-text" x={item.x} y={item.y} textAnchor="middle">{item.content}</text>}
             {item.kind === 'arrow' && <line x1={item.x - 58} y1={item.y + 34} x2={item.x + 58} y2={item.y - 34} markerEnd="url(#circuit-arrowhead)" />}
