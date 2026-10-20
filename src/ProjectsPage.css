@@ -125,6 +125,13 @@
 }
 .project-format-toolbar button {min-width:29px;height:28px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--p-ink);font-size:10px;cursor:pointer}
 .project-format-toolbar button:hover {border-color:var(--p-line);background:var(--p-panel);color:var(--p-accent)}
+.project-paragraph-group select {height:28px;max-width:125px;padding:0 6px;border:1px solid var(--p-line);border-radius:6px;background:var(--p-panel);color:var(--p-ink);font:inherit;font-size:10px}
+.project-math-entry {display:flex;flex:none;align-items:center;gap:7px}
+.project-math-entry label {color:var(--p-muted);font-size:10px;font-weight:700}
+.project-math-entry input {width:min(250px,30vw);height:34px;padding:0 9px;border:1px solid var(--p-line);border-radius:7px;background:var(--p-panel);color:var(--p-ink);font:inherit;font-size:11px}
+.project-math-entry input:focus {border-color:var(--p-accent);outline:2px solid color-mix(in srgb,var(--p-accent) 20%,transparent)}
+.project-math-entry button {height:34px;padding:0 11px;border:1px solid var(--p-accent);border-radius:7px;background:var(--p-soft);color:var(--p-accent);font-weight:700}
+.project-math-symbols button {min-width:34px;font-family:Georgia,'Times New Roman',serif;font-size:15px}
 .project-format-divider {width:1px;height:21px;margin:0 4px;background:var(--p-line)}
 .project-rich-editor {min-height:max(620px,72vh);padding:30px clamp(18px,4vw,54px);outline:0;color:var(--p-ink);font-size:14px;line-height:1.8}
 .project-rich-editor:empty::before {content:attr(data-placeholder);color:var(--p-muted);opacity:.68;pointer-events:none}
