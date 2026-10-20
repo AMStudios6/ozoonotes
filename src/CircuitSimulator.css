@@ -27,6 +27,7 @@
 .circuit-wire .wire-handle:hover{r:8;fill:#a3f0b5}
 .circuit-wire .wire-hit{pointer-events:stroke}
 .circuit-canvas .wire-preview{fill:none;stroke:#258d4b;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:6 5;vector-effect:non-scaling-stroke;pointer-events:none;opacity:.9}
+.circuit-canvas .wire-snap-indicator circle{fill:#8a55df33;stroke:#8a55df;stroke-width:2;vector-effect:non-scaling-stroke}.circuit-canvas .wire-snap-indicator path{fill:none;stroke:#8a55df;stroke-width:1.5;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
 .circuit-rotation button.pressed{background:#e3f5e7;border-color:#70bd84;color:#21753a}
 .circuit-workspace{--c-accent:#26854a;--c-wire:#299c59}
 .circuit-workspace[data-theme="white-purple"]{--c-accent:#8246c1;--c-wire:#8246c1}
