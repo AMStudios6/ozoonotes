@@ -96,7 +96,9 @@ function sanitizeHtml(value: string) {
       return fragment
     }
     const clean = document.createElement(node.tagName.toLowerCase())
-    if (node.tagName === 'SPAN' && node.classList.contains('project-equation')) clean.className = 'project-equation'
+    if (node.tagName === 'SPAN' && node.classList.contains('project-equation')) {
+      clean.className = node.classList.contains('project-fraction') ? 'project-equation project-fraction' : 'project-equation'
+    }
     if (['SPAN', 'P', 'DIV'].includes(node.tagName)) {
       const style = node.style
       const color = style.color
@@ -263,6 +265,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
     if (!equation.trim()) return
     insertHtml(`<span class="project-equation">${escapeHtml(equation.trim())}</span>&nbsp;`)
   }
+  const insertFraction = () => insertHtml('<span class="project-equation project-fraction"><span>□</span><span>□</span></span>&nbsp;')
   const insertTable = () => {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
@@ -452,8 +455,9 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         </div>
         <span className="project-format-divider" />
         <div className="project-ribbon-group project-insert-group" aria-label="Equation structures">
+          <button type="button" title="Insert a stacked fraction" aria-label="Insert a stacked fraction" onMouseDown={(event) => { event.preventDefault(); insertFraction() }}>□<small>Fraction</small></button>
           {[
-            ['Fraction', '□ / □'], ['Power', 'xⁿ'], ['Subscript', 'xₙ'], ['Square root', '√(□)'],
+            ['Power', 'xⁿ'], ['Subscript', 'xₙ'], ['Square root', '√(□)'],
             ['Integral', '∫ f(x) dx'], ['Summation', '∑'],
           ].map(([label, value]) => <button key={label} type="button" title={`Insert ${label.toLowerCase()} template`} onMouseDown={(event) => { event.preventDefault(); insertEquation(value) }}>{value}<small>{label}</small></button>)}
         </div>
