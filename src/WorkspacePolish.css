@@ -376,9 +376,7 @@
   box-shadow: var(--p-shadow);
 }
 .project-ribbon-tabs {
-  position: sticky;
-  top: 72px;
-  z-index: 12;
+  position: static;
   border-radius: 16px 16px 0 0;
 }
 .project-ribbon-tabs button {
@@ -595,7 +593,7 @@
     border-radius: 12px;
   }
   .project-ribbon-tabs {
-    top: 0;
+    position: static;
     overflow-x: auto;
   }
   .project-ribbon-tabs button {
