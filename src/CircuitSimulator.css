@@ -162,4 +162,23 @@
 .circuit-options-dialog kbd{padding:2px 5px;border:1px solid var(--c-line);border-radius:4px;background:color-mix(in srgb,var(--c-bg) 85%,var(--c-panel));color:var(--c-ink);font-size:10px}
 .circuit-dialog-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border:1px solid var(--c-line);border-radius:8px;background:transparent;color:var(--c-ink);font-size:20px;cursor:pointer}
 .circuit-reset-options{padding:9px 12px;border:1px solid var(--c-line);border-radius:8px;background:color-mix(in srgb,var(--c-accent) 12%,var(--c-panel));color:var(--c-ink);font-weight:700;cursor:pointer}
+.circuit-presets-popover{width:min(330px,calc(100vw - 24px));max-height:min(76vh,680px);padding:8px}
+.circuit-preset-search{display:grid;gap:7px;padding:8px 9px 10px;color:var(--c-muted);font:700 9px ui-monospace,monospace;letter-spacing:.1em}
+.circuit-preset-search input{height:34px;width:100%;padding:0 10px;border:1px solid var(--c-line);border-radius:7px;background:var(--c-bg);color:var(--c-ink);font:11px inherit;letter-spacing:normal}
+.circuit-preset-groups{display:grid;gap:4px}
+.circuit-preset-groups details{border:1px solid transparent;border-radius:8px}
+.circuit-preset-groups details[open]{border-color:var(--c-line);background:color-mix(in srgb,var(--c-bg) 55%,var(--c-panel))}
+.circuit-preset-groups summary{display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 9px;border-radius:7px;color:var(--c-ink);font-size:11px;font-weight:700;cursor:pointer;list-style:none}
+.circuit-preset-groups summary::-webkit-details-marker{display:none}
+.circuit-preset-groups summary::after{content:'›';margin-left:8px;color:var(--c-muted);font-size:16px;line-height:1;transform:rotate(90deg)}
+.circuit-preset-groups details:not([open]) summary::after{transform:none}
+.circuit-preset-groups summary span{margin-left:auto;color:var(--c-muted);font-size:9px;font-weight:500}
+.circuit-preset-groups details>div{display:grid;gap:2px;padding:2px 5px 6px}
+.circuit-preset-groups details>div>button{display:grid;gap:3px;width:100%;min-height:43px;padding:7px 8px;border:0;border-radius:6px;background:transparent;color:var(--c-ink);text-align:left;cursor:pointer}
+.circuit-preset-groups details>div>button:hover:not(:disabled){background:color-mix(in srgb,var(--c-accent) 10%,var(--c-panel))}
+.circuit-preset-groups details>div>button:disabled{opacity:.42;cursor:not-allowed}
+.circuit-preset-groups details>div>button strong{font-size:10px;font-weight:650}
+.circuit-preset-groups details>div>button small,.circuit-preset-empty{margin:0;color:var(--c-muted);font-size:9px;line-height:1.35}
+.circuit-preset-empty{padding:9px}
+@media(max-width:680px){.circuit-presets-popover{position:fixed;top:122px;left:10px;max-width:calc(100vw - 20px)}}
 
