@@ -121,6 +121,7 @@
 .circuit-menubar{grid-column:1/-1;flex-wrap:wrap;border:1px solid var(--c-line);border-radius:10px;box-shadow:0 3px 14px #17231b08}
 .circuit-drawing{cursor:pointer;color:var(--c-accent)}
 .circuit-drawing image{pointer-events:visiblePainted}
+.circuit-drawing .drawing-selection-frame{fill:none;stroke:var(--c-accent);stroke-width:2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
 .circuit-drawing line,.circuit-drawing rect,.circuit-drawing ellipse{fill:none;stroke:var(--c-accent);stroke-width:3;vector-effect:non-scaling-stroke}
 .circuit-drawing.selected line,.circuit-drawing.selected rect,.circuit-drawing.selected ellipse{stroke-dasharray:6 4}
 .circuit-drawing-text{fill:var(--c-ink);font:700 18px sans-serif;paint-order:stroke;stroke:var(--c-bg);stroke-width:3px;stroke-linejoin:round}
