@@ -188,6 +188,7 @@
 .circuit-place-draw-grid .palette-symbol{width:27px;height:27px;flex:none}
 .circuit-place-draw-annotations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
 .circuit-place-draw-annotations>button{min-height:32px;font-size:10px}
+.circuit-file-popover{width:min(330px,calc(100vw - 24px));max-height:min(82vh,740px)}
 @media(max-width:680px){.circuit-presets-popover{position:fixed;top:122px;left:10px;max-width:calc(100vw - 20px)}}
 @media(max-width:680px){.circuit-place-draw-popover{position:fixed;top:122px;left:10px;max-width:calc(100vw - 20px)}}
 
