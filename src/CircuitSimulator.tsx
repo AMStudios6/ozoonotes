@@ -76,6 +76,42 @@ function buildPresetCircuit(preset: CircuitPreset): Circuit {
   wires.push({ id: makeId(), from: pinId(last, 'b'), to: pinId(ground, 'g'), points: [{ x: last.x + 48, y: 300 }, { x: last.x + 70, y: 300 }, { x: last.x + 70, y: 462 }, { x: 220, y: 462 }] })
   return { parts: [...parts, ground], wires, drawings: [] }
 }
+function parseCircuitText(text: string): Circuit {
+  const trimmed = text.trim()
+  const jsonStart = trimmed.indexOf('{')
+  if (jsonStart >= 0) {
+    const parsed = JSON.parse(trimmed.slice(jsonStart)) as Circuit
+    if (Array.isArray(parsed.parts) && Array.isArray(parsed.wires)) return { ...parsed, drawings: Array.isArray(parsed.drawings) ? parsed.drawings : [] }
+  }
+  const readValue = (raw: string) => {
+    const match = raw.trim().match(/^([+-]?(?:\d+\.?\d*|\.\d+))(meg|[kMmunµp]?)(?:[A-Za-zΩ]+)?$/i)
+    if (!match) return NaN
+    const scale: Record<string, number> = { '': 1, k: 1e3, K: 1e3, M: 1e6, meg: 1e6, m: 1e-3, u: 1e-6, 'µ': 1e-6, n: 1e-9, p: 1e-12 }
+    return Number(match[1]) * (scale[match[2]] ?? 1)
+  }
+  const rows = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#') && !line.startsWith('*'))
+  let source: { kind: 'dc' | 'ac'; value: number; frequency: number; label: string } | null = null
+  const parts: PresetPart[] = []
+  for (const row of rows) {
+    const fields = row.replace(/,/g, ' ').split(/\s+/)
+    const [label, type, valueText, frequencyText] = fields
+    const kind = type?.toLowerCase()
+    if (['source', 'dc', 'voltage', 'ac-source', 'ac'].includes(kind)) {
+      const value = readValue(valueText ?? '')
+      if (!Number.isFinite(value) || value <= 0 || source) throw new Error('Text import needs one source line, for example: V1 source 9V or VAC1 ac 12V 60Hz.')
+      source = { kind: kind === 'ac' || kind === 'ac-source' ? 'ac' : 'dc', value, frequency: readValue(frequencyText ?? '60Hz'), label }
+      continue
+    }
+    const kinds: Record<string, PresetPart['kind']> = { resistor: 'resistor', r: 'resistor', capacitor: 'capacitor', c: 'capacitor', inductor: 'inductor', l: 'inductor', diode: 'diode', d: 'diode', switch: 'switch', s: 'switch' }
+    const componentKind = kinds[kind?.replace(/\d+$/, '') ?? ''] ?? kinds[kind ?? '']
+    if (!componentKind) { if (/^(ozoo|circuit|#|\.)/i.test(row)) continue; throw new Error(`Unknown component in text import: ${label ?? row}`) }
+    const value = componentKind === 'switch' && !valueText ? 0 : readValue(valueText ?? '')
+    if (!Number.isFinite(value) || (componentKind !== 'switch' && value <= 0)) throw new Error(`Check the value on line: ${row}`)
+    parts.push({ kind: componentKind, value, label })
+  }
+  if (!source || !parts.length) throw new Error('No circuit found. Add a source and at least one component. Example lines: V1 source 9V, R1 resistor 1kΩ.')
+  return buildPresetCircuit({ category: 'Imported', name: 'Text circuit', description: 'Imported from a component list', source: source.kind, voltage: source.value, frequency: source.frequency, parts })
+}
 function loadCircuit(): Circuit {
   try {
     const value = JSON.parse(localStorage.getItem('ozoo:circuit') ?? 'null')
@@ -271,6 +307,7 @@ function componentTracePath(reading: Reading, simulation: Simulation, current = 
 }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
+const constrainWirePoint = (origin: Point, target: Point): Point => Math.abs(target.x - origin.x) >= Math.abs(target.y - origin.y) ? { x: target.x, y: origin.y } : { x: origin.x, y: target.y }
 const nearestPointOnSegment = (point: Point, a: Point, b: Point) => {
   const dx = b.x - a.x, dy = b.y - a.y
   const lengthSquared = dx * dx + dy * dy
@@ -337,6 +374,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const [options, setOptions] = useState<CircuitOptions>(() => { try { return { ...defaultCircuitOptions, ...JSON.parse(localStorage.getItem('ozoo:circuit-options') ?? '{}') } } catch { return defaultCircuitOptions } })
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
+  const [hasRecovery, setHasRecovery] = useState(() => { try { return !!localStorage.getItem('ozoo:circuit-recovery') } catch { return false } })
   const [circuitSearch, setCircuitSearch] = useState('')
   const toggleOption = (key: keyof CircuitOptions) => setOptions((current) => ({ ...current, [key]: !current[key] }))
   const [simulation, setSimulation] = useState<Simulation | null>(null)
@@ -412,7 +451,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     })
     setSelectedPart(snap.partId); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Component snapped to wire and connected.'); setWireSnapPreview(null)
   }
-  useEffect(() => { try { localStorage.setItem('ozoo:circuit', JSON.stringify(circuit)) } catch {} }, [circuit])
+  useEffect(() => { try { const next = JSON.stringify(circuit); const previous = localStorage.getItem('ozoo:circuit'); if (previous && previous !== next) { localStorage.setItem('ozoo:circuit-recovery', previous); setHasRecovery(true) } localStorage.setItem('ozoo:circuit', next) } catch {} }, [circuit])
   useEffect(() => { try { localStorage.setItem('ozoo:circuit-options', JSON.stringify(options)) } catch {} }, [options])
   useEffect(() => {
     if (historyAction.current) { historyAction.current = false; lastCircuit.current = circuit; return }
@@ -474,7 +513,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const handleCanvasPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.button !== 0 || event.target !== event.currentTarget) return
     if (wireStart) {
-      const point = screenPoint(event)
+      const raw = screenPoint(event), origin = wirePoints.at(-1) ?? pinLookup[wireStart]
+      const point = event.shiftKey && origin ? constrainWirePoint(origin, raw) : raw
       setWirePoints((current) => [...current, point])
       setWireCursor(point)
       setError('Bend added. Click to add another bend or select a pin to finish the wire.')
@@ -632,21 +672,31 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     if (found) { setSelectedPart(found.id); setSelectedParts([]); setViewCenter({ x: found.x, y: found.y }); setZoom(1.5); setError('Found ' + found.label + '.') }
     else setError('No component matched “' + findQuery + '”.')
   }
-  const saveDesign = () => {
+  const saveDesign = (name = 'ozoo-circuit', extension = '.json', mime = 'application/json') => {
     const payload = JSON.stringify({ format: 'ozoo-circuit', version: 1, parts: circuit.parts, wires: circuit.wires, drawings: circuit.drawings ?? [] }, null, 2)
-    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' })), link = document.createElement('a')
-    link.href = url; link.download = 'ozoo-circuit.json'; link.click(); URL.revokeObjectURL(url)
+    const url = URL.createObjectURL(new Blob([payload], { type: mime })), link = document.createElement('a')
+    link.href = url; link.download = name.replace(/[^\w.-]+/g, '-').replace(/\.(json|txt)$/i, '') + extension; link.click(); URL.revokeObjectURL(url)
   }
   const importDesign = async (event: ChangeEvent<HTMLInputElement>) => {
     if (options.disableEditing) { event.target.value = ''; return }
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const data = JSON.parse(await file.text()) as Circuit & { format?: string; version?: number }
+      const text = await file.text()
+      const data = (file.name.toLowerCase().endsWith('.txt') ? parseCircuitText(text) : JSON.parse(text)) as Circuit & { format?: string; version?: number }
       if (!Array.isArray(data.parts) || !Array.isArray(data.wires) || data.parts.some((part) => !part.id || !part.kind || !Number.isFinite(part.x) || !Number.isFinite(part.y)) || data.wires.some((wire) => !wire.from || !wire.to)) throw new Error('This file is not a valid circuit design.')
       setCircuit({ parts: data.parts, wires: data.wires, drawings: Array.isArray(data.drawings) ? data.drawings : [] }); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Circuit design opened.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open this circuit file.') }
     event.target.value = ''
+  }
+  const recoverAutoSave = () => {
+    try {
+      const saved = localStorage.getItem('ozoo:circuit-recovery')
+      if (!saved) { setError('No earlier autosave is available.'); return }
+      const data = JSON.parse(saved) as Circuit
+      if (!Array.isArray(data.parts) || !Array.isArray(data.wires)) throw new Error('The recovery copy is invalid.')
+      setCircuit({ ...data, drawings: Array.isArray(data.drawings) ? data.drawings : [] }); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setSimulation(null); setError('Recovered the previous autosave.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to recover the previous autosave.') }
   }
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -686,6 +736,54 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' })
     const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'ozoo-circuit.svg'; link.click(); URL.revokeObjectURL(url)
   }
+  const exportCircuitText = () => saveDesign('ozoo-circuit', '.txt', 'text/plain')
+  const getCircuitPng = async () => {
+    const svg = svgRef.current
+    if (!svg) throw new Error('The circuit canvas is not ready yet.')
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(W)); clone.setAttribute('height', String(H)); clone.style.backgroundColor = options.whiteBackground ? '#fff' : '#f8faf9'
+    const sourceElements = [svg, ...Array.from(svg.querySelectorAll('*'))], cloneElements = [clone, ...Array.from(clone.querySelectorAll('*'))]
+    const cssProps = ['stroke', 'fill', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'color']
+    sourceElements.forEach((source, index) => { const target = cloneElements[index] as SVGElement | undefined; if (!target) return; const style = getComputedStyle(source); cssProps.forEach((prop) => target.style.setProperty(prop, style.getPropertyValue(prop))); target.style.setProperty('animation', 'none') })
+    clone.querySelectorAll('.wire-hit,.pin-hit,.wire-handle,.drawing-selection-frame,.wire-snap-indicator').forEach((node) => node.remove())
+    const svgBlob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+    try {
+      const image = new Image()
+      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Unable to render the circuit image.')); image.src = url })
+      const canvas = document.createElement('canvas'); canvas.width = W * 2; canvas.height = H * 2
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Image export is not supported by this browser.')
+      context.fillStyle = options.whiteBackground ? '#fff' : '#f8faf9'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Unable to create the PNG image.')), 'image/png'))
+    } finally { URL.revokeObjectURL(url) }
+  }
+  const saveAsImage = async () => {
+    try { const blob = await getCircuitPng(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'ozoo-circuit.png'; link.click(); URL.revokeObjectURL(url); setError('Circuit image downloaded.') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to save the circuit image.') }
+  }
+  const copyCircuitImage = async () => {
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('Image clipboard is not supported here. Use Save As Image instead.')
+      const blob = await getCircuitPng(); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); setError('Circuit image copied to clipboard.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to copy the circuit image.') }
+  }
+  const toggleFullscreen = async () => {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen() }
+    catch { setError('Fullscreen mode is not available in this browser.') }
+  }
+  useEffect(() => {
+    const fileShortcuts = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!(event.ctrlKey || event.metaKey) || target?.closest('input,textarea,select,[contenteditable="true"]')) return
+      const key = event.key.toLowerCase()
+      if (key === 'o') { event.preventDefault(); if (!options.disableEditing) designFileInput.current?.click() }
+      else if (key === 's') { event.preventDefault(); const name = window.prompt('Save circuit as:', 'ozoo-circuit'); if (name !== null) saveDesign(name) }
+      else if (key === 'p') { event.preventDefault(); window.print() }
+    }
+    window.addEventListener('keydown', fileShortcuts)
+    return () => window.removeEventListener('keydown', fileShortcuts)
+  }, [options.disableEditing, circuit])
   return <main className="circuit-workspace" data-theme={colorTheme} data-white-background={options.whiteBackground}>
     <header className="circuit-topbar">
       <button className="circuit-back" onClick={onBack}>← <span>Simulator</span></button>
@@ -695,7 +793,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Drag parts into place, connect terminals, and watch current and voltage.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
     <section className="circuit-layout">
       <nav className="circuit-menubar" aria-label="Circuit menus" data-history-version={historyVersion}>
-        <div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>New design</button><button role="menuitem" disabled={options.disableEditing} onClick={() => designFileInput.current?.click()}>Open design…</button><button role="menuitem" onClick={() => { saveDesign(); setOpenMenu(null) }}>Download design <kbd>JSON</kbd></button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>Export schematic <kbd>SVG</kbd></button><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => { setCircuit(exampleCircuit()); setSelectedPart(null); setSelectedParts([]); setSimulation(null); setError(''); setOpenMenu(null) }}>Load example circuit</button></div>}</div>
+<div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover circuit-file-popover" role="menu"><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>＋ New Blank Circuit</button><button role="menuitem" disabled={options.disableEditing} onClick={() => designFileInput.current?.click()}>▱ Open File… <kbd>Ctrl+O</kbd></button><button role="menuitem" disabled={options.disableEditing} title="Choose an Ozoo JSON or text file with lines such as V1 source 9V and R1 resistor 1kΩ." onClick={() => designFileInput.current?.click()}>▧ Import From Text…</button><button role="menuitem" disabled title="Dropbox import is not connected yet.">◈ Import From Dropbox…</button><hr /><button role="menuitem" onClick={() => { const name = window.prompt('Save circuit as:', 'ozoo-circuit'); if (name !== null) saveDesign(name); setOpenMenu(null) }}>▣ Save As… <kbd>Ctrl+S</kbd></button><button role="menuitem" disabled title="Shareable circuit links require online circuit storage, which is not connected yet.">↗ Export As Link…</button><button role="menuitem" onClick={() => { exportCircuitText(); setOpenMenu(null) }}>▤ Export As Text…</button><button role="menuitem" onClick={() => { void saveAsImage(); setOpenMenu(null) }}>▧ Save As Image…</button><button role="menuitem" onClick={() => { void copyCircuitImage(); setOpenMenu(null) }}>▧ Copy Circuit Image to Clipboard</button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>▧ Save As SVG…</button><button role="menuitem" disabled title="Subcircuits are not supported by the current circuit solver.">▥ Create Subcircuit…</button><hr /><button role="menuitem" disabled={circuit.parts.some((part) => part.kind === 'ac-source')} title={circuit.parts.some((part) => part.kind === 'ac-source') ? 'Remove the AC source to run DC analysis.' : 'Solve and show the DC operating point.'} onClick={() => { runSimulation(); setOpenMenu(null) }}>⌁ Find DC Operating Point</button><button role="menuitem" disabled={!hasRecovery || options.disableEditing} title={hasRecovery ? 'Restore the circuit saved before the latest changes.' : 'No earlier autosave is available.'} onClick={() => { recoverAutoSave(); setOpenMenu(null) }}>↶ Recover Auto-Save</button><button role="menuitem" onClick={() => { window.print(); setOpenMenu(null) }}>▤ Print… <kbd>Ctrl+P</kbd></button><button role="menuitem" onClick={() => { void toggleFullscreen(); setOpenMenu(null) }}>⛶ Toggle Full Screen</button><hr /><button role="menuitem" onClick={() => { setShowAbout(true); setOpenMenu(null) }}>ⓘ About…</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'edit' ? 'open' : ''} aria-expanded={openMenu === 'edit'} onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}>Edit <span>⌄</span></button>{openMenu === 'edit' && <div className="circuit-menu-popover circuit-edit-popover" role="menu"><button role="menuitem" disabled={!undoStack.current.length} onClick={() => { undoCircuit(); setOpenMenu(null) }}>↶ Undo <kbd>Ctrl+Z</kbd></button><button role="menuitem" disabled={!redoStack.current.length} onClick={() => { redoCircuit(); setOpenMenu(null) }}>↷ Redo <kbd>Ctrl+Y</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); deleteSelection(); setOpenMenu(null) }}>✂ Cut <kbd>Ctrl+X</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); setOpenMenu(null) }}>▢ Copy <kbd>Ctrl+C</kbd></button><button role="menuitem" disabled={!clipboard.parts.length} onClick={() => { pasteParts(clipboard.parts, clipboard.wires); setOpenMenu(null) }}>▣ Paste <kbd>Ctrl+V</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { duplicateSelection(); setOpenMenu(null) }}>▧ Duplicate <kbd>Ctrl+D</kbd></button><button role="menuitem" onClick={() => { selectAll(); setOpenMenu(null) }}>✣ Select all <kbd>Ctrl+A</kbd></button><hr /><label className="circuit-menu-search"><span>Find component <kbd>/</kbd></span><div><input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { findComponent(); setOpenMenu(null) } }} placeholder="Name or type…" /><button onClick={() => { findComponent(); setOpenMenu(null) }}>Find</button></div></label><button role="menuitem" onClick={() => { centerCircuit(); setOpenMenu(null) }}>⌖ Center circuit <kbd>Home</kbd></button><button role="menuitem" onClick={() => { resetZoom(); setOpenMenu(null) }}>◎ Zoom 100% <kbd>0</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1.2); setOpenMenu(null) }}>⊕ Zoom in <kbd>+</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1 / 1.2); setOpenMenu(null) }}>⊖ Zoom out <kbd>−</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorX'); setOpenMenu(null) }}>↔ Mirror X</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorY'); setOpenMenu(null) }}>↕ Mirror Y</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(-90); setOpenMenu(null) }}>↶ Rotate CCW</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(90); setOpenMenu(null) }}>↻ Rotate CW</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'tools' ? 'open' : ''} aria-expanded={openMenu === 'tools'} onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}>Tools <span>⌄</span></button>{openMenu === 'tools' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" aria-pressed={dmmActive} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setOpenMenu(null) }}>▦ {dmmActive ? 'Close multimeter' : 'Digital multimeter'}</button><button role="menuitem" disabled={options.disableEditing} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.'); setOpenMenu(null) }}>⌁ Wire tool</button><button role="menuitemcheckbox" aria-checked={gridVisible} onClick={() => setGridVisible((visible) => !visible)}>▧ {gridVisible ? 'Hide grid' : 'Show grid'}</button></div>}</div>
 <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place & Draw <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-draw-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div><div className="circuit-place-draw-grid">{(['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} disabled={options.disableEditing} onClick={() => { setPlacement(kind); setDrawMode(null); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div><hr /><div className="circuit-menu-label">ANNOTATIONS & PICTURES</div><div className="circuit-place-draw-annotations"><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('image')}>▧ Insert image…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('text')}>T Add text label…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('arrow')}>↗ Add arrow</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('rectangle')}>▱ Add rectangle</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('ellipse')}>◯ Add ellipse</button></div></div>}</div>
@@ -706,7 +804,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           <button role="menuitem" disabled title="Digital logic-gate parts are not available in this simulator yet.">IEC Gates <small>coming later</small></button><hr />
           <button role="menuitem" onClick={() => { setShowShortcuts(true); setOpenMenu(null) }}>⌨ Shortcuts…</button><button role="menuitem" onClick={() => { setShowOtherOptions(true); setOpenMenu(null) }}>Other Options…</button>
         </div>}</div>
-        <input ref={designFileInput} type="file" accept=".json,application/json" hidden onChange={importDesign} /><input ref={pictureFileInput} type="file" accept="image/*" hidden onChange={importPicture} />
+        <input ref={designFileInput} type="file" accept=".json,.txt,application/json,text/plain" hidden onChange={importDesign} /><input ref={pictureFileInput} type="file" accept="image/*" hidden onChange={importPicture} />
       </nav>
       {options.toolbar && <section className="circuit-tools" aria-label="Circuit tools">
         <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit} disabled={options.disableEditing}><span className="palette-symbol">＋</span><span>New</span></button></div>
@@ -725,8 +823,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           setCircuit((current) => ({ ...current, parts: current.parts.map((item) => item.id === part.id ? { ...item, value: next } : item) }))
         }} onPointerDown={handleCanvasPointerDown} onPointerMove={(event) => {
           const point = screenPoint(event)
-          if (wireDrag.current) { const state = wireDrag.current; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(point) }
-          else if (wireStart) setWireCursor(point)
+          if (wireDrag.current) { const state = wireDrag.current, origin = pinLookup[state.from], wirePoint = event.shiftKey && origin ? constrainWirePoint(origin, point) : point; if (Math.hypot(point.x - state.x, point.y - state.y) > 6) state.moved = true; setWireCursor(wirePoint) }
+          else if (wireStart) { const origin = wirePoints.at(-1) ?? pinLookup[wireStart]; setWireCursor(event.shiftKey && origin ? constrainWirePoint(origin, point) : point) }
           if (drawingDrag) { setCircuit((current) => ({ ...current, drawings: (current.drawings ?? []).map((item) => item.id === drawingDrag.id ? { ...item, x: point.x - drawingDrag.dx, y: point.y - drawingDrag.dy } : item) })); return }
           if (dragPoint) { setWireSnapPreview(null); setCircuit((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === dragPoint.wireId ? { ...wire, points: (wire.points ?? []).map((item, index) => index === dragPoint.index ? point : item) } : wire) })); return }
           if (!drag) return
@@ -744,7 +842,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
             if (state.moved && endpoint && endpoint !== state.from) {
               setCircuit((value) => ({ ...value, wires: [...value.wires, { id: makeId(), from: state.from, to: endpoint }] }))
               setWireStart(null); setWireCursor(null); setWirePoints([]); setSimulation(null); setError('Wire connected.')
-            } else if (state.moved) { const point = screenPoint(event); setWirePoints((value) => [...value, point]); setWireCursor(point) }
+            } else if (state.moved) { const raw = screenPoint(event), origin = pinLookup[state.from], point = event.shiftKey && origin ? constrainWirePoint(origin, raw) : raw; setWirePoints((value) => [...value, point]); setWireCursor(point) }
             suppressPinClick.current = true; window.setTimeout(() => { suppressPinClick.current = false }, 0); wireDrag.current = null
           }
           if (drag && wireSnapPreview) attachPartToWire(wireSnapPreview)
@@ -813,6 +911,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         <div className="circuit-library-note"><strong>Simulator model</strong><p>DC mode solves steady state; AC mode uses RMS phasors for resistors, capacitors, inductors, switches, and sources. AC diode analysis and time-domain transients are not modeled.</p></div>
       </aside>
     </section>
-    {(showShortcuts || showOtherOptions) && <div className="circuit-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setShowShortcuts(false); setShowOtherOptions(false) } }}><section className="circuit-options-dialog" role="dialog" aria-modal="true" aria-labelledby="circuit-options-dialog-title"><button className="circuit-dialog-close" aria-label="Close dialog" onClick={() => { setShowShortcuts(false); setShowOtherOptions(false) }}>×</button><h2 id="circuit-options-dialog-title">{showShortcuts ? 'Keyboard shortcuts' : 'Other options'}</h2>{showShortcuts ? <ul><li><kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo</li><li><kbd>Ctrl</kbd> + <kbd>Y</kbd> Redo</li><li><kbd>Ctrl</kbd> + <kbd>D</kbd> Duplicate</li><li><kbd>Delete</kbd> Remove selection</li><li><kbd>0</kbd> Reset zoom</li><li><kbd>+</kbd> / <kbd>−</kbd> Zoom in or out</li><li><kbd>Home</kbd> Center the circuit</li><li><kbd>Esc</kbd> Cancel current action</li></ul> : <><p>These display and editing preferences are saved in this browser. Circuit designs and uploaded pictures are also stored locally on this device.</p><button className="circuit-reset-options" onClick={() => setOptions(defaultCircuitOptions)}>Restore default options</button></>}</section></div>}
+{(showShortcuts || showOtherOptions || showAbout) && <div className="circuit-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setShowShortcuts(false); setShowOtherOptions(false); setShowAbout(false) } }}><section className="circuit-options-dialog" role="dialog" aria-modal="true" aria-labelledby="circuit-options-dialog-title"><button className="circuit-dialog-close" aria-label="Close dialog" onClick={() => { setShowShortcuts(false); setShowOtherOptions(false); setShowAbout(false) }}>×</button><h2 id="circuit-options-dialog-title">{showShortcuts ? 'Keyboard shortcuts' : showAbout ? 'About Circuit Studio' : 'Other options'}</h2>{showShortcuts ? <ul><li><kbd>Ctrl</kbd> + <kbd>O</kbd> Open circuit file</li><li><kbd>Ctrl</kbd> + <kbd>S</kbd> Save circuit as</li><li><kbd>Ctrl</kbd> + <kbd>P</kbd> Print circuit</li><li><kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo</li><li><kbd>Ctrl</kbd> + <kbd>Y</kbd> Redo</li><li><kbd>Ctrl</kbd> + <kbd>D</kbd> Duplicate</li><li><kbd>Delete</kbd> Remove selection</li><li><kbd>Shift</kbd> while routing a wire Constrain its direction</li><li><kbd>0</kbd> Reset zoom</li><li><kbd>Home</kbd> Center the circuit</li><li><kbd>Esc</kbd> Cancel current action</li></ul> : showAbout ? <p>OzooNotes Circuit Studio lets you sketch and analyze basic DC and AC circuits. Circuit designs are autosaved in this browser. Current analysis supports sources, resistors, capacitors, inductors, switches, diodes in DC mode, and ground.</p> : <><p>These display and editing preferences are saved in this browser. Circuit designs and uploaded pictures are also stored locally on this device.</p><button className="circuit-reset-options" onClick={() => setOptions(defaultCircuitOptions)}>Restore default options</button></>}</section></div>}
   </main>
 }
+
