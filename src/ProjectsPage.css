@@ -125,6 +125,7 @@
 }
 .project-format-toolbar button {min-width:29px;height:28px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--p-ink);font-size:10px;cursor:pointer}
 .project-format-toolbar button:hover {border-color:var(--p-line);background:var(--p-panel);color:var(--p-accent)}
+.project-paragraph-group select {height:28px;max-width:125px;padding:0 6px;border:1px solid var(--p-line);border-radius:6px;background:var(--p-panel);color:var(--p-ink);font:inherit;font-size:10px}
 .project-format-divider {width:1px;height:21px;margin:0 4px;background:var(--p-line)}
 .project-rich-editor {min-height:max(620px,72vh);padding:30px clamp(18px,4vw,54px);outline:0;color:var(--p-ink);font-size:14px;line-height:1.8}
 .project-rich-editor:empty::before {content:attr(data-placeholder);color:var(--p-muted);opacity:.68;pointer-events:none}
@@ -132,6 +133,10 @@
 .project-rich-editor blockquote {margin:12px 0;padding:5px 12px;border-left:3px solid var(--p-accent);color:var(--p-muted)}
 .project-rich-editor a {color:var(--p-accent)}
 .project-rich-editor img {max-width:100%;height:auto}
+.project-rich-editor pre {overflow-x:auto;margin:14px 0;padding:14px 16px;border:1px solid var(--p-line);border-radius:9px;background:var(--p-surface);color:var(--p-ink);font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;tab-size:2}
+.project-rich-editor pre code {font:inherit}
+.project-editor-status {max-width:980px;display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px auto 0;padding:8px 2px;color:var(--p-muted);font-size:10px}
+.project-editor-status span+span {padding-left:15px;border-left:1px solid var(--p-line)}
 .project-attachments {max-width:1000px;margin:28px auto 10px;padding-top:22px;border-top:1px solid var(--p-line)}
 .project-attachments-heading {display:flex;align-items:flex-end;justify-content:space-between;gap:15px}
 .project-attachments-heading h2 {margin:6px 0 4px;font-size:18px;letter-spacing:-.04em}
