@@ -126,7 +126,7 @@
 .project-format-toolbar button {min-width:29px;height:28px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--p-ink);font-size:10px;cursor:pointer}
 .project-format-toolbar button:hover {border-color:var(--p-line);background:var(--p-panel);color:var(--p-accent)}
 .project-format-divider {width:1px;height:21px;margin:0 4px;background:var(--p-line)}
-.project-rich-editor {min-height:340px;padding:30px clamp(18px,4vw,54px);outline:0;color:var(--p-ink);font-size:14px;line-height:1.8}
+.project-rich-editor {min-height:max(620px,72vh);padding:30px clamp(18px,4vw,54px);outline:0;color:var(--p-ink);font-size:14px;line-height:1.8}
 .project-rich-editor:empty::before {content:attr(data-placeholder);color:var(--p-muted);opacity:.68;pointer-events:none}
 .project-rich-editor h1,.project-rich-editor h2,.project-rich-editor h3 {margin:1em 0 .45em;line-height:1.3;letter-spacing:-.03em}
 .project-rich-editor blockquote {margin:12px 0;padding:5px 12px;border-left:3px solid var(--p-accent);color:var(--p-muted)}
