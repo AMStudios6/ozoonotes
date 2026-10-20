@@ -82,4 +82,52 @@ Projects and simulator workspaces stay in their own pages. Their URL keeps the c
 
 ## 🎨 Templates that help you begin
 
-Try a coding-notes layout to put theory beside code, a Cornell page for class notes, a weekly planner to map study sessions, or a mood board to collect 
+Try a coding-notes layout to put theory beside code, a Cornell page for class notes, a weekly planner to map study sessions, or a mood board to collect inspiration. Teachers can start with a lesson plan, worksheet, rubric, or seating chart. Templates are starting points, so you can still draw, type, and rearrange the page.
+
+## 🧪 Explore the simulators
+
+Open **Simulator** on the home page to enter a focused workspace for a subject.
+
+### 📈 Graphing
+
+Plot formulas on an infinite coordinate plane. Keep several expressions in a list, add more as you explore, and pan or zoom to follow the graph.
+
+### 💻 Coding
+
+Choose C++, Python, Java, or Web.
+
+- Write and run C++, Python, and Java programs.
+- Upload a `.cpp` file to work with existing code.
+- Use syntax highlighting and automatic closing for common brackets and quotation marks.
+- Build HTML, CSS, and JavaScript together with a live web preview.
+- Add local images and other project files to web projects.
+
+### ⚡ Electronics
+
+Place voltage sources, resistors, switches, and ground; connect pins with routed wires and bend points; then run a supported DC circuit simulation. Rotate or mirror components and use the digital multimeter to measure voltage, current, and resistance.
+
+### ∫ Calculus
+
+Enter a differentiation or integration expression and view the result in its own workspace.
+
+## 📤 Export, save, and take your work with you
+
+Export pages or a whole board as **PDF, PNG, or SVG**. Choose pages for export where supported, and use image formats for an infinite canvas. Download an OzooNotes file to keep a portable copy or move a board to another device.
+
+Boards save automatically in the browser on the device you are using. Browser storage belongs to that browser profile, so download a separate copy for backup. The Windows app keeps boards in its own app storage.
+
+## ⌨️ Quick actions when you need them
+
+Open the keyboard-shortcuts guide from the note’s three-line menu or custom right-click menu. It covers undo, redo, select all, copy, cut, paste, and delete, and points to the toolbar and page controls for other actions. Right-click also offers context-sensitive options when they are available.
+
+## 💜 OzooNotes on Windows
+
+The Windows app opens OzooNotes in its own window and loads the live website, so published site updates appear when the app launches with an internet connection.
+
+<a href="https://github.com/AMStudios6/ozoonotes/actions/workflows/build-desktop.yml"><strong>⬇️ Download the latest Windows build</strong></a>
+
+On the build page, open the newest successful run and download the **OzooNotes-Windows** artifact.
+
+## ℹ️ A quick note
+
+OzooNotes is designed for visual note-taking, learning, teaching, and lightweight experimentation. The electronics simulator focuses on supported resistive DC circuits; it is not a full engineering package. Download a portable OzooNotes file or export a PDF when you need a copy outside the browser or app profile.

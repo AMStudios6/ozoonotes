@@ -1363,14 +1363,3 @@
 .profile-plan-card small { color:var(--muted); font-size:10px; line-height:1.4; }
 .profile-plan-pro { background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
 .profile-plan-normal { background:var(--panel); color:var(--ink); }
-.classroom-access-panel{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
-.classroom-access-panel h3{margin:0 0 6px;font-size:14px}
-.classroom-access-panel>p{margin:0 0 12px;color:var(--muted);font-size:11px;line-height:1.5}
-.classroom-link-list{display:grid;gap:6px;margin-top:12px}
-.classroom-link-list article{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel-raised)}
-.classroom-link-list article>span:first-child{display:grid;gap:3px;min-width:0}
-.classroom-link-list strong{font-size:11px}
-.classroom-link-list small{color:var(--muted);font-size:9px}
-.classroom-link-list button{padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-size:10px;cursor:pointer}
-.classroom-link-list button:hover{border-color:var(--accent);color:var(--accent)}
-.classroom-link-list article>span:last-child{display:flex;gap:5px}
