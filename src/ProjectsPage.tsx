@@ -96,8 +96,16 @@ function sanitizeHtml(value: string) {
       return fragment
     }
     const clean = document.createElement(node.tagName.toLowerCase())
-    if (node.tagName === 'SPAN' && node.classList.contains('project-equation')) {
-      clean.className = node.classList.contains('project-fraction') ? 'project-equation project-fraction' : 'project-equation'
+    if (node.tagName === 'SPAN') {
+      const classes = []
+      if (node.classList.contains('project-equation')) classes.push('project-equation')
+      if (node.classList.contains('project-fraction')) classes.push('project-fraction')
+      if (node.classList.contains('project-math-slot')) {
+        classes.push('project-math-slot')
+        clean.setAttribute('contenteditable', 'true')
+        clean.setAttribute('tabindex', '0')
+      }
+      clean.className = classes.join(' ')
     }
     if (['SPAN', 'P', 'DIV'].includes(node.tagName)) {
       const style = node.style
@@ -263,9 +271,15 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
   const insertEquation = (equation: string) => {
     if (!equation.trim()) return
-    insertHtml(`<span class="project-equation">${escapeHtml(equation.trim())}</span>&nbsp;`)
+    let markup = escapeHtml(equation.trim())
+    markup = markup.replace(/\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
+    markup = markup.replace(/(?<![\\w/])([A-Za-z0-9]+)\\/([A-Za-z0-9]+)(?![\\w/])/g, (_match, numerator: string, denominator: string) => `<span class="project-equation project-fraction"><span class="project-math-slot">${numerator}</span><span class="project-math-slot">${denominator}</span></span>`)
+    markup = markup.replace(/([A-Za-z0-9]+)\\^(?:\\{([^{}]+)\\}|([A-Za-z0-9]+))/g, (_match, base: string, grouped: string | undefined, simple: string | undefined) => `${base}<sup>${grouped ?? simple}</sup>`)
+    markup = markup.replace(/([A-Za-z0-9]+)_((?:\\{[^{}]+\\})|(?:[A-Za-z0-9]+))/g, (_match, base: string, value: string) => `${base}<sub>${value.startsWith('{') ? value.slice(1,-1) : value}</sub>`)
+    insertHtml(`<span class="project-equation">${markup}</span>&nbsp;`)
   }
-  const insertFraction = () => insertHtml('<span class="project-equation project-fraction"><span>□</span><span>□</span></span>&nbsp;')
+  const insertFraction = () => insertHtml('<span class="project-equation project-fraction"><span class="project-math-slot"></span><span class="project-math-slot"></span></span>&nbsp;')
+  const hasMathSyntax = (value: string) => /\\\\frac\\{[^{}]+\\}\\{[^{}]+\\}|\\^[{]?[A-Za-z0-9]+|_[{]?[A-Za-z0-9]+|[A-Za-z0-9]+\\/[A-Za-z0-9]+/.test(value)
   const insertTable = () => {
     const rows = Math.min(12, Math.max(1, Number(window.prompt('How many table rows?', '3')) || 0))
     const columns = Math.min(8, Math.max(1, Number(window.prompt('How many columns?', '3')) || 0))
@@ -450,7 +464,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       </> : <>
         <div className="project-math-entry">
           <label htmlFor="project-equation-input">Equation</label>
-          <input id="project-equation-input" value={equationDraft} onChange={(event) => setEquationDraft(event.target.value)} onMouseDown={rememberSelection} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') } }} placeholder="Type an equation, e.g. y = mx + b" />
+          <input id="project-equation-input" value={equationDraft} onChange={(event) => setEquationDraft(event.target.value)} onMouseDown={rememberSelection} onKeyDown={(event) => { if (event.key === 'Enter' || (event.key === ' ' && hasMathSyntax(equationDraft))) { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') } }} placeholder="Type an equation, e.g. 1/2 or x^2" />
           <button type="button" onMouseDown={(event) => { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') }}>Insert</button>
         </div>
         <span className="project-format-divider" />
