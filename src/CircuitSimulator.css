@@ -180,5 +180,14 @@
 .circuit-preset-groups details>div>button strong{font-size:10px;font-weight:650}
 .circuit-preset-groups details>div>button small,.circuit-preset-empty{margin:0;color:var(--c-muted);font-size:9px;line-height:1.35}
 .circuit-preset-empty{padding:9px}
+.circuit-place-draw-popover{width:min(330px,calc(100vw - 24px))}
+.circuit-place-draw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;padding:0 4px}
+.circuit-place-draw-grid>button{display:flex;align-items:center;gap:7px;min-width:0;min-height:37px;padding:4px 6px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--c-ink);font-size:10px;text-align:left;cursor:pointer}
+.circuit-place-draw-grid>button:hover:not(:disabled){background:color-mix(in srgb,var(--c-accent) 10%,var(--c-panel));border-color:var(--c-line)}
+.circuit-place-draw-grid>button:disabled,.circuit-place-draw-annotations>button:disabled{opacity:.42;cursor:not-allowed}
+.circuit-place-draw-grid .palette-symbol{width:27px;height:27px;flex:none}
+.circuit-place-draw-annotations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
+.circuit-place-draw-annotations>button{min-height:32px;font-size:10px}
 @media(max-width:680px){.circuit-presets-popover{position:fixed;top:122px;left:10px;max-width:calc(100vw - 20px)}}
+@media(max-width:680px){.circuit-place-draw-popover{position:fixed;top:122px;left:10px;max-width:calc(100vw - 20px)}}
 
