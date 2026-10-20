@@ -155,7 +155,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const imageInput = useRef<HTMLInputElement>(null)
   const updateCounts = () => {
     const text = editorRef.current?.innerText ?? ''
-    setWordCount(text.trim() ? text.trim().split(/\\s+/).length : 0)
+    setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0)
     setCharacterCount(text.length)
   }
   useEffect(() => {
