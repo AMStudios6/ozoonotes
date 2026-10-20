@@ -84,7 +84,7 @@ async function removeProject(id: string) {
   })
 }
 
-const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
+const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
 function sanitizeHtml(value: string) {
   const parsed = new DOMParser().parseFromString(value, 'text/html')
   const cleanNode = (node: Node): Node | null => {
@@ -150,16 +150,29 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
   const savedSelection = useRef<Range | null>(null)
   const [showMarks, setShowMarks] = useState(false)
   const [ribbonTab, setRibbonTab] = useState<'home' | 'insert'>('home')
+  const [wordCount, setWordCount] = useState(0)
+  const [characterCount, setCharacterCount] = useState(0)
   const imageInput = useRef<HTMLInputElement>(null)
+  const updateCounts = () => {
+    const text = editorRef.current?.innerText ?? ''
+    setWordCount(text.trim() ? text.trim().split(/\\s+/).length : 0)
+    setCharacterCount(text.length)
+  }
   useEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
+    if (editorRef.current) {
+      editorRef.current.innerHTML = sanitizeHtml(project.bodyHtml)
+      updateCounts()
+    }
     savedSelection.current = null
     return () => { if (pendingSave.current) clearTimeout(pendingSave.current) }
   }, [project.id])
   const queueSave = () => {
     if (pendingSave.current) clearTimeout(pendingSave.current)
     pendingSave.current = setTimeout(() => {
-      if (editorRef.current) onChange(sanitizeHtml(editorRef.current.innerHTML))
+      if (editorRef.current) {
+        onChange(sanitizeHtml(editorRef.current.innerHTML))
+        updateCounts()
+      }
       pendingSave.current = null
     }, 450)
   }
@@ -370,8 +383,14 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       </div>
       <span className="project-format-divider" />
       <div className="project-ribbon-group project-paragraph-group" aria-label="Paragraph">
+        <select aria-label="Text style" title="Text style" defaultValue="P" onMouseDown={rememberSelection} onChange={(event) => { restoreSelection(); document.execCommand('formatBlock', false, event.target.value); rememberSelection(); queueSave() }}>
+          <option value="P">Normal text</option><option value="H1">Title</option><option value="H2">Heading 1</option><option value="H3">Heading 2</option>
+        </select>
+        <button type="button" title="Undo" aria-label="Undo" onMouseDown={run('undo')}>↶</button>
+        <button type="button" title="Redo" aria-label="Redo" onMouseDown={run('redo')}>↷</button>
         <button type="button" title="Bulleted list" aria-label="Bulleted list" onMouseDown={run('insertUnorderedList')}>• List</button>
         <button type="button" title="Numbered list" aria-label="Numbered list" onMouseDown={run('insertOrderedList')}>1. List</button>
+        <button type="button" title="Add a checklist item" aria-label="Add a checklist item" onMouseDown={(event) => { event.preventDefault(); const task = window.prompt('What do you need to do?', 'New task'); if (task !== null) insertHtml(`<ul><li>☐ ${escapeHtml(task)}</li></ul><p><br></p>`) }}>☐ Task</button>
         <button type="button" title="Decrease indent" aria-label="Decrease indent" onMouseDown={run('outdent')}>⇤</button>
         <button type="button" title="Increase indent" aria-label="Increase indent" onMouseDown={run('indent')}>⇥</button>
         <span className="project-format-divider" />
@@ -405,6 +424,8 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         </div>
         <span className="project-format-divider" />
         <div className="project-ribbon-group project-insert-group" aria-label="Links and text">
+          <button type="button" title="Insert a code snippet" onMouseDown={(event) => { event.preventDefault(); const code = window.prompt('Paste or type a code snippet', '// Your code'); if (code !== null) insertHtml(`<pre><code>${escapeHtml(code)}</code></pre><p><br></p>`) }}>⌘<small>Code</small></button>
+          <button type="button" title="Insert a divider" onMouseDown={(event) => { event.preventDefault(); insertHtml('<hr><p><br></p>') }}>―<small>Divider</small></button>
           <button type="button" title="Insert a video link" onMouseDown={(event) => { event.preventDefault(); insertVideoLink() }}>▶<small>Online Video</small></button>
           <button type="button" title="Link selected text" onMouseDown={addInlineLink}>↗<small>Hyperlink</small></button>
           <button type="button" title="Add a comment" onMouseDown={(event) => { event.preventDefault(); const note = window.prompt('Write a comment or review note'); if (note) insertHtml(`<blockquote><strong>Comment:</strong> ${escapeHtml(note)}</blockquote>`) }}>▤<small>Comment</small></button>
@@ -427,7 +448,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
       aria-label={`Write in ${project.title}`}
       aria-multiline="true"
       data-placeholder="Start writing your project notes… Add headings, explanations, plans, and reflections."
-      onInput={() => { rememberSelection(); queueSave() }}
+      onInput={() => { rememberSelection(); updateCounts(); queueSave() }}
       onKeyUp={rememberSelection}
       onMouseUp={rememberSelection}
       onBlur={() => {
@@ -436,6 +457,7 @@ function RichTextEditor({ project, onChange }: { project: ProjectDocument; onCha
         pendingSave.current = null
       }}
     />
+    <div className="project-editor-status" aria-live="polite"><span>{wordCount.toLocaleString()} words</span><span>{characterCount.toLocaleString()} characters</span><span>About {Math.ceil(wordCount / 200)} min read</span></div>
   </div>
 }
 
