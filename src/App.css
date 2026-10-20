@@ -490,7 +490,16 @@
 .screen-recording-actions {display:flex;gap:7px}.screen-recording-actions button {flex:1;min-width:0;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel-raised);color:var(--ink);font-size:10px;font-weight:700;cursor:pointer}.screen-recording-actions button:hover {border-color:var(--accent);color:var(--accent)}.screen-recording-actions .recording-start {display:flex;align-items:center;justify-content:center;gap:7px;border-color:color-mix(in srgb,#e65353 60%,var(--line));background:color-mix(in srgb,#e65353 12%,var(--panel));color:var(--ink)}.screen-recording-actions .recording-start:hover {border-color:#e65353;color:#e65353}.screen-recording-actions .recording-stop {border-color:#e65353;background:#e65353;color:#fff}.screen-recording-actions .recording-stop:hover {filter:brightness(1.1);color:#fff}
 .screen-recording-error {margin:8px 0;color:#e65353;font-size:10px;line-height:1.45}
 .drawing-style-select {width:100%;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--workspace);color:var(--ink);font-size:11px}.drawing-style-select option {background:var(--panel);color:var(--ink)}
-.library-file-rename {width:100%;padding:9px 13px;border:0;border-bottom:1px solid var(--line);background:var(--panel);color:var(--accent);text-align:right;font-size:12px;font-weight:650;cursor:pointer}.library-file-rename:hover {background:var(--accent-soft)}
+.library-file-settings {width:100%;min-height:36px;display:flex;align-items:center;justify-content:flex-end;gap:7px;padding:6px 12px;border:0;border-bottom:1px solid var(--line);background:var(--panel);color:var(--accent);font-size:12px;font-weight:650;cursor:pointer}
+.library-file-settings:hover {background:var(--accent-soft)}
+.file-settings-current-name {margin:-13px 0 16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--workspace);color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.file-settings-actions {display:flex;gap:8px;margin:0 0 8px}
+.file-settings-actions button {flex:1;min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-raised);color:var(--ink);font-size:11px;font-weight:650;cursor:pointer}
+.file-settings-actions .dialog-create {border-color:var(--accent);background:var(--accent);color:#160e20}
+.file-settings-actions .file-settings-remove {border-color:color-mix(in srgb,#e65353 50%,var(--line));color:#e65353}
+.file-settings-favorite {display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--ink);font-size:12px}
+.file-settings-favorite input {width:16px;height:16px;accent-color:var(--accent)}
+.file-settings-footnote {margin:14px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:850px) {.more-features-trigger {width:36px;justify-content:center;padding:0;font-size:0;gap:0}.more-features-trigger svg:last-child {display:none}.more-features-trigger::after {content:"More";font-size:9px}.more-features-wrap {margin-left:2px}.window-top {gap:7px;padding:0 8px}.file-tabs {gap:2px}.theme-picker select {max-width:88px}}
 @media(max-width:600px) {.more-features-panel {position:fixed;top:58px;right:8px}.more-features-trigger::after {content:""}.more-features-trigger {width:32px;height:32px}.window-top .brand-mark {width:100px}}
 
