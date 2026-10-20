@@ -4,7 +4,8 @@ import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 
 type Kind = 'source' | 'ac-source' | 'resistor' | 'capacitor' | 'inductor' | 'diode' | 'switch' | 'ground' | 'junction'
 type MeterMode = 'voltage' | 'current' | 'resistance'
-type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; frequency?: number; rotation?: number; mirrorX?: boolean; mirrorY?: boolean }
+type DiodeModel = 'silicon' | 'schottky' | 'zener' | 'led'
+type Part = { id: string; kind: Kind; x: number; y: number; value: number; label: string; on: boolean; frequency?: number; rotation?: number; mirrorX?: boolean; mirrorY?: boolean; powerRating?: number; voltageRating?: number; currentRating?: number; diodeModel?: DiodeModel; zenerVoltage?: number; reverseRecoveryNs?: number; junctionCapacitancePf?: number; thermalResistance?: number; maxJunctionTemperature?: number }
 type Point = { x: number; y: number }
 type Wire = { id: string; from: string; to: string; points?: Point[] }
 type WireHandle = { wireId: string; index: number }
@@ -14,10 +15,12 @@ type DrawKind = 'image' | 'text' | 'arrow' | 'rectangle' | 'ellipse'
 type DrawItem = { id: string; kind: DrawKind; x: number; y: number; content?: string; color?: string }
 type CircuitOptions = { showCurrent: boolean; showVoltage: boolean; showPower: boolean; showValues: boolean; smallGrid: boolean; toolbar: boolean; cursorCrosshair: boolean; europeanResistors: boolean; showOhmUnit: boolean; whiteBackground: boolean; conventionalCurrent: boolean; disableEditing: boolean; editValuesWithMouseWheel: boolean }
 type Reading = { id: string; label: string; voltage: number; current: number; power: number; voltagePhase?: number; currentPhase?: number }
-type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; nodePhasors?: Record<string, { re: number; im: number }>; frequency?: number; ac?: boolean; message: string }
+type Simulation = { readings: Reading[]; nodeVoltages: Record<string, number>; nodePhasors?: Record<string, { re: number; im: number }>; frequency?: number; ac?: boolean; message: string; timeDomain?: TransientResult }
+type TransientResult = { times: number[]; nodeVoltages: Record<string, number[]>; partVoltages: Record<string, number[]>; partCurrents: Record<string, number[]>; message: string }
 type Circuit = { parts: Part[]; wires: Wire[]; drawings?: DrawItem[] }
-type PresetPart = { kind: Exclude<Kind, 'ground' | 'junction'>; value: number; label: string }
-type CircuitPreset = { name: string; category: string; description: string; source: 'dc' | 'ac'; voltage: number; frequency?: number; parts: PresetPart[] }
+type PresetPart = { kind: Exclude<Kind, 'ground' | 'junction'>; value: number; label: string; diodeModel?: DiodeModel; zenerVoltage?: number; reverse?: boolean }
+type CircuitPreset = { name: string; category: string; description: string; source: 'dc' | 'ac'; voltage: number; frequency?: number; parts: PresetPart[]; topology?: 'bridge' }
+type SavedRun = { id: string; name: string; createdAt: string; analysis: string; readings: Reading[] }
 const circuitPresets: CircuitPreset[] = [
   { category: 'Basics', name: 'Simple resistor circuit', description: 'DC supply with one resistor', source: 'dc', voltage: 9, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }] },
   { category: 'Basics', name: 'Voltage divider', description: 'Two resistors share the supply voltage', source: 'dc', voltage: 9, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'resistor', value: 2000, label: 'R2' }] },
@@ -30,8 +33,32 @@ const circuitPresets: CircuitPreset[] = [
   { category: 'Passive Filters', name: 'RC low-pass example', description: 'Simple series RC filter for AC study', source: 'ac', voltage: 5, frequency: 100, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'capacitor', value: 1e-6, label: 'C1' }] },
   { category: 'Passive Filters', name: 'RC high-pass example', description: 'Series capacitor and resistor at AC', source: 'ac', voltage: 5, frequency: 1000, parts: [{ kind: 'capacitor', value: 100e-9, label: 'C1' }, { kind: 'resistor', value: 10000, label: 'R1' }] },
   { category: 'Passive Filters', name: 'RL filter example', description: 'Series resistor and inductor at AC', source: 'ac', voltage: 5, frequency: 500, parts: [{ kind: 'resistor', value: 470, label: 'R1' }, { kind: 'inductor', value: 47e-3, label: 'L1' }] },
-  { category: 'Diodes', name: 'Diode forward-bias circuit', description: 'DC source and diode operating point', source: 'dc', voltage: 5, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'diode', value: 0.7, label: 'D1' }] },
+  { category: 'Diodes', name: 'Diode forward-bias circuit', description: 'DC source and diode operating point', source: 'dc', voltage: 5, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'diode', value: 0.7, label: 'D1', diodeModel: 'silicon' }] },
+  { category: 'Diodes', name: 'Half-wave rectifier', description: 'See an AC supply turn into pulsating DC through one diode', source: 'ac', voltage: 9, frequency: 60, parts: [{ kind: 'diode', value: 0.7, label: 'D1', diodeModel: 'silicon' }, { kind: 'resistor', value: 1000, label: 'RL' }] },
+  { category: 'Diodes', name: 'Bridge rectifier', description: 'Four diodes rectify both halves of an AC waveform', source: 'ac', voltage: 9, frequency: 60, parts: [], topology: 'bridge' },
+  { category: 'Diodes', name: 'Zener voltage regulator', description: 'Series resistor and reverse-biased 5.1 V Zener clamp', source: 'dc', voltage: 12, parts: [{ kind: 'resistor', value: 1000, label: 'R1' }, { kind: 'diode', value: 0.7, label: 'DZ1', diodeModel: 'zener', zenerVoltage: 5.1, reverse: true }] },
 ]
+type GuidedLesson = { title: string; preset: string; intro: string; steps: string[] }
+const guidedLessons: GuidedLesson[] = [
+  { title: 'Build a voltage divider', preset: 'Voltage divider', intro: 'Two resistors in series split the source voltage. The larger resistance receives the larger share.', steps: ['Run the simulation and note the voltage across R1 and R2.', 'Change R2 to twice its value. Predict the voltage split before simulating again.', 'Check that the two resistor voltages add up to the supply voltage.'] },
+  { title: 'Limit LED current', preset: 'LED current limiter', intro: 'A series resistor limits the current through a diode. Too little resistance can overdrive the LED.', steps: ['Run the circuit and note the diode current.', 'Increase the resistor value and simulate again.', 'Compare the current and power readings with the parts list ratings.'] },
+  { title: 'Explore an RC low-pass filter', preset: 'RC low-pass example', intro: 'A resistor and capacitor respond differently as frequency changes, forming a simple filter.', steps: ['Run an AC frequency sweep on the capacitor or resistor.', 'Compare the voltage curve at low and high frequencies.', 'Change the capacitor value and repeat the sweep.'] },
+]
+type SavedCircuit = { id: string; name: string; updatedAt: string; circuit: Circuit }
+function loadSavedCircuits(): SavedCircuit[] { try { const saved = JSON.parse(localStorage.getItem('ozoo:circuit-library') ?? '[]'); return Array.isArray(saved) ? saved.filter((item) => item && typeof item.name === 'string' && item.circuit?.parts && item.circuit?.wires) : [] } catch { return [] } }
+function loadSavedRuns(): SavedRun[] { try { const saved = JSON.parse(localStorage.getItem('ozoo:circuit-runs') ?? '[]'); return Array.isArray(saved) ? saved.filter((item) => item && typeof item.id === 'string' && Array.isArray(item.readings)).slice(0, 10) : [] } catch { return [] } }
+async function encodeCircuitShare(value: string): Promise<string> {
+  let bytes = new TextEncoder().encode(value), prefix = 'raw.'
+  if ('CompressionStream' in window) { const compressed = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip')); bytes = new Uint8Array(await new Response(compressed).arrayBuffer()); prefix = 'gz.' }
+  let binary = ''; for (let i=0;i<bytes.length;i+=0x8000) binary += String.fromCharCode(...bytes.subarray(i,i+0x8000))
+  return prefix + btoa(binary).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'')
+}
+async function decodeCircuitShare(payload: string): Promise<string> {
+  const compressed=payload.startsWith('gz.'), encoded=payload.replace(/^(gz|raw)\./,'').replaceAll('-','+').replaceAll('_','/')
+  const binary=atob(encoded), bytes=Uint8Array.from(binary,(char)=>char.charCodeAt(0))
+  if(compressed&&'DecompressionStream' in window){const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));return await new Response(stream).text()}
+  return new TextDecoder().decode(bytes)
+}
 const defaultCircuitOptions: CircuitOptions = { showCurrent: true, showVoltage: true, showPower: false, showValues: true, smallGrid: false, toolbar: true, cursorCrosshair: false, europeanResistors: false, showOhmUnit: true, whiteBackground: false, conventionalCurrent: true, disableEditing: false, editValuesWithMouseWheel: true }
 
 const W = 1120
@@ -66,14 +93,37 @@ function exampleCircuit(): Circuit {
   }
 }
 function buildPresetCircuit(preset: CircuitPreset): Circuit {
+  if (preset.topology === 'bridge') {
+    const source: Part = { id: makeId(), kind: 'ac-source', x: 140, y: 350, value: preset.voltage, frequency: preset.frequency ?? 60, label: 'VAC1', on: true }
+    const junction = (x: number, y: number, label: string): Part => ({ id: makeId(), kind: 'junction', x, y, value: 0, label, on: true })
+    const acLeft = junction(300, 350, 'AC1'), acRight = junction(820, 350, 'AC2'), positive = junction(560, 175, 'V+'), negative = junction(560, 525, 'V−')
+    const diode = (x: number, y: number, rotation: number, label: string): Part => ({ id: makeId(), kind: 'diode', x, y, rotation, value: .7, diodeModel: 'silicon', label, on: true })
+    const d1=diode(455,260,315,'D1'), d2=diode(665,260,225,'D2'), d3=diode(455,440,225,'D3'), d4=diode(665,440,315,'D4')
+    const load: Part = { id: makeId(), kind: 'resistor', x: 730, y: 350, rotation: 90, value: 1000, label: 'RL', on: true }
+    const ground: Part = { id: makeId(), kind: 'ground', x: 560, y: 580, value: 0, label: 'GND', on: true }
+    const parts=[source,acLeft,acRight,positive,negative,d1,d2,d3,d4,load,ground]
+    const wire=(from:string,to:string,points?:Point[]):Wire=>({id:makeId(),from,to,...(points?{points}:{})})
+    const wires=[
+      wire(pinId(source,'a'),pinId(acLeft,'j'),[{x:220,y:350}]),wire(pinId(source,'b'),pinId(acRight,'j'),[{x:220,y:350},{x:220,y:620},{x:820,y:620},{x:820,y:350}]),
+      wire(pinId(d1,'a'),pinId(acLeft,'j'),[{x:390,y:294},{x:300,y:294},{x:300,y:350}]),wire(pinId(d3,'b'),pinId(acLeft,'j'),[{x:390,y:406},{x:300,y:406},{x:300,y:350}]),
+      wire(pinId(d2,'a'),pinId(acRight,'j'),[{x:730,y:294},{x:820,y:294},{x:820,y:350}]),wire(pinId(d4,'b'),pinId(acRight,'j'),[{x:730,y:406},{x:820,y:406},{x:820,y:350}]),
+      wire(pinId(d1,'b'),pinId(positive,'j'),[{x:500,y:226},{x:500,y:175}]),wire(pinId(d2,'b'),pinId(positive,'j'),[{x:620,y:226},{x:620,y:175}]),
+      wire(pinId(d3,'a'),pinId(negative,'j'),[{x:500,y:474},{x:500,y:525}]),wire(pinId(d4,'a'),pinId(negative,'j'),[{x:620,y:474},{x:620,y:525}]),
+      wire(pinId(positive,'j'),pinId(load,'a'),[{x:560,y:175},{x:730,y:175}]),wire(pinId(load,'b'),pinId(negative,'j'),[{x:730,y:398},{x:730,y:525},{x:560,y:525}]),wire(pinId(negative,'j'),pinId(ground,'g')),
+    ]
+    return { parts, wires, drawings: [] }
+  }
   const source: Part = { id: makeId(), kind: preset.source === 'ac' ? 'ac-source' : 'source', x: 190, y: 300, value: preset.voltage, label: preset.source === 'ac' ? 'VAC1' : 'V1', on: true, ...(preset.source === 'ac' ? { frequency: preset.frequency ?? 60 } : {}) }
-  const parts: Part[] = [source, ...preset.parts.map((item, index) => ({ id: makeId(), kind: item.kind, x: 410 + index * 185, y: 300, value: item.value, label: item.label, on: true }))]
+  const parts: Part[] = [source, ...preset.parts.map((item, index) => ({ id: makeId(), kind: item.kind, x: 410 + index * 185, y: 300, value: item.value, label: item.label, on: true, ...(item.diodeModel ? { diodeModel: item.diodeModel } : {}), ...(item.zenerVoltage ? { zenerVoltage: item.zenerVoltage } : {}) }))]
   const ground: Part = { id: makeId(), kind: 'ground', x: 190, y: 485, value: 0, label: 'GND', on: true }
-  const wires: Wire[] = [{ id: makeId(), from: pinId(source, 'a'), to: pinId(parts[1], 'a') }]
-  for (let index = 1; index < parts.length - 1; index++) wires.push({ id: makeId(), from: pinId(parts[index], 'b'), to: pinId(parts[index + 1], 'a') })
+  const inputPin = (index: number) => preset.parts[index]?.reverse ? 'b' : 'a'
+  const outputPin = (index: number) => preset.parts[index]?.reverse ? 'a' : 'b'
+  const wires: Wire[] = [{ id: makeId(), from: pinId(source, 'a'), to: pinId(parts[1], inputPin(0)) }]
+  for (let index = 1; index < parts.length - 1; index++) wires.push({ id: makeId(), from: pinId(parts[index], outputPin(index - 1)), to: pinId(parts[index + 1], inputPin(index)) })
   const last = parts[parts.length - 1]
+  const lastOutputSide = outputPin(parts.length - 2)
   wires.push({ id: makeId(), from: pinId(source, 'b'), to: pinId(ground, 'g'), points: [{ x: 238, y: 300 }, { x: 238, y: 462 }, { x: 190, y: 462 }] })
-  wires.push({ id: makeId(), from: pinId(last, 'b'), to: pinId(ground, 'g'), points: [{ x: last.x + 48, y: 300 }, { x: last.x + 70, y: 300 }, { x: last.x + 70, y: 462 }, { x: 220, y: 462 }] })
+  wires.push({ id: makeId(), from: pinId(last, lastOutputSide), to: pinId(ground, 'g'), points: [{ x: last.x + (lastOutputSide === 'a' ? -48 : 48), y: 300 }, { x: last.x + (lastOutputSide === 'a' ? -70 : 70), y: 300 }, { x: last.x + (lastOutputSide === 'a' ? -70 : 70), y: 462 }, { x: 220, y: 462 }] })
   return { parts: [...parts, ground], wires, drawings: [] }
 }
 function parseCircuitText(text: string): Circuit {
@@ -127,13 +177,13 @@ const cMul = (a: Complex, b: Complex): Complex => complex(a.re * b.re - a.im * b
 const cDiv = (a: Complex, b: Complex): Complex => { const d = b.re * b.re + b.im * b.im; return d ? complex((a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d) : complex() }
 const cAbs = (a: Complex) => Math.hypot(a.re, a.im)
 const cPhase = (a: Complex) => Math.atan2(a.im, a.re)
-function solveAcCircuit(parts: Part[], wires: Wire[]): Simulation {
+function solveAcCircuit(parts: Part[], wires: Wire[], frequencyOverride?: number): Simulation {
   const sources = parts.filter((part) => part.kind === 'source' || part.kind === 'ac-source')
   const acSources = sources.filter((part) => part.kind === 'ac-source')
-  const frequency = acSources[0]?.frequency ?? 60
+  const frequency = frequencyOverride ?? acSources[0]?.frequency ?? 60
   if (!frequency || frequency < 0.1 || frequency > 1e6) throw new Error('AC frequency must be between 0.1 Hz and 1 MHz.')
   if (acSources.some((part) => Math.abs((part.frequency ?? 60) - frequency) > 0.001)) throw new Error('All AC supplies in one circuit must use the same frequency.')
-  if (parts.some((part) => part.kind === 'diode')) throw new Error('AC analysis currently supports resistors, capacitors, inductors, switches, and voltage sources. Remove the diode or use DC analysis.')
+  if (parts.some((part) => part.kind === 'diode')) return solveDiodeAcWaveform(parts, wires, frequency)
   const parent = new Map<string, string>()
   const find = (id: string): string => { if (!parent.has(id)) parent.set(id, id); const p = parent.get(id)!; if (p !== id) parent.set(id, find(p)); return parent.get(id)! }
   const join = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb) }
@@ -225,7 +275,7 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
     if (ia !== undefined && ib !== undefined) { matrix[ia][ib] -= conductance; matrix[ib][ia] -= conductance }
   }
   const diodeConductance = 1000
-  const activeDiodes = new Set<string>()
+  const diodeStates = new Map<string, -1 | 0 | 1>()
   let solved = Array(size).fill(0)
   let iterations = 0
   let changed = true
@@ -237,9 +287,11 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
       if (part.kind === 'resistor') stampConductance(pinId(part, 'a'), pinId(part, 'b'), 1 / Math.max(0.001, part.value))
       if (part.kind === 'inductor') stampConductance(pinId(part, 'a'), pinId(part, 'b'), 1e6)
       if (part.kind === 'switch') stampConductance(pinId(part, 'a'), pinId(part, 'b'), part.on ? 50 : 1e-10)
-      if (part.kind === 'diode' && activeDiodes.has(part.id)) {
+      const diodeState = part.kind === 'diode' ? diodeStates.get(part.id) ?? 0 : 0
+      if (part.kind === 'diode' && diodeState !== 0) {
         stampConductance(pinId(part, 'a'), pinId(part, 'b'), diodeConductance)
-        const a = nodeFor(pinId(part, 'a')), b = nodeFor(pinId(part, 'b')), bias = diodeConductance * Math.max(0, part.value)
+        const targetVoltage = diodeState === 1 ? Math.max(0, part.value) : -(part.zenerVoltage ?? 5.1)
+        const a = nodeFor(pinId(part, 'a')), b = nodeFor(pinId(part, 'b')), bias = diodeConductance * targetVoltage
         if (a !== undefined) rhs[a] += bias
         if (b !== undefined) rhs[b] -= bias
       }
@@ -271,8 +323,9 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
     solved = rhs
     const voltageOfNode = (id: string) => { const index = nodeFor(id); return index === undefined ? 0 : solved[index] }
     parts.filter((part) => part.kind === 'diode').forEach((part) => {
-      const forward = voltageOfNode(pinId(part, 'a')) - voltageOfNode(pinId(part, 'b')) > Math.max(0, part.value)
-      if (forward !== activeDiodes.has(part.id)) { if (forward) activeDiodes.add(part.id); else activeDiodes.delete(part.id); changed = true }
+      const voltage = voltageOfNode(pinId(part, 'a')) - voltageOfNode(pinId(part, 'b'))
+      const nextState: -1 | 0 | 1 = voltage > Math.max(0, part.value) ? 1 : part.diodeModel === 'zener' && voltage < -(part.zenerVoltage ?? 5.1) ? -1 : 0
+      if (nextState !== (diodeStates.get(part.id) ?? 0)) { diodeStates.set(part.id, nextState); changed = true }
     })
   }
   const nodeVoltages: Record<string, number> = { [groundRoot]: 0 }
@@ -284,12 +337,114 @@ function solveCircuit(parts: Part[], wires: Wire[]): Simulation {
     const current = part.kind === 'source' ? solved[roots.length + voltageSources.findIndex((source) => source.id === part.id)]
       : part.kind === 'resistor' ? voltage / Math.max(0.001, part.value)
         : part.kind === 'inductor' ? voltage * 1e6
-          : part.kind === 'diode' ? (activeDiodes.has(part.id) ? Math.max(0, voltage - Math.max(0, part.value)) * diodeConductance : 0)
+          : part.kind === 'diode' ? ((diodeStates.get(part.id) ?? 0) === 1 ? (voltage - Math.max(0, part.value)) * diodeConductance : (diodeStates.get(part.id) ?? 0) === -1 ? (voltage + (part.zenerVoltage ?? 5.1)) * diodeConductance : 0)
             : part.kind === 'switch' ? voltage * (part.on ? 50 : 1e-10) : 0
     return { id: part.id, label: part.label, voltage, current, power: voltage * current }
   })
   const pins = allPins.map((pin) => ({ id: pin.id, voltage: voltageOf(pin.id) }))
-  return { readings, nodeVoltages: Object.fromEntries(pins.map((pin) => [pin.id, pin.voltage])), message: 'DC steady state solved · capacitor open, inductor short, diode forward-drop model' }
+  return { readings, nodeVoltages: Object.fromEntries(pins.map((pin) => [pin.id, pin.voltage])), message: 'DC operating point solved · diodes block reverse current; Zeners conduct in breakdown.' }
+}
+type CircuitCheck = { level: 'error' | 'warning' | 'info'; title: string; detail: string }
+function checkCircuit(parts: Part[], wires: Wire[], simulation?: Simulation | null): CircuitCheck[] {
+  const checks: CircuitCheck[] = []
+  const knownPins = new Set(parts.flatMap(pinsFor).map((pin) => pin.id))
+  const pinUse = new Map<string, number>()
+  wires.forEach((wire) => { pinUse.set(wire.from, (pinUse.get(wire.from) ?? 0) + 1); pinUse.set(wire.to, (pinUse.get(wire.to) ?? 0) + 1) })
+  const supplies = parts.filter((part) => part.kind === 'source' || part.kind === 'ac-source')
+  const loads = parts.filter((part) => ['resistor', 'capacitor', 'inductor', 'diode', 'switch'].includes(part.kind))
+  if (!supplies.length) checks.push({ level: 'error', title: 'No power source', detail: 'Place a DC source or AC supply before simulating.' })
+  else checks.push({ level: 'info', title: `${supplies.length} power source${supplies.length === 1 ? '' : 's'} placed`, detail: supplies.map((part) => part.label).join(', ') })
+  if (!parts.some((part) => part.kind === 'ground')) checks.push({ level: 'error', title: 'Ground reference is missing', detail: 'Add ground and connect it to the circuit so node voltages have a reference.' })
+  else checks.push({ level: 'info', title: 'Ground reference found', detail: 'A reference node is available for voltage analysis.' })
+  parts.filter((part)=>part.kind==='ground'&&(pinUse.get(pinId(part,'g'))??0)===0).forEach((part)=>checks.push({level:'warning',title:'Ground is not connected',detail:`Connect ${part.label} to a circuit node before relying on node voltage readings.`}))
+  if (!loads.length) checks.push({ level: 'warning', title: 'No load components', detail: 'Add a resistor, capacitor, inductor, diode, or switch to study circuit behavior.' })
+  const dangling = parts.filter((part) => !['ground', 'junction'].includes(part.kind)).flatMap((part) => pinsFor(part)).filter((pin) => (pinUse.get(pin.id) ?? 0) === 0)
+  if (dangling.length) checks.push({ level: 'warning', title: `${dangling.length} unconnected terminal${dangling.length === 1 ? '' : 's'}`, detail: `Connect: ${dangling.slice(0, 6).map((pin) => `${parts.find((part) => pin.id.startsWith(part.id + ':'))?.label ?? 'part'} ${pin.label}`).join(', ')}${dangling.length > 6 ? '…' : ''}` })
+  const invalid = parts.filter((part) => ['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode'].includes(part.kind) && (!Number.isFinite(part.value) || part.value <= 0))
+  if (invalid.length) checks.push({ level: 'error', title: 'Invalid component values', detail: invalid.map((part) => part.label).join(', ') })
+  const staleWires = wires.filter((wire) => !knownPins.has(wire.from) || !knownPins.has(wire.to))
+  if (staleWires.length) checks.push({ level: 'error', title: 'Wire endpoint is missing', detail: 'Delete or reconnect the wire with a missing terminal.' })
+  const nets = new Map<string,string>()
+  const root = (id: string): string => { if (!nets.has(id)) nets.set(id,id); const parent=nets.get(id)!; if (parent!==id) nets.set(id,root(parent)); return nets.get(id)! }
+  wires.filter((wire) => knownPins.has(wire.from) && knownPins.has(wire.to)).forEach((wire) => nets.set(root(wire.from),root(wire.to)))
+  supplies.forEach((part) => { if (root(pinId(part,'a'))===root(pinId(part,'b'))) checks.push({ level:'error',title:`${part.label} is shorted`,detail:'Both supply terminals are connected to the same wire net. Separate the terminals before powering the circuit.' }) })
+  const closedSwitches = parts.filter((part) => part.kind === 'switch' && part.on)
+  if (closedSwitches.length) checks.push({ level: 'info', title: `${closedSwitches.length} closed switch${closedSwitches.length === 1 ? '' : 'es'}`, detail: 'Closed switches are treated as a small resistance in this idealized model.' })
+  const peakMagnitude = (values: number[] | undefined) => values?.length ? Math.max(...values.map((value) => Math.abs(value))) : undefined
+  if (simulation) parts.forEach((part) => {
+    const reading = simulation.readings.find((item) => item.id === part.id)
+    if (!reading) return
+    const voltageSamples = simulation.timeDomain?.partVoltages[part.id], currentSamples = simulation.timeDomain?.partCurrents[part.id]
+    const currentStress = peakMagnitude(currentSamples) ?? Math.abs(reading.current)
+    const voltageStress = part.kind === 'diode' && voltageSamples?.length ? Math.max(0, ...voltageSamples.map((value) => -value)) : peakMagnitude(voltageSamples) ?? Math.abs(reading.voltage)
+    const peakPower = voltageSamples?.length && currentSamples?.length ? Math.max(...voltageSamples.map((value, index) => Math.abs(value * (currentSamples[index] ?? 0)))) : Math.abs(reading.power)
+    if (part.powerRating && ['resistor', 'diode'].includes(part.kind) && peakPower > part.powerRating) checks.push({ level: 'warning', title: `${part.label} may exceed its power rating`, detail: `Estimated peak dissipation ${fmt(peakPower, 'W')} is above the entered ${fmt(part.powerRating, 'W')} rating.` })
+    if (part.currentRating && ['diode', 'inductor'].includes(part.kind) && currentStress > part.currentRating) checks.push({ level: 'warning', title: `${part.label} may exceed its current rating`, detail: `Estimated peak current ${fmt(currentStress, 'A')} is above the entered ${fmt(part.currentRating, 'A')} rating.` })
+    if (part.voltageRating && ['capacitor', 'diode'].includes(part.kind) && voltageStress > part.voltageRating) checks.push({ level: 'warning', title: `${part.label} may exceed its voltage rating`, detail: `${part.kind === 'diode' ? 'Estimated reverse voltage' : 'Estimated voltage'} ${fmt(voltageStress, 'V')} is above the entered ${fmt(part.voltageRating, 'V')} rating.` })
+    if (part.kind === 'diode' && part.thermalResistance && Math.abs(reading.power) > 0) {
+      const estimatedJunction = 25 + Math.abs(reading.power) * part.thermalResistance
+      if (estimatedJunction > (part.maxJunctionTemperature ?? 125)) checks.push({ level: 'warning', title: `${part.label} may overheat`, detail: `Estimated junction temperature is ${estimatedJunction.toFixed(0)} °C at 25 °C ambient, above the entered limit of ${(part.maxJunctionTemperature ?? 125).toFixed(0)} °C.` })
+    }
+    if (part.kind === 'diode' && part.diodeModel === 'zener') {
+      const breakdown = Math.abs(reading.voltage) >= (part.zenerVoltage ?? 5.1) * 0.9
+      checks.push({ level: 'info', title: `${part.label} Zener ${simulation.ac ? 'AC readings' : breakdown ? 'regulation active' : 'below breakdown'}`, detail: `${simulation.ac ? 'RMS voltage' : 'Output across Zener'}: ${fmt(Math.abs(reading.voltage), 'V')} · ${simulation.ac ? 'RMS current' : 'Zener current'}: ${fmt(Math.abs(reading.current), 'A')}${breakdown && !simulation.ac ? '' : ` · target breakdown ${fmt(part.zenerVoltage ?? 5.1, 'V')}`}.` })
+    }
+  })
+  if (parts.some((part) => part.kind === 'ac-source') && parts.some((part) => part.kind === 'diode')) checks.push({ level: 'info', title: 'AC diodes use a waveform model', detail: 'The simulator samples three AC cycles to estimate RMS values; open transient analysis to inspect the rectified waveform.' })
+  if (checks.every((check) => check.level !== 'error' && check.level !== 'warning')) checks.push({ level: 'info', title: 'Ready to simulate', detail: 'No basic connection or setup issues were found.' })
+  return checks
+}
+function solveTransient(parts: Part[], wires: Wire[], duration: number, steps: number): TransientResult {
+  if (!Number.isFinite(duration) || duration <= 0 || duration > 10) throw new Error('Transient duration must be between 0 and 10 seconds.')
+  if (!Number.isInteger(steps) || steps < 40 || steps > 1600) throw new Error('Choose between 40 and 1,600 time steps.')
+  const sources=parts.filter((part)=>part.kind==='source'||part.kind==='ac-source'), inductors=parts.filter((part)=>part.kind==='inductor'), diodes=parts.filter((part)=>part.kind==='diode')
+  if (!sources.length) throw new Error('Add a DC or AC supply before running transient analysis.')
+  const parent=new Map<string,string>(), find=(id:string):string=>{if(!parent.has(id))parent.set(id,id);const p=parent.get(id)!;if(p!==id)parent.set(id,find(p));return parent.get(id)!}, join=(a:string,b:string)=>{const ra=find(a),rb=find(b);if(ra!==rb)parent.set(ra,rb)}
+  const pins=parts.flatMap(pinsFor); pins.forEach(pin=>find(pin.id)); wires.forEach(wire=>{if(parent.has(wire.from)&&parent.has(wire.to))join(wire.from,wire.to)})
+  const grounds=parts.filter(part=>part.kind==='ground').map(part=>pinId(part,'g'))
+  if(!grounds.length)throw new Error('Add ground before running transient analysis.')
+  grounds.slice(1).forEach(id=>join(grounds[0],id))
+  const ground=find(grounds[0]), roots=Array.from(new Set(pins.map(pin=>find(pin.id)))).filter(id=>id!==ground), nodeIndex=new Map(roots.map((id,index)=>[id,index]))
+  const sourceBranch=roots.length, inductorBranch=sourceBranch+sources.length, size=roots.length+sources.length+inductors.length, dt=duration/steps
+  const node=(id:string)=>nodeIndex.get(find(id)), times=[0], nodeSamples:Record<string,number[]>={}, voltageSamples:Record<string,number[]>={}, currentSamples:Record<string,number[]>={}
+  pins.forEach(pin=>nodeSamples[pin.id]=[0]); parts.filter(part=>!['ground','junction'].includes(part.kind)).forEach(part=>{voltageSamples[part.id]=[0];currentSamples[part.id]=[0]})
+  const capacitorHistory=new Map<string,number>(), inductorHistory=new Map<string,number>(), diodeModes=new Map<string,-1|0|1|2>(), diodeRecoveryUntil=new Map<string,number>()
+  const solve=(matrix:number[][],rhs:number[])=>{
+    for(let col=0;col<size;col++){let pivot=col;for(let row=col+1;row<size;row++)if(Math.abs(matrix[row][col])>Math.abs(matrix[pivot][col]))pivot=row;if(Math.abs(matrix[pivot][col])<1e-16)throw new Error('Transient solve failed: the circuit has a floating node, an open loop, or an ideal short. Check the connections.');[matrix[col],matrix[pivot]]=[matrix[pivot],matrix[col]];[rhs[col],rhs[pivot]]=[rhs[pivot],rhs[col]];const d=matrix[col][col];for(let j=col;j<size;j++)matrix[col][j]/=d;rhs[col]/=d;for(let row=0;row<size;row++){if(row===col)continue;const f=matrix[row][col];if(Math.abs(f)<1e-20)continue;for(let j=col;j<size;j++)matrix[row][j]-=f*matrix[col][j];rhs[row]-=f*rhs[col]}}
+    return rhs
+  }
+  for(let step=1;step<=steps;step++){
+    const t=step*dt
+    let solution:number[]=[]
+    for(let iteration=0;iteration<8;iteration++){
+      const matrix=Array.from({length:size},()=>Array(size).fill(0)),rhs=Array(size).fill(0)
+      const stampG=(a:string,b:string,g:number)=>{const ia=node(a),ib=node(b);if(ia!==undefined)matrix[ia][ia]+=g;if(ib!==undefined)matrix[ib][ib]+=g;if(ia!==undefined&&ib!==undefined){matrix[ia][ib]-=g;matrix[ib][ia]-=g}}
+      parts.forEach(part=>{const a=pinId(part,'a'),b=pinId(part,'b');if(part.kind==='resistor')stampG(a,b,1/Math.max(.001,part.value));if(part.kind==='switch')stampG(a,b,part.on?50:1e-10);if(part.kind==='capacitor'){const g=Math.max(0,part.value)/dt;stampG(a,b,g);const history=g*(capacitorHistory.get(part.id)??0),ia=node(a),ib=node(b);if(ia!==undefined)rhs[ia]+=history;if(ib!==undefined)rhs[ib]-=history}if(part.kind==='diode'){const mode=diodeModes.get(part.id)??0,capacitance=(part.junctionCapacitancePf??0)*1e-12;if(capacitance>0){const gc=capacitance/dt,history=gc*(capacitorHistory.get(part.id)??0),ia=node(a),ib=node(b);stampG(a,b,gc);if(ia!==undefined)rhs[ia]+=history;if(ib!==undefined)rhs[ib]-=history}if(mode){const target=mode===1?Math.max(0,part.value):mode===-1?-(part.zenerVoltage??5.1):0,g=mode===2?20:1000,ia=node(a),ib=node(b);stampG(a,b,g);if(ia!==undefined)rhs[ia]+=g*target;if(ib!==undefined)rhs[ib]-=g*target}}})
+      const stampBranch=(a:string,b:string,column:number,seriesTerm:number,history:number,sourceVoltage?:number)=>{const ia=node(a),ib=node(b);if(ia!==undefined){matrix[ia][column]+=1;matrix[column][ia]+=1}if(ib!==undefined){matrix[ib][column]-=1;matrix[column][ib]-=1}matrix[column][column]-=seriesTerm;rhs[column]=sourceVoltage??history}
+      sources.forEach((part,index)=>{const voltage=part.kind==='ac-source'?Math.SQRT2*part.value*Math.sin(2*Math.PI*(part.frequency??60)*t):part.value;stampBranch(pinId(part,'a'),pinId(part,'b'),sourceBranch+index,0,0,voltage)})
+      inductors.forEach((part,index)=>{const term=Math.max(1e-12,part.value)/dt;stampBranch(pinId(part,'a'),pinId(part,'b'),inductorBranch+index,term,-term*(inductorHistory.get(part.id)??0))})
+      solution=solve(matrix,rhs)
+      const value=(id:string)=>{const index=node(id);return index===undefined?0:solution[index]}
+      let changed=false
+      diodes.forEach(part=>{const v=value(pinId(part,'a'))-value(pinId(part,'b')),previous=diodeModes.get(part.id)??0;let mode:-1|0|1|2=v>Math.max(0,part.value)?1:part.diodeModel==='zener'&&v<-(part.zenerVoltage??5.1)?-1:0;if(previous===1&&mode!==1&&(part.reverseRecoveryNs??0)>0)diodeRecoveryUntil.set(part.id,t+(part.reverseRecoveryNs??0)*1e-9);if(mode===0&&v<0&&t<(diodeRecoveryUntil.get(part.id)??0))mode=2;if(mode!==previous){diodeModes.set(part.id,mode);changed=true}})
+      if(!changed)break
+    }
+    const value=(id:string)=>{const index=node(id);return index===undefined?0:solution[index]}
+    pins.forEach(pin=>nodeSamples[pin.id].push(value(pin.id)))
+    parts.filter(part=>!['ground','junction'].includes(part.kind)).forEach(part=>{const va=value(pinId(part,'a')),vb=value(pinId(part,'b')),v=va-vb;let current=0;if(part.kind==='resistor')current=v/Math.max(.001,part.value);else if(part.kind==='switch')current=v*(part.on?50:1e-10);else if(part.kind==='capacitor'){const g=Math.max(0,part.value)/dt;current=g*(v-(capacitorHistory.get(part.id)??0));capacitorHistory.set(part.id,v)}else if(part.kind==='inductor'){current=solution[inductorBranch+inductors.findIndex(item=>item.id===part.id)];inductorHistory.set(part.id,current)}else if(part.kind==='diode'){const mode=diodeModes.get(part.id)??0,target=mode===1?Math.max(0,part.value):mode===-1?-(part.zenerVoltage??5.1):0,conductance=mode===2?20:1000,oldVoltage=capacitorHistory.get(part.id)??0;current=(mode?conductance*(v-target):0)+((part.junctionCapacitancePf??0)*1e-12/dt)*(v-oldVoltage);if((part.junctionCapacitancePf??0)>0)capacitorHistory.set(part.id,v)}else if(part.kind==='source'||part.kind==='ac-source')current=solution[sourceBranch+sources.findIndex(item=>item.id===part.id)];voltageSamples[part.id].push(v);currentSamples[part.id].push(current)})
+    times.push(t)
+  }
+  return {times,nodeVoltages:nodeSamples,partVoltages:voltageSamples,partCurrents:currentSamples,message:`Transient response solved · ${steps} steps over ${fmt(duration,'s')} · diode recovery and junction capacitance use a simplified model`}
+}
+function solveDiodeAcWaveform(parts: Part[], wires: Wire[], frequency: number): Simulation {
+  if (frequency > 5000) throw new Error('AC diode waveforms are limited to 5 kHz for this time-domain model. Lower the supply frequency or use an idealized AC circuit without diodes.')
+  const duration=Math.min(10,3/frequency),steps=Math.min(1600,Math.max(240,Math.round(duration*frequency*240)))
+  const timeDomain=solveTransient(parts,wires,duration,steps),samples=Math.max(12,Math.min(steps,Math.round(steps/(duration*frequency)))),start=Math.max(1,steps-samples+1)
+  const rms=(values:number[])=>Math.sqrt(values.slice(start).reduce((sum,value)=>sum+value*value,0)/Math.max(1,values.length-start))
+  const averageProduct=(a:number[],b:number[])=>{const pairs=a.slice(start).map((value,index)=>value*(b[start+index]??0));return pairs.reduce((sum,value)=>sum+value,0)/Math.max(1,pairs.length)}
+  const readings=parts.filter(part=>part.kind!=='ground'&&part.kind!=='junction').map(part=>({id:part.id,label:part.label,voltage:rms(timeDomain.partVoltages[part.id]??[]),current:rms(timeDomain.partCurrents[part.id]??[]),power:averageProduct(timeDomain.partVoltages[part.id]??[],timeDomain.partCurrents[part.id]??[])}))
+  const nodeVoltages=Object.fromEntries(Object.entries(timeDomain.nodeVoltages).map(([id,values])=>[id,rms(values)]))
+  return {readings,nodeVoltages,frequency,ac:true,message:`AC diode response solved over three waveform cycles at ${frequency} Hz · readings are RMS voltage/current and average power`,timeDomain}
 }
 const fmt = (value: number, unit: string) => {
   const abs = Math.abs(value)
@@ -298,12 +453,39 @@ const fmt = (value: number, unit: string) => {
 }
 const partNames: Record<Kind, string> = { source: 'DC source', 'ac-source': 'AC supply', resistor: 'Resistor', capacitor: 'Capacitor', inductor: 'Inductor', diode: 'Diode', switch: 'Switch', ground: 'Ground', junction: 'Wire junction' }
 const partGlyph: Record<Kind, string> = { source: '＋', 'ac-source': '∿', resistor: '▱', capacitor: '║', inductor: '∿', diode: '▷', switch: '⌁', ground: '⏚', junction: '●' }
+const diodeModelDefaults: Record<DiodeModel, number> = { silicon: 0.7, schottky: 0.3, zener: 0.7, led: 1.8 }
+const commonPartValues: Partial<Record<Kind,{label:string;value:number;model?:DiodeModel}[]>> = {
+  source:[1.5,3.3,5,9,12,24].map(value=>({label:`${value} V`,value})),
+  'ac-source':[1,3,6,12,24,120,230].map(value=>({label:`${value} V RMS`,value})),
+  resistor:[10,22,47,100,220,330,470,1000,2200,4700,10000].map(value=>({label:fmt(value,'Ω'),value})),
+  capacitor:[1e-9,10e-9,100e-9,1e-6,10e-6,47e-6,100e-6,470e-6].map(value=>({label:fmt(value,'F'),value})),
+  inductor:[1e-3,4.7e-3,10e-3,47e-3,100e-3,1].map(value=>({label:fmt(value,'H'),value})),
+  diode:[{label:'Schottky · 0.3 V',value:.3,model:'schottky'},{label:'Silicon · 0.7 V',value:.7,model:'silicon'},{label:'Red LED · 1.8 V',value:1.8,model:'led'},{label:'Blue LED · 3.0 V',value:3,model:'led'}],
+}
 function componentTracePath(reading: Reading, simulation: Simulation, current = false) {
   const magnitude = current ? reading.current : reading.voltage
   const phase = current ? reading.currentPhase ?? 0 : reading.voltagePhase ?? 0
   const samples = Array.from({ length: 81 }, (_, index) => simulation.ac ? Math.SQRT2 * magnitude * Math.sin(2 * Math.PI * index / 80 + phase) : magnitude)
   const max = Math.max(...samples.map(Math.abs), 1e-12)
   return samples.map((sample, index) => `${index ? 'L' : 'M'} ${54 + index * 11.15} ${current ? 112 - sample / max * 25 : 43 - sample / max * 25}`).join(' ')
+}
+function transientTracePath(values: number[], yTop: number, yBottom: number) {
+  if(!values.length)return ''
+  const stride=Math.max(1,Math.ceil(values.length/600)),sampled=values.filter((_,index)=>index%stride===0||index===values.length-1),max=Math.max(...sampled.map(Math.abs),1e-12),span=yBottom-yTop
+  return sampled.map((value,index)=>`${index?'L':'M'} ${52+index*(916/Math.max(1,sampled.length-1))} ${yTop+span/2-value/max*(span*.44)}`).join(' ')
+}
+function transientRange(values: number[]) {
+  if (!values.length) return { min: 0, max: 0 }
+  const min = Math.min(...values), max = Math.max(...values)
+  if (Math.abs(max - min) < 1e-12) return { min: min - 1e-9, max: max + 1e-9 }
+  return { min, max }
+}
+function transientPlotPath(values: number[], yTop: number, yBottom: number) {
+  if (!values.length) return ''
+  const stride = Math.max(1, Math.ceil(values.length / 600))
+  const sampled = values.filter((_, index) => index % stride === 0 || index === values.length - 1)
+  const { min, max } = transientRange(sampled), span = max - min || 1
+  return sampled.map((value, index) => `${index ? 'L' : 'M'} ${60 + index * (900 / Math.max(1, sampled.length - 1))} ${yBottom - ((value - min) / span) * (yBottom - yTop)}`).join(' ')
 }
 const symbolPinsText = (part: Part) => pinsFor(part)
 const wirePath = (a: Point, b: Point, points: Point[] = []) => [a, ...points, b].map((point, index) => (index === 0 ? 'M' : 'L') + point.x + ' ' + point.y).join(' ')
@@ -380,6 +562,18 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const toggleOption = (key: keyof CircuitOptions) => setOptions((current) => ({ ...current, [key]: !current[key] }))
   const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [simulationActive, setSimulationActive] = useState(false)
+  const [circuitChecks, setCircuitChecks] = useState<CircuitCheck[] | null>(null)
+  const [frequencySweep, setFrequencySweep] = useState<{ label: string; samples: { frequency: number; voltage: number }[] } | null>(null)
+  const [savedCircuits, setSavedCircuits] = useState<SavedCircuit[]>(loadSavedCircuits)
+  const [savedRuns, setSavedRuns] = useState<SavedRun[]>(loadSavedRuns)
+  const [lesson, setLesson] = useState<{ lesson: GuidedLesson; step: number } | null>(null)
+  const [comparisonBase, setComparisonBase] = useState<{ readings: Reading[]; label: string } | null>(null)
+  const [transient, setTransient] = useState<TransientResult | null>(null)
+  const [transientDurationMs, setTransientDurationMs] = useState(100)
+  const [transientSteps, setTransientSteps] = useState(500)
+  const [scopeActive, setScopeActive] = useState(false)
+  const [scopeProbe, setScopeProbe] = useState<'a' | 'b' | null>(null)
+  const [scopePins, setScopePins] = useState<{ a: string | null; b: string | null }>({ a: null, b: null })
   const [historyVersion, setHistoryVersion] = useState(0)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
@@ -401,6 +595,10 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const selected = circuit.parts.find((part) => part.id === selectedPart)
   const selectedReading = selected ? simulation?.readings.find((reading) => reading.id === selected.id) : undefined
+  const diodeWaveform = selected?.kind === 'diode' ? transient ?? simulation?.timeDomain : undefined
+  const diodeVoltage = diodeWaveform?.partVoltages[selected!.id] ?? []
+  const diodeCurrent = diodeWaveform?.partCurrents[selected!.id] ?? []
+  const diodePower = diodeVoltage.map((voltage, index) => voltage * (diodeCurrent[index] ?? 0))
   const selectedIds = selectedParts.length ? selectedParts : selectedPart ? [selectedPart] : []
   const metricColumns = Number(options.showVoltage) + Number(options.showCurrent) + Number(options.showPower)
   const viewWidth = W / zoom, viewHeight = H / zoom
@@ -452,7 +650,17 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setSelectedPart(snap.partId); setSelectedParts([]); setSelectedWire(null); setSimulation(null); setError('Component snapped to wire and connected.'); setWireSnapPreview(null)
   }
   useEffect(() => { try { const next = JSON.stringify(circuit); const previous = localStorage.getItem('ozoo:circuit'); if (previous && previous !== next) { localStorage.setItem('ozoo:circuit-recovery', previous); setHasRecovery(true) } localStorage.setItem('ozoo:circuit', next) } catch {} }, [circuit])
+  useEffect(() => { setFrequencySweep(null); setCircuitChecks(null); setTransient(null) }, [circuit])
+  useEffect(() => {
+    const payload=new URLSearchParams(window.location.hash.slice(1)).get('circuit')
+    if(!payload)return
+    let active=true
+    void decodeCircuitShare(payload).then((text)=>{if(!active)return;const data=JSON.parse(text) as Circuit;if(!Array.isArray(data.parts)||!Array.isArray(data.wires))throw new Error('This shared circuit is not a valid OzooNotes file.');setCircuit({parts:data.parts,wires:data.wires,drawings:Array.isArray(data.drawings)?data.drawings:[]});setSelectedPart(null);setSelectedParts([]);setSelectedWire(null);setError('Shared circuit loaded. Save a copy if you want to keep it in your browser.');const url=new URL(window.location.href);url.hash='';window.history.replaceState(window.history.state,'',url.pathname+url.search)}).catch(()=>setError('This shared circuit link is incomplete or unsupported.'))
+    return()=>{active=false}
+  },[])
   useEffect(() => { try { localStorage.setItem('ozoo:circuit-options', JSON.stringify(options)) } catch {} }, [options])
+  useEffect(() => { try { localStorage.setItem('ozoo:circuit-library', JSON.stringify(savedCircuits)) } catch { setError('The saved circuit library is full. Export circuits as files to keep additional copies.') } }, [savedCircuits])
+  useEffect(() => { try { localStorage.setItem('ozoo:circuit-runs', JSON.stringify(savedRuns)) } catch { setError('Unable to save simulation history in this browser. Remove some saved runs and try again.') } }, [savedRuns])
   useEffect(() => {
     if (historyAction.current) { historyAction.current = false; lastCircuit.current = circuit; return }
     if (circuit === lastCircuit.current) return
@@ -462,8 +670,8 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   }, [circuit])
   useEffect(() => {
     if (!simulationActive) return
-    try { setSimulation(solveCircuit(circuit.parts, circuit.wires)); setError('') }
-    catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
+    try { const result = solveCircuit(circuit.parts, circuit.wires); setSimulation(result); setCircuitChecks(checkCircuit(circuit.parts, circuit.wires, result)); setError('') }
+    catch (reason) { setSimulation(null); setCircuitChecks(checkCircuit(circuit.parts, circuit.wires)); setError(reason instanceof Error ? reason.message : String(reason)) }
   }, [circuit, simulationActive])
   const screenPoint = (event: { clientX: number; clientY: number }) => {
     const svg = svgRef.current
@@ -481,7 +689,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     const labels: Record<Kind, string> = { source: 'V', 'ac-source': 'VAC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', switch: 'S', ground: 'GND', junction: 'J' }
     const value = kind === 'source' || kind === 'ac-source' ? 5 : kind === 'resistor' ? 1000 : kind === 'capacitor' ? 100e-6 : kind === 'inductor' ? 10e-3 : kind === 'diode' ? 0.7 : 0
     const label = kind === 'ground' ? 'GND' : labels[kind] + (circuit.parts.filter((part) => part.kind === kind).length + 1)
-    const part: Part = { id: makeId(), kind, x: Math.max(64, Math.min(W - 64, x)), y: Math.max(90, Math.min(H - 62, y)), value, label, on: true, ...(kind === 'ac-source' ? { frequency: 60 } : {}) }
+    const part: Part = { id: makeId(), kind, x: Math.max(64, Math.min(W - 64, x)), y: Math.max(90, Math.min(H - 62, y)), value, label, on: true, ...(kind === 'ac-source' ? { frequency: 60 } : {}), ...(kind === 'diode' ? { diodeModel: 'silicon' as const } : {}) }
     setCircuit((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelectedPart(part.id); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setSimulation(null); setPlacement(null); setDmmActive(false); setMeterPins({ red: null, black: null })
   }
@@ -573,6 +781,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const handlePin = (pin: Pin) => {
     if (suppressPinClick.current) { suppressPinClick.current = false; return }
     if (options.disableEditing) return
+    if (scopeProbe) { setScopePins((current)=>({...current,[scopeProbe]:pin.id})); setError(`Oscilloscope channel ${scopeProbe.toUpperCase()} connected to ${pin.label}.`); setScopeProbe(null); setScopeActive(true); return }
     if (dmmActive && meterMode !== 'voltage') { setMeterReading('Click a component body to measure ' + (meterMode === 'current' ? 'current.' : 'resistance.')); return }
     if (dmmActive && meterMode === 'voltage') {
       const lead = meterProbe ?? (meterPins.red === null ? 'red' : 'black')
@@ -600,7 +809,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     setWireStart(null); setWirePoints([]); setWireCursor(null); setError(''); setSimulation(null)
   }
   const handlePinPointerDown = (event: ReactPointerEvent<SVGGElement>, pin: Pin) => {
-    if (event.button !== 0 || dmmActive || placement || wireStart || options.disableEditing) return
+    if (event.button !== 0 || dmmActive || scopeProbe || placement || wireStart || options.disableEditing) return
     const point = screenPoint(event)
     wireDrag.current = { from: pin.id, x: point.x, y: point.y, moved: false }
     setWireStart(pin.id); setWirePoints([]); setWireCursor(point); setSelectedPart(null); setSelectedWire(null)
@@ -610,8 +819,91 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
   const runSimulation = () => {
     setSimulationActive(true)
     setError('')
-    try { setSimulation(solveCircuit(circuit.parts, circuit.wires)) }
-    catch (reason) { setSimulation(null); setError(reason instanceof Error ? reason.message : String(reason)) }
+    try { const result = solveCircuit(circuit.parts, circuit.wires); setSimulation(result); setCircuitChecks(checkCircuit(circuit.parts, circuit.wires, result)); setTransient(result.timeDomain ?? null) }
+    catch (reason) { setSimulation(null); setCircuitChecks(checkCircuit(circuit.parts, circuit.wires)); setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
+  const runCircuitChecks = () => {
+    let readings: Simulation | null = simulation
+    if (!readings) { try { readings = solveCircuit(circuit.parts, circuit.wires) } catch { readings = null } }
+    setCircuitChecks(checkCircuit(circuit.parts, circuit.wires, readings)); setOpenMenu(null)
+  }
+  const saveToCircuitLibrary = () => {
+    if (options.disableEditing) return
+    const name = window.prompt('Name this circuit:', `Circuit ${savedCircuits.length + 1}`)?.trim()
+    if (!name) return
+    if (savedCircuits.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) { setError('A saved circuit already has that name. Choose a different name.'); return }
+    setSavedCircuits((items) => [{ id: makeId(), name, updatedAt: new Date().toISOString(), circuit: JSON.parse(JSON.stringify(circuit)) as Circuit }, ...items])
+    setError(`“${name}” saved in this browser.`)
+  }
+  const openSavedCircuit = (saved: SavedCircuit) => { setCircuit(JSON.parse(JSON.stringify(saved.circuit)) as Circuit); setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setSimulation(null); setSimulationActive(false); setError(`Opened “${saved.name}”.`) }
+  const beginLesson = (item: GuidedLesson) => {
+    const preset = circuitPresets.find((entry) => entry.name === item.preset)
+    if (!preset) return
+    loadCircuitPreset(preset); setLesson({ lesson: item, step: 0 }); setOpenMenu(null)
+  }
+  const setComparisonBaseline = () => {
+    try { const result = solveCircuit(circuit.parts, circuit.wires); setComparisonBase({ readings: result.readings, label: circuit.parts.filter((part) => !['ground','junction'].includes(part.kind)).map((part) => part.label).join(', ') }); setError('Comparison baseline saved. Change values or load another circuit, then simulate to compare.') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Solve this circuit before saving a comparison baseline.') }
+  }
+  const saveSimulationRun = () => {
+    try {
+      const result = simulation ?? solveCircuit(circuit.parts, circuit.wires)
+      const name = window.prompt('Name this simulation run:', `Run ${savedRuns.length + 1}`)?.trim()
+      if (!name) return
+      const run: SavedRun = { id: makeId(), name, createdAt: new Date().toISOString(), analysis: result.ac ? `AC · ${result.frequency} Hz` : 'DC', readings: result.readings.map((reading) => ({ ...reading })) }
+      setSavedRuns((runs) => [run, ...runs].slice(0, 10))
+      setError(`“${name}” saved. Keep up to 10 runs in this browser.`)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Run a valid circuit before saving a snapshot.') }
+  }
+  const compareSavedRun = (run: SavedRun) => { setComparisonBase({ readings: run.readings, label: `${run.name} · ${run.analysis}` }); setError(`Comparing current results with “${run.name}”.`) }
+  const exportPartsCsv = () => {
+    const rows = [['Reference','Component','Value','Rating'], ...circuit.parts.filter((part) => !['ground','junction'].includes(part.kind)).map((part) => {
+      const value = part.kind === 'resistor' ? fmt(part.value,'Ω') : ['source','ac-source'].includes(part.kind) ? fmt(part.value,'V') : part.kind === 'capacitor' ? fmt(part.value,'F') : part.kind === 'inductor' ? fmt(part.value,'H') : part.kind === 'diode' ? fmt(part.value,'V') : part.on ? 'Closed' : 'Open'
+      const rating = part.powerRating ? fmt(part.powerRating,'W') : part.voltageRating ? fmt(part.voltageRating,'V') : part.currentRating ? fmt(part.currentRating,'A') : ''
+      return [part.label, partNames[part.kind], value, rating]
+    })]
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"','""')}"`).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); const anchor=document.createElement('a'); anchor.href=url; anchor.download='ozoo-circuit-parts.csv'; anchor.click(); URL.revokeObjectURL(url)
+  }
+  const runFrequencySweep = () => {
+    if (circuit.parts.some((part) => part.kind === 'diode')) { setError('Frequency sweeps use a linear AC model. Run Simulate or Time-domain analysis to inspect the diode waveform.'); return }
+    const source = circuit.parts.find((part) => part.kind === 'ac-source')
+    const target = selected && selected.kind !== 'ac-source' ? selected : circuit.parts.find((part) => !['source', 'ac-source', 'ground', 'junction'].includes(part.kind))
+    if (!source || !target) { setError('Add an AC supply and select a component to run a frequency sweep.'); return }
+    try {
+      const center = source.frequency ?? 60
+      const low = Math.max(0.1, center / 1000), high = Math.min(1e6, center * 1000)
+      const samples = Array.from({ length: 49 }, (_, index) => {
+        const frequency = low * (high / low) ** (index / 48)
+        const result = solveAcCircuit(circuit.parts, circuit.wires, frequency)
+        return { frequency, voltage: result.readings.find((reading) => reading.id === target.id)?.voltage ?? 0 }
+      })
+      setFrequencySweep({ label: target.label, samples }); setSimulation(solveCircuit(circuit.parts, circuit.wires)); setError('')
+    } catch (reason) { setFrequencySweep(null); setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
+  const runTransientSimulation = () => {
+    try { const result=solveTransient(circuit.parts,circuit.wires,transientDurationMs/1000,transientSteps);setTransient(result);setSimulationActive(false);setError(result.message) }
+    catch(reason){setTransient(null);setError(reason instanceof Error?reason.message:String(reason))}
+  }
+  const shareCircuitLink = async () => {
+    try {
+      const payload=await encodeCircuitShare(JSON.stringify({format:'ozoonotes-circuit',version:1,parts:circuit.parts,wires:circuit.wires,drawings:circuit.drawings??[]}))
+      const url=new URL(window.location.href);url.searchParams.set('simulator','electronics');url.hash=new URLSearchParams({circuit:payload}).toString();const shareUrl=url.toString()
+      if(shareUrl.length>60000){setError('This circuit is too large for a share link. Use File → Export Ozoo circuit file instead.');return}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareUrl);setError('Circuit link copied. Anyone with the link can view and edit their own copy.')}
+      else window.prompt('Copy this circuit link:',shareUrl)
+    }catch(reason){setError(reason instanceof Error?reason.message:'Unable to create a share link.')}
+  }
+  const exportOzooCircuit = () => {
+    const data=JSON.stringify({format:'ozoonotes-circuit',version:1,parts:circuit.parts,wires:circuit.wires,drawings:circuit.drawings??[]},null,2)
+    const url=URL.createObjectURL(new Blob([data],{type:'application/vnd.ozoonotes.circuit+json'})),anchor=document.createElement('a');anchor.href=url;anchor.download='circuit.ozoo';anchor.click();URL.revokeObjectURL(url);setError('OzooNotes circuit file downloaded.')
+  }
+  const exportResultsCsv = () => {
+    if (!simulation) return
+    const rows = [['Component', simulation.ac ? 'Voltage (V RMS)' : 'Voltage (V)', simulation.ac ? 'Current (A RMS)' : 'Current (A)', 'Power (W)'], ...simulation.readings.map((reading) => [reading.label, String(reading.voltage), String(reading.current), String(reading.power)])]
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'ozoo-circuit-results.csv'; anchor.click(); URL.revokeObjectURL(url)
   }
   const updateSelected = (change: Partial<Part>) => {
     if (!selectedPart || options.disableEditing) return
@@ -727,7 +1019,7 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     if (options.disableEditing) return
     const nextCircuit = buildPresetCircuit(preset)
     setCircuit(nextCircuit)
-    try { setSimulation(solveCircuit(nextCircuit.parts, nextCircuit.wires)) } catch { setSimulation(null) }
+    try { const result = solveCircuit(nextCircuit.parts, nextCircuit.wires); setSimulation(result); setTransient(result.timeDomain ?? null) } catch { setSimulation(null); setTransient(null) }
     setSelectedPart(null); setSelectedParts([]); setSelectedWire(null); setSelectedDrawing(null); setWireStart(null); setWirePoints([]); setWireCursor(null); setError(`${preset.name} loaded · ${preset.description}`); setOpenMenu(null); setCircuitSearch('')
   }
   const downloadSvg = () => {
@@ -793,9 +1085,9 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
     <section className="circuit-heading"><div><p>SIMULATOR / ELECTRONICS</p><h1>Build a circuit. See it work.</h1><span>Drag parts into place, connect terminals, and watch current and voltage.</span></div><span className="circuit-local"><i /> Saved on this device</span></section>
     <section className="circuit-layout">
       <nav className="circuit-menubar" aria-label="Circuit menus" data-history-version={historyVersion}>
-<div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover circuit-file-popover" role="menu"><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>＋ New Blank Circuit</button><button role="menuitem" disabled={options.disableEditing} onClick={() => designFileInput.current?.click()}>▱ Open File… <kbd>Ctrl+O</kbd></button><button role="menuitem" disabled={options.disableEditing} title="Choose an Ozoo JSON or text file with lines such as V1 source 9V and R1 resistor 1kΩ." onClick={() => designFileInput.current?.click()}>▧ Import From Text…</button><button role="menuitem" disabled title="Dropbox import is not connected yet.">◈ Import From Dropbox…</button><hr /><button role="menuitem" onClick={() => { const name = window.prompt('Save circuit as:', 'ozoo-circuit'); if (name !== null) saveDesign(name); setOpenMenu(null) }}>▣ Save As… <kbd>Ctrl+S</kbd></button><button role="menuitem" disabled title="Shareable circuit links require online circuit storage, which is not connected yet.">↗ Export As Link…</button><button role="menuitem" onClick={() => { exportCircuitText(); setOpenMenu(null) }}>▤ Export As Text…</button><button role="menuitem" onClick={() => { void saveAsImage(); setOpenMenu(null) }}>▧ Save As Image…</button><button role="menuitem" onClick={() => { void copyCircuitImage(); setOpenMenu(null) }}>▧ Copy Circuit Image to Clipboard</button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>▧ Save As SVG…</button><button role="menuitem" disabled title="Subcircuits are not supported by the current circuit solver.">▥ Create Subcircuit…</button><hr /><button role="menuitem" disabled={circuit.parts.some((part) => part.kind === 'ac-source')} title={circuit.parts.some((part) => part.kind === 'ac-source') ? 'Remove the AC source to run DC analysis.' : 'Solve and show the DC operating point.'} onClick={() => { runSimulation(); setOpenMenu(null) }}>⌁ Find DC Operating Point</button><button role="menuitem" disabled={!hasRecovery || options.disableEditing} title={hasRecovery ? 'Restore the circuit saved before the latest changes.' : 'No earlier autosave is available.'} onClick={() => { recoverAutoSave(); setOpenMenu(null) }}>↶ Recover Auto-Save</button><button role="menuitem" onClick={() => { window.print(); setOpenMenu(null) }}>▤ Print… <kbd>Ctrl+P</kbd></button><button role="menuitem" onClick={() => { void toggleFullscreen(); setOpenMenu(null) }}>⛶ Toggle Full Screen</button><hr /><button role="menuitem" onClick={() => { setShowAbout(true); setOpenMenu(null) }}>ⓘ About…</button></div>}</div>
+<div className="circuit-menu-wrap"><button className={openMenu === 'file' ? 'open' : ''} aria-expanded={openMenu === 'file'} onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}>File <span>⌄</span></button>{openMenu === 'file' && <div className="circuit-menu-popover circuit-file-popover" role="menu"><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>＋ New Blank Circuit</button><button role="menuitem" disabled={options.disableEditing} onClick={() => designFileInput.current?.click()}>▱ Open File… <kbd>Ctrl+O</kbd></button><button role="menuitem" disabled={options.disableEditing} title="Choose an Ozoo JSON or text file with lines such as V1 source 9V and R1 resistor 1kΩ." onClick={() => designFileInput.current?.click()}>▧ Import From Text…</button><button role="menuitem" disabled title="Dropbox import is not connected yet.">◈ Import From Dropbox…</button><hr /><button role="menuitem" onClick={() => { const name = window.prompt('Save circuit as:', 'ozoo-circuit'); if (name !== null) saveDesign(name); setOpenMenu(null) }}>▣ Save As… <kbd>Ctrl+S</kbd></button><button role="menuitem" onClick={() => { void shareCircuitLink(); setOpenMenu(null) }}>↗ Copy share link…</button><button role="menuitem" onClick={() => { exportOzooCircuit(); setOpenMenu(null) }}>⬇ Export Ozoo circuit file…</button><button role="menuitem" onClick={() => { exportCircuitText(); setOpenMenu(null) }}>▤ Export As Text…</button><button role="menuitem" onClick={() => { void saveAsImage(); setOpenMenu(null) }}>▧ Save As Image…</button><button role="menuitem" onClick={() => { void copyCircuitImage(); setOpenMenu(null) }}>▧ Copy Circuit Image to Clipboard</button><button role="menuitem" onClick={() => { downloadSvg(); setOpenMenu(null) }}>▧ Save As SVG…</button><button role="menuitem" disabled title="Subcircuits are not supported by the current circuit solver.">▥ Create Subcircuit…</button><hr /><button role="menuitem" disabled={circuit.parts.some((part) => part.kind === 'ac-source')} title={circuit.parts.some((part) => part.kind === 'ac-source') ? 'Remove the AC source to run DC analysis.' : 'Solve and show the DC operating point.'} onClick={() => { runSimulation(); setOpenMenu(null) }}>⌁ Find DC Operating Point</button><button role="menuitem" disabled={!hasRecovery || options.disableEditing} title={hasRecovery ? 'Restore the circuit saved before the latest changes.' : 'No earlier autosave is available.'} onClick={() => { recoverAutoSave(); setOpenMenu(null) }}>↶ Recover Auto-Save</button><button role="menuitem" onClick={() => { window.print(); setOpenMenu(null) }}>▤ Print… <kbd>Ctrl+P</kbd></button><button role="menuitem" onClick={() => { void toggleFullscreen(); setOpenMenu(null) }}>⛶ Toggle Full Screen</button><hr /><button role="menuitem" onClick={() => { setShowAbout(true); setOpenMenu(null) }}>ⓘ About…</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'edit' ? 'open' : ''} aria-expanded={openMenu === 'edit'} onClick={() => setOpenMenu(openMenu === 'edit' ? null : 'edit')}>Edit <span>⌄</span></button>{openMenu === 'edit' && <div className="circuit-menu-popover circuit-edit-popover" role="menu"><button role="menuitem" disabled={!undoStack.current.length} onClick={() => { undoCircuit(); setOpenMenu(null) }}>↶ Undo <kbd>Ctrl+Z</kbd></button><button role="menuitem" disabled={!redoStack.current.length} onClick={() => { redoCircuit(); setOpenMenu(null) }}>↷ Redo <kbd>Ctrl+Y</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); deleteSelection(); setOpenMenu(null) }}>✂ Cut <kbd>Ctrl+X</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { copySelection(); setOpenMenu(null) }}>▢ Copy <kbd>Ctrl+C</kbd></button><button role="menuitem" disabled={!clipboard.parts.length} onClick={() => { pasteParts(clipboard.parts, clipboard.wires); setOpenMenu(null) }}>▣ Paste <kbd>Ctrl+V</kbd></button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { duplicateSelection(); setOpenMenu(null) }}>▧ Duplicate <kbd>Ctrl+D</kbd></button><button role="menuitem" onClick={() => { selectAll(); setOpenMenu(null) }}>✣ Select all <kbd>Ctrl+A</kbd></button><hr /><label className="circuit-menu-search"><span>Find component <kbd>/</kbd></span><div><input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { findComponent(); setOpenMenu(null) } }} placeholder="Name or type…" /><button onClick={() => { findComponent(); setOpenMenu(null) }}>Find</button></div></label><button role="menuitem" onClick={() => { centerCircuit(); setOpenMenu(null) }}>⌖ Center circuit <kbd>Home</kbd></button><button role="menuitem" onClick={() => { resetZoom(); setOpenMenu(null) }}>◎ Zoom 100% <kbd>0</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1.2); setOpenMenu(null) }}>⊕ Zoom in <kbd>+</kbd></button><button role="menuitem" onClick={() => { setZoomBy(1 / 1.2); setOpenMenu(null) }}>⊖ Zoom out <kbd>−</kbd></button><hr /><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorX'); setOpenMenu(null) }}>↔ Mirror X</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { mirrorSelection('mirrorY'); setOpenMenu(null) }}>↕ Mirror Y</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(-90); setOpenMenu(null) }}>↶ Rotate CCW</button><button role="menuitem" disabled={!selectedIds.length} onClick={() => { rotateSelection(90); setOpenMenu(null) }}>↻ Rotate CW</button></div>}</div>
-        <div className="circuit-menu-wrap"><button className={openMenu === 'tools' ? 'open' : ''} aria-expanded={openMenu === 'tools'} onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}>Tools <span>⌄</span></button>{openMenu === 'tools' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" aria-pressed={dmmActive} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setOpenMenu(null) }}>▦ {dmmActive ? 'Close multimeter' : 'Digital multimeter'}</button><button role="menuitem" disabled={options.disableEditing} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.'); setOpenMenu(null) }}>⌁ Wire tool</button><button role="menuitemcheckbox" aria-checked={gridVisible} onClick={() => setGridVisible((visible) => !visible)}>▧ {gridVisible ? 'Hide grid' : 'Show grid'}</button></div>}</div>
+        <div className="circuit-menu-wrap"><button className={openMenu === 'tools' ? 'open' : ''} aria-expanded={openMenu === 'tools'} onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}>Tools <span>⌄</span></button>{openMenu === 'tools' && <div className="circuit-menu-popover" role="menu"><button role="menuitem" aria-pressed={dmmActive} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setOpenMenu(null) }}>▦ {dmmActive ? 'Close multimeter' : 'Digital multimeter'}</button><button role="menuitem" disabled={options.disableEditing} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.'); setOpenMenu(null) }}>⌁ Wire tool</button><button role="menuitemcheckbox" aria-checked={gridVisible} onClick={() => setGridVisible((visible) => !visible)}>▧ {gridVisible ? 'Hide grid' : 'Show grid'}</button><button role="menuitem" onClick={setComparisonBaseline}>⇄ Set comparison baseline</button><hr /><strong className="circuit-menu-label">GUIDED LESSONS</strong>{guidedLessons.map((item) => <button role="menuitem" key={item.title} onClick={() => beginLesson(item)}>▸ {item.title}</button>)}</div>}</div>
 <div className="circuit-menu-wrap"><button className={openMenu === 'place' ? 'open' : ''} aria-expanded={openMenu === 'place'} onClick={() => setOpenMenu(openMenu === 'place' ? null : 'place')}>Place & Draw <span>⌄</span></button>{openMenu === 'place' && <div className="circuit-menu-popover circuit-place-draw-popover" role="menu"><div className="circuit-menu-label">COMPONENTS</div><div className="circuit-place-draw-grid">{(['source', 'ac-source', 'resistor', 'capacitor', 'inductor', 'diode', 'switch', 'ground'] as Kind[]).map((kind) => <button role="menuitem" key={kind} disabled={options.disableEditing} onClick={() => { setPlacement(kind); setDrawMode(null); setWireStart(null); setError('Click the board to place ' + partNames[kind].toLowerCase() + '.'); setOpenMenu(null) }}><span className={'palette-symbol symbol-' + kind}>{partGlyph[kind]}</span>{partNames[kind]}</button>)}</div><hr /><div className="circuit-menu-label">ANNOTATIONS & PICTURES</div><div className="circuit-place-draw-annotations"><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('image')}>▧ Insert image…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('text')}>T Add text label…</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('arrow')}>↗ Add arrow</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('rectangle')}>▱ Add rectangle</button><button role="menuitem" disabled={options.disableEditing} onClick={() => beginDrawing('ellipse')}>◯ Add ellipse</button></div></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'circuits' ? 'open' : ''} aria-expanded={openMenu === 'circuits'} onClick={() => setOpenMenu(openMenu === 'circuits' ? null : 'circuits')}>Circuits <span>⌄</span></button>{openMenu === 'circuits' && <div className="circuit-menu-popover circuit-presets-popover" role="menu"><label className="circuit-preset-search"><span>PREMADE CIRCUITS</span><input value={circuitSearch} onChange={(event) => setCircuitSearch(event.target.value)} placeholder="Search circuits…" /></label><div className="circuit-preset-groups">{Array.from(new Set(circuitPresets.map((preset) => preset.category))).map((category, index) => { const presets = circuitPresets.filter((preset) => preset.category === category && (!circuitSearch || `${preset.name} ${preset.description} ${preset.category}`.toLowerCase().includes(circuitSearch.toLowerCase()))); return presets.length ? <details key={category} open={!!circuitSearch || index === 0}><summary>{category}<span>{presets.length}</span></summary><div>{presets.map((preset) => <button key={preset.name} role="menuitem" disabled={options.disableEditing} onClick={() => loadCircuitPreset(preset)}><strong>{preset.name}</strong><small>{preset.description}</small></button>)}</div></details> : null })}{!circuitPresets.some((preset) => `${preset.name} ${preset.description} ${preset.category}`.toLowerCase().includes(circuitSearch.toLowerCase())) && <p className="circuit-preset-empty">No matching circuits. Try a different search.</p>}</div><hr /><button role="menuitem" disabled={options.disableEditing} onClick={() => { newCircuit(); setOpenMenu(null) }}>＋ Blank circuit</button></div>}</div>
         <div className="circuit-menu-wrap"><button className={openMenu === 'options' ? 'open' : ''} aria-expanded={openMenu === 'options'} onClick={() => setOpenMenu(openMenu === 'options' ? null : 'options')}>Options <span>⌄</span></button>{openMenu === 'options' && <div className="circuit-menu-popover circuit-options-popover" role="menu">
@@ -804,10 +1096,10 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           <button role="menuitem" disabled title="Digital logic-gate parts are not available in this simulator yet.">IEC Gates <small>coming later</small></button><hr />
           <button role="menuitem" onClick={() => { setShowShortcuts(true); setOpenMenu(null) }}>⌨ Shortcuts…</button><button role="menuitem" onClick={() => { setShowOtherOptions(true); setOpenMenu(null) }}>Other Options…</button>
         </div>}</div>
-        <input ref={designFileInput} type="file" accept=".json,.txt,application/json,text/plain" hidden onChange={importDesign} /><input ref={pictureFileInput} type="file" accept="image/*" hidden onChange={importPicture} />
+        <input ref={designFileInput} type="file" accept=".ozoo,.json,.txt,application/json,text/plain" hidden onChange={importDesign} /><input ref={pictureFileInput} type="file" accept="image/*" hidden onChange={importPicture} />
       </nav>
       {options.toolbar && <section className="circuit-tools" aria-label="Circuit tools">
-        <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={newCircuit} disabled={options.disableEditing}><span className="palette-symbol">＋</span><span>New</span></button></div>
+        <div className="circuit-tools-group"><div className="circuit-section-title">TOOLS</div><button className={dmmActive ? 'active' : ''} onClick={() => { setDmmActive((active) => !active); setPlacement(null); setDrawMode(null); setWireStart(null); setMeterPins({ red: null, black: null }); setMeterProbe(null); setMeterReading('Choose a mode, then connect the probes.') }}><span className="palette-symbol symbol-meter">DMM</span><span>Multimeter</span></button><button className={scopeActive ? 'active' : ''} onClick={() => {setScopeActive((active)=>!active);setScopeProbe(null);setDmmActive(false);setPlacement(null);setDrawMode(null);setWireStart(null);setError('Choose channel A or B, then click a circuit terminal to probe its voltage.') }}><span className="palette-symbol">◉</span><span>Oscilloscope</span></button><button className={wireStart ? 'active' : ''} onClick={() => { setPlacement(null); setDrawMode(null); setError('Drag from a pin to another pin, or click two pins to wire.') }}><span className="palette-symbol">⌁</span><span>Wire</span></button><button className={gridVisible ? 'active' : ''} onClick={() => setGridVisible((visible) => !visible)} title="Toggle schematic grid"><span className="palette-symbol">▦</span><span>Grid</span></button><button onClick={runCircuitChecks}><span className="palette-symbol">✓</span><span>Check</span></button><button onClick={runFrequencySweep} disabled={!circuit.parts.some((part) => part.kind === 'ac-source')} title="Measure selected component voltage across a logarithmic frequency range"><span className="palette-symbol">∿</span><span>AC sweep</span></button><button onClick={runTransientSimulation} title="Calculate the circuit response as time passes"><span className="palette-symbol">⏱</span><span>Transient</span></button><button onClick={newCircuit} disabled={options.disableEditing}><span className="palette-symbol">＋</span><span>New</span></button></div>
       </section>}
       <section className="circuit-main">
         <div className="circuit-canvas-head"><span><i /> Schematic</span><span className="circuit-canvas-controls"><span>{wireSnapPreview ? 'Release to connect component to wire' : drawMode ? `Click the board to place ${drawMode} · Esc to cancel` : placement ? 'Click to place · Esc to cancel' : wireStart ? 'Drag to a pin or click the destination terminal' : 'Drag parts to arrange · drag a pin to wire'}</span><div className="circuit-zoom-controls"><button title="Zoom out" aria-label="Zoom out" onClick={() => setZoomBy(1 / 1.2)}>−</button><output>{Math.round(zoom * 100)}%</output><button title="Zoom in" aria-label="Zoom in" onClick={() => setZoomBy(1.2)}>+</button><button title="Center circuit" onClick={centerCircuit}>Center</button></div></span></div>
@@ -880,15 +1172,35 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
           {circuit.parts.map((part) => <PartSymbol key={part.id} part={part} selected={selectedPart === part.id || selectedParts.includes(part.id)} onPointerDown={handlePartPointerDown} onPin={handlePin} onPinPointerDown={handlePinPointerDown} voltageMap={options.showVoltage ? simulation?.nodeVoltages : undefined} showValues={options.showValues} showOhmUnit={options.showOhmUnit} europeanResistors={options.europeanResistors} />)}
         </svg>
         <div className="circuit-status" role="status">{error ? <span className="error">⚠ {error}</span> : simulation ? <span className="success">✓ {simulation.message}</span> : <span>Ready · Drag parts to move them · drag terminals to connect wires · Simulate to show voltages and current</span>}</div>
+        {lesson && <section className="circuit-lesson"><header><div><small>GUIDED LESSON · {lesson.lesson.title}</small><button onClick={() => setLesson(null)} aria-label="Close lesson">×</button></div><p>{lesson.lesson.intro}</p></header><div className="lesson-step"><b>Step {lesson.step + 1} of {lesson.lesson.steps.length}</b><span>{lesson.lesson.steps[lesson.step]}</span></div><footer><button disabled={lesson.step === 0} onClick={() => setLesson((current) => current ? { ...current, step: Math.max(0,current.step-1) } : current)}>Previous</button><button className="lesson-next" onClick={() => setLesson((current) => current ? current.step + 1 >= current.lesson.steps.length ? null : { ...current, step: current.step+1 } : current)}>{lesson.step + 1 === lesson.lesson.steps.length ? 'Finish lesson' : 'Next step'}</button></footer></section>}
+        {circuitChecks && <section className="circuit-check-panel" aria-label="Circuit health check"><header><div><strong>Circuit health check</strong><small>{circuitChecks.filter((item) => item.level === 'error').length} errors · {circuitChecks.filter((item) => item.level === 'warning').length} warnings</small></div><button onClick={() => setCircuitChecks(null)} aria-label="Close circuit checks">×</button></header><ul>{circuitChecks.map((check, index) => <li className={'check-' + check.level} key={index}><span>{check.level === 'error' ? '!' : check.level === 'warning' ? '△' : '✓'}</span><div><strong>{check.title}</strong><small>{check.detail}</small></div></li>)}</ul></section>}
+        {transient && <section className="transient-panel" aria-label="Transient circuit response"><header><div><strong>Time-domain response</strong><small>{transient.message}</small></div><button onClick={()=>setTransient(null)} aria-label="Close transient graph">×</button></header><div className="transient-settings"><label>Duration (ms)<input type="number" min="0.001" max="10000" step="any" value={transientDurationMs} onChange={(event)=>setTransientDurationMs(Number(event.target.value))}/></label><label>Time steps<input type="number" min="40" max="1600" step="20" value={transientSteps} onChange={(event)=>setTransientSteps(Number(event.target.value))}/></label><button onClick={runTransientSimulation}>Run again</button></div><svg viewBox="0 0 1000 220" role="img" aria-label="Transient voltage and current versus time"><path className="scope-grid" d="M52 15H968M52 60H968M52 105H968M52 150H968M52 195H968M52 15V195M235 15V195M418 15V195M602 15V195M785 15V195M968 15V195"/>{selected && transient.partVoltages[selected.id] && <><path className="scope-voltage" d={transientTracePath(transient.partVoltages[selected.id],18,105)}/><path className="scope-current" d={transientTracePath(transient.partCurrents[selected.id]??[],110,195)}/><text x="8" y="25">V</text><text x="8" y="118">A</text></>}{!selected && <>{scopePins.a && transient.nodeVoltages[scopePins.a] && <path className="scope-voltage" d={transientTracePath(transient.nodeVoltages[scopePins.a],18,195)}/>}{scopePins.b && transient.nodeVoltages[scopePins.b] && <path className="scope-current" d={transientTracePath(transient.nodeVoltages[scopePins.b],18,195)}/>}</>}<text x="52" y="215">0 ms</text><text x="900" y="215">{fmt(transient.times.at(-1)??0,'s')}</text></svg><footer>{selected ? `${selected.label}: voltage (yellow) and current (green).` : 'Oscilloscope channels A (yellow) and B (green), measured against ground.'} This educational transient solver uses a backward Euler approximation.</footer></section>}
+        {selected?.kind === 'diode' && diodeWaveform && <section className="diode-waveform-panel" aria-label={`${selected.label} voltage, current, and power waveforms`}>
+          <header><div><strong>{selected.label} · diode waveforms</strong><small>Time-domain readings for the selected diode</small></div><span>{diodeWaveform.times.length} samples</span></header>
+          <svg viewBox="0 0 1000 270" role="img" aria-label="Diode voltage, current, and power versus time">
+            <path className="scope-grid" d="M60 18H960M60 88H960M60 100H960M60 170H960M60 182H960M60 252H960M60 18V252M285 18V252M510 18V252M735 18V252M960 18V252"/>
+            {[{ name: 'Voltage', unit: 'V', values: diodeVoltage, top: 22, bottom: 82, className: 'scope-voltage' }, { name: 'Current', unit: 'A', values: diodeCurrent, top: 104, bottom: 164, className: 'scope-current' }, { name: 'Power', unit: 'W', values: diodePower, top: 186, bottom: 246, className: 'scope-power' }].map((plot) => {
+              const range = transientRange(plot.values)
+              return <g key={plot.name}><path className={plot.className} d={transientPlotPath(plot.values, plot.top, plot.bottom)}/><text x="5" y={plot.top + 10}>{plot.name} ({plot.unit})</text><text x="5" y={plot.bottom}>{fmt(range.min, plot.unit)}</text><text x="910" y={plot.top + 10}>{fmt(range.max, plot.unit)}</text></g>
+            })}
+            <text x="60" y="267">0 s</text><text x="900" y="267">{fmt(diodeWaveform.times.at(-1) ?? 0, 's')}</text>
+          </svg>
+          <footer>Each trace is scaled to its own min/max range. Run <b>Time-domain analysis</b> to view switching behavior; steady-state DC alone has no time waveform.</footer>
+        </section>}
+        {frequencySweep && <section className="frequency-sweep-panel" aria-label="AC frequency response"><header><div><strong>AC frequency response</strong><small>{frequencySweep.label} · {frequencySweep.samples.length} points · peak {fmt(Math.max(...frequencySweep.samples.map((point)=>point.voltage)),'V RMS')}</small></div><button onClick={() => setFrequencySweep(null)} aria-label="Close frequency response">×</button></header><svg viewBox="0 0 760 190" role="img" aria-label="Logarithmic frequency sweep chart"><path className="scope-grid" d="M58 12H744M58 52H744M58 92H744M58 132H744M58 172H744M58 12V172M230 12V172M401 12V172M573 12V172M744 12V172"/><path className="sweep-trace" d={frequencySweep.samples.map((point,index) => { const x=58+index*686/(frequencySweep.samples.length-1), max=Math.max(...frequencySweep.samples.map((item)=>item.voltage),1e-9), y=164-(point.voltage/max)*144; return `${index?'L':'M'} ${x} ${y}` }).join(' ')}/><text x="58" y="187">{fmt(frequencySweep.samples[0].frequency,'Hz')}</text><text x="695" y="187">{fmt(frequencySweep.samples.at(-1)!.frequency,'Hz')}</text><text x="10" y="20">V</text></svg><footer>Frequency axis is logarithmic · supply amplitude stays constant · select another component and run sweep again.</footer></section>}
         {selected && selectedReading && simulation && <section className="component-scope" aria-label="Selected component scope">
           <header><div><span className="scope-live-dot" /><strong>Scope</strong><span className="scope-part-name">{selected.label} · {partNames[selected.kind]}</span></div><small>{simulation.ac ? `AC · ${simulation.frequency} Hz · one cycle` : 'DC · steady state'}</small></header>
           <svg viewBox="0 0 1000 160" role="img" aria-label={`${selected.label} scope graph`}><path className="scope-grid" d="M54 10H946M54 43H946M54 77H946M54 112H946M54 145H946M54 10V145M165 10V145M277 10V145M388 10V145M500 10V145M611 10V145M723 10V145M834 10V145M946 10V145"/>{options.showVoltage && <><path className="scope-voltage" d={componentTracePath(selectedReading, simulation)} /><text x="8" y="18">V</text></>}{options.showCurrent && <><path className="scope-current" d={componentTracePath(selectedReading, simulation, true)} /><text x="8" y="87">A</text></>}<text x="54" y="157">0</text><text x="920" y="157">{simulation.ac ? '1 cycle' : 'time'}</text></svg>
           <footer>{options.showVoltage && <span><i className="scope-key-voltage" />Voltage {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.voltage, 'V')}</span>}{options.showCurrent && <span><i className="scope-key-current" />Current {simulation.ac ? 'RMS ' : ''}{fmt(selectedReading.current, 'A')}</span>}{options.showPower && <span><i className="scope-key-power" />Power {fmt(selectedReading.power, 'W')}</span>}<small>{simulation.ac ? 'AC waveform shown from its steady-state phasor.' : 'Flat trace: DC steady-state does not model transients.'}</small></footer>
         </section>}
-        {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>{simulation.ac ? `AC · ${simulation.frequency} Hz` : 'DC analysis'}</span></div><div className="circuit-results-table"><div className="circuit-result-row labels" style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>Part</span>{options.showVoltage && <span>Voltage</span>}{options.showCurrent && <span>Current</span>}{options.showPower && <span>Power</span>}</div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id} style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>{reading.label}</span>{options.showVoltage && <span>{fmt(reading.voltage, 'V')}</span>}{options.showCurrent && <span>{fmt(reading.current, 'A')}</span>}{options.showPower && <span>{fmt(reading.power, 'W')}</span>}</div>)}</div></div>}
+        {simulation && <div className="circuit-results"><div className="circuit-results-head"><strong>Operating point</strong><span>{simulation.ac ? `AC · ${simulation.frequency} Hz` : 'DC analysis'}</span><button type="button" onClick={exportResultsCsv}>Download CSV</button></div><div className="circuit-results-table"><div className="circuit-result-row labels" style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>Part</span>{options.showVoltage && <span>Voltage</span>}{options.showCurrent && <span>Current</span>}{options.showPower && <span>Power</span>}</div>{simulation.readings.map((reading) => <div className="circuit-result-row" key={reading.id} style={{ gridTemplateColumns: `minmax(70px,1fr) repeat(${Math.max(1, metricColumns)},minmax(55px,.7fr))` }}><span>{reading.label}</span>{options.showVoltage && <span>{fmt(reading.voltage, 'V')}</span>}{options.showCurrent && <span>{fmt(reading.current, 'A')}</span>}{options.showPower && <span>{fmt(reading.power, 'W')}</span>}</div>)}</div></div>}
+        {simulation && comparisonBase && <section className="circuit-comparison"><header><strong>Baseline comparison</strong><button onClick={() => setComparisonBase(null)}>Clear</button></header><p>Current readings compared with the saved baseline ({comparisonBase.label || 'circuit'}).</p><div className="comparison-table"><div className="comparison-row labels"><span>Part</span><span>Baseline V</span><span>Now V</span><span>Δ V</span></div>{simulation.readings.map((reading) => { const base = comparisonBase.readings.find((item) => item.label === reading.label); return <div className="comparison-row" key={reading.id}><span>{reading.label}</span><span>{base ? fmt(base.voltage,'V') : 'New'}</span><span>{fmt(reading.voltage,'V')}</span><strong>{base ? `${reading.voltage-base.voltage >= 0 ? '+' : ''}${fmt(reading.voltage-base.voltage,'V')}` : '—'}</strong></div> })}</div><button className="circuit-secondary-action" onClick={setComparisonBaseline}>Use current setup as new baseline</button></section>}
       </section>
       <aside className="circuit-inspector">
         <div className="circuit-section-title">INSPECTOR</div>
+        <section className="circuit-bom"><header><strong>Parts list</strong><span>{circuit.parts.filter((part) => !['ground','junction'].includes(part.kind)).length} parts</span></header>{circuit.parts.filter((part) => !['ground','junction'].includes(part.kind)).length ? <ul>{circuit.parts.filter((part) => !['ground','junction'].includes(part.kind)).map((part) => <li key={part.id}><span><i className={'palette-symbol symbol-' + part.kind}>{partGlyph[part.kind]}</i><b>{part.label}</b><small>{partNames[part.kind]}</small></span><strong>{part.kind === 'source' || part.kind === 'ac-source' ? fmt(part.value,'V') : part.kind === 'resistor' ? fmt(part.value,'Ω') : part.kind === 'capacitor' ? fmt(part.value,'F') : part.kind === 'inductor' ? fmt(part.value,'H') : part.kind === 'diode' ? fmt(part.value,'V') : part.on ? 'Closed' : 'Open'}</strong></li>)}</ul> : <p>Add components to build a parts list as you work.</p>}<button type="button" className="circuit-secondary-action" onClick={exportPartsCsv}>Export parts list CSV</button></section>
+        <details className="circuit-saved-library"><summary>My saved circuits <span>{savedCircuits.length}</span></summary><button type="button" className="circuit-secondary-action" onClick={saveToCircuitLibrary} disabled={options.disableEditing}>＋ Save current circuit</button>{savedCircuits.length ? <ul>{savedCircuits.map((item) => <li key={item.id}><button className="saved-circuit-open" onClick={() => openSavedCircuit(item)}><b>{item.name}</b><small>{new Date(item.updatedAt).toLocaleDateString()}</small></button><button className="saved-circuit-delete" aria-label={`Delete ${item.name}`} onClick={() => setSavedCircuits((items) => items.filter((saved) => saved.id !== item.id))}>×</button></li>)}</ul> : <p>Save circuits here to reopen them later in this browser.</p>}</details>
+        {scopeActive && <section className="circuit-probe-panel" aria-label="Oscilloscope probes"><header><strong>Oscilloscope</strong><button onClick={()=>{setScopeActive(false);setScopeProbe(null)}} aria-label="Close oscilloscope">×</button></header><p>Select a channel, then click a terminal. Voltage is shown relative to ground.</p><div><button className={scopeProbe==='a'?'active':''} onClick={()=>setScopeProbe('a')}>Channel A · {scopePins.a?pinLookup[scopePins.a]?.label??'Connected':'Choose terminal'}</button><button className={scopeProbe==='b'?'active':''} onClick={()=>setScopeProbe('b')}>Channel B · {scopePins.b?pinLookup[scopePins.b]?.label??'Connected':'Choose terminal'}</button></div><button className="circuit-secondary-action" onClick={()=>setScopePins({a:null,b:null})}>Clear probes</button></section>}
         {dmmActive && <section className="physical-dmm" aria-label="Digital multimeter">
           <div className="dmm-topline"><span>OZOO</span><small>DIGITAL MULTIMETER</small></div>
           <div className="dmm-screen"><small>{meterMode === 'voltage' ? simulation?.ac ? 'AC VOLTS RMS' : 'DC VOLTS' : meterMode === 'current' ? simulation?.ac ? 'AC AMPS RMS' : 'DC AMPS' : 'RESISTANCE'}</small><output>{meterReading}</output><span>{meterMode === 'voltage' ? 'RED − BLACK' : 'SELECT COMPONENT'}</span></div>
@@ -899,16 +1211,29 @@ export default function CircuitSimulator({ onBack }: { onBack: () => void }) {
         </section>}
         {selected ? <>
           <div className="circuit-selected-kind"><span className={'palette-symbol symbol-' + selected.kind}>{partGlyph[selected.kind]}</span><span><b>{partNames[selected.kind]}</b><small>{selected.label}</small></span></div>
-          {selected.kind !== 'ground' && <label className="circuit-field"><span>{selected.kind === 'source' || selected.kind === 'ac-source' ? selected.kind === 'ac-source' ? 'AC voltage (RMS)' : 'Voltage' : selected.kind === 'resistor' ? 'Resistance' : selected.kind === 'capacitor' ? 'Capacitance' : selected.kind === 'inductor' ? 'Inductance' : selected.kind === 'diode' ? 'Forward voltage' : 'Switch state'}</span>
-            {selected.kind === 'switch' ? <button className={'switch-toggle ' + (selected.on ? 'on' : '')} onClick={() => updateSelected({ on: !selected.on })}>{selected.on ? 'Closed' : 'Open'}</button> : <span className="circuit-number"><input type="number" min={['resistor', 'capacitor', 'inductor', 'diode'].includes(selected.kind) ? 0.000001 : undefined} step={selected.kind === 'resistor' ? 100 : selected.kind === 'capacitor' ? 0.000001 : selected.kind === 'inductor' ? 0.001 : 0.1} value={selected.value} onChange={(event) => updateSelected({ value: Number(event.target.value) })} /><b>{selected.kind === 'source' || selected.kind === 'ac-source' || selected.kind === 'diode' ? 'V' : selected.kind === 'resistor' ? 'Ω' : selected.kind === 'capacitor' ? 'F' : 'H'}</b></span>}
+          {selected.kind !== 'ground' && <label className="circuit-field"><span>{selected.kind === 'source' || selected.kind === 'ac-source' ? selected.kind === 'ac-source' ? 'AC voltage (RMS)' : 'Voltage' : selected.kind === 'resistor' ? 'Resistance' : selected.kind === 'capacitor' ? 'Capacitance' : selected.kind === 'inductor' ? 'Inductance' : selected.kind === 'diode' ? 'Diode forward voltage drop' : 'Switch state'}</span>
+            {selected.kind === 'switch' ? <button className={'switch-toggle ' + (selected.on ? 'on' : '')} onClick={() => updateSelected({ on: !selected.on })}>{selected.on ? 'Closed' : 'Open'}</button> : <span className="circuit-number"><input aria-label={selected.kind === 'diode' ? 'Diode forward voltage drop in volts' : `${partNames[selected.kind]} value`} type="number" min={['resistor', 'capacitor', 'inductor', 'diode'].includes(selected.kind) ? 0.000001 : undefined} step={selected.kind === 'resistor' ? 100 : selected.kind === 'capacitor' ? 0.000001 : selected.kind === 'inductor' ? 0.001 : selected.kind === 'diode' ? 0.05 : 0.1} value={selected.value} onChange={(event) => updateSelected({ value: Number(event.target.value) })} /><b>{selected.kind === 'source' || selected.kind === 'ac-source' || selected.kind === 'diode' ? 'V' : selected.kind === 'resistor' ? 'Ω' : selected.kind === 'capacitor' ? 'F' : 'H'}</b></span>}
           </label>}
+          {selected.kind === 'diode' && <p className="circuit-field-hint">Used as the diode’s voltage drop in DC simulation. Typical values: silicon 0.7 V, red LED 1.8 V, blue LED 3.0 V.</p>}
+          {selected.kind === 'diode' && <label className="circuit-field"><span>Diode model</span><select className="circuit-common-value" value={selected.diodeModel ?? 'silicon'} onChange={(event) => { const diodeModel = event.target.value as DiodeModel; updateSelected({ diodeModel, value: diodeModelDefaults[diodeModel], ...(diodeModel === 'zener' ? { zenerVoltage: selected.zenerVoltage ?? 5.1 } : {}) }) }}><option value="silicon">Standard silicon</option><option value="schottky">Schottky</option><option value="zener">Zener</option><option value="led">LED</option></select></label>}
+          {selected.kind === 'diode' && selected.diodeModel === 'zener' && <label className="circuit-field"><span>Zener breakdown voltage</span><span className="circuit-number"><input aria-label="Zener breakdown voltage in volts" type="number" min="0.1" step="0.1" value={selected.zenerVoltage ?? 5.1} onChange={(event) => updateSelected({ zenerVoltage: Math.max(0.1, Number(event.target.value)) })} /><b>V</b></span></label>}
+          {selected.kind === 'diode' && <><label className="circuit-field"><span>Reverse recovery time (optional)</span><span className="circuit-number"><input aria-label="Diode reverse recovery time in nanoseconds" type="number" min="0" step="1" placeholder="e.g. 50" value={selected.reverseRecoveryNs ?? ''} onChange={(event) => updateSelected({ reverseRecoveryNs: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>ns</b></span></label><label className="circuit-field"><span>Junction capacitance (optional)</span><span className="circuit-number"><input aria-label="Diode junction capacitance in picofarads" type="number" min="0" step="1" placeholder="e.g. 15" value={selected.junctionCapacitancePf ?? ''} onChange={(event) => updateSelected({ junctionCapacitancePf: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>pF</b></span></label><p className="circuit-field-hint">Switching effects are easiest to see with a short transient duration and a high step count.</p></>}
           {selected.kind === 'ac-source' && <label className="circuit-field"><span>Frequency</span><span className="circuit-number"><input type="number" min="0.1" max="1000000" step="1" value={selected.frequency ?? 60} onChange={(event) => updateSelected({ frequency: Number(event.target.value) })} /><b>Hz</b></span></label>}
+          {selected.kind === 'resistor' && <label className="circuit-field"><span>Power rating (optional)</span><span className="circuit-number"><input aria-label="Resistor power rating" type="number" min="0" step="0.1" placeholder="e.g. 0.25" value={selected.powerRating ?? ''} onChange={(event) => updateSelected({ powerRating: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>W</b></span></label>}
+          {selected.kind === 'capacitor' && <label className="circuit-field"><span>Voltage rating (optional)</span><span className="circuit-number"><input aria-label="Capacitor voltage rating" type="number" min="0" step="1" placeholder="e.g. 25" value={selected.voltageRating ?? ''} onChange={(event) => updateSelected({ voltageRating: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>V</b></span></label>}
+          {['diode','inductor'].includes(selected.kind) && <label className="circuit-field"><span>Current rating (optional)</span><span className="circuit-number"><input aria-label="Component current rating" type="number" min="0" step="0.01" placeholder="e.g. 0.5" value={selected.currentRating ?? ''} onChange={(event) => updateSelected({ currentRating: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>A</b></span></label>}
+          {selected.kind === 'diode' && <label className="circuit-field"><span>Power rating (optional)</span><span className="circuit-number"><input aria-label="Diode power rating" type="number" min="0" step="0.1" placeholder="e.g. 0.5" value={selected.powerRating ?? ''} onChange={(event) => updateSelected({ powerRating: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>W</b></span></label>}
+          {selected.kind === 'diode' && <><label className="circuit-field"><span>Thermal resistance (optional)</span><span className="circuit-number"><input aria-label="Diode thermal resistance in degrees Celsius per watt" type="number" min="0" step="1" placeholder="e.g. 100" value={selected.thermalResistance ?? ''} onChange={(event) => updateSelected({ thermalResistance: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>°C/W</b></span></label>{selected.thermalResistance && <label className="circuit-field"><span>Maximum junction temperature</span><span className="circuit-number"><input aria-label="Maximum diode junction temperature in degrees Celsius" type="number" min="25" step="5" value={selected.maxJunctionTemperature ?? 125} onChange={(event) => updateSelected({ maxJunctionTemperature: Math.max(25, Number(event.target.value)) })} /><b>°C</b></span></label>}<p className="circuit-field-hint">Temperature warning estimates use 25 °C ambient and the thermal resistance you enter.</p></>}
+          {selected.kind === 'diode' && selected.diodeModel !== 'zener' && <label className="circuit-field"><span>Maximum reverse voltage (optional)</span><span className="circuit-number"><input aria-label="Diode maximum reverse voltage" type="number" min="0" step="1" placeholder="e.g. 50" value={selected.voltageRating ?? ''} onChange={(event) => updateSelected({ voltageRating: Number(event.target.value) > 0 ? Number(event.target.value) : undefined })} /><b>V</b></span></label>}
+          {commonPartValues[selected.kind] && <label className="circuit-field"><span>Common real-world values</span><select className="circuit-common-value" value="" onChange={(event)=>{const choice=commonPartValues[selected.kind]?.find((item)=>item.label===event.target.value);if(choice)updateSelected({value:choice.value,...(choice.model?{diodeModel:choice.model}:{})})}}><option value="">Choose a standard value…</option>{commonPartValues[selected.kind]?.map((item)=><option key={item.label} value={item.label}>{item.label}</option>)}</select></label>}
           <label className="circuit-field"><span>Reference name</span><input value={selected.label} onChange={(event) => updateSelected({ label: event.target.value })} /></label>
           <div className="circuit-rotation"><span>Rotate</span><button type="button" title="Rotate counterclockwise 90°" aria-label="Rotate counterclockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 270) % 360 })}>↶</button><output>{selected.rotation ?? 0}°</output><button type="button" title="Rotate clockwise 90°" aria-label="Rotate clockwise" onClick={() => updateSelected({ rotation: ((selected.rotation ?? 0) + 90) % 360 })}>↻</button></div>
           <div className="circuit-rotation"><span>Mirror</span><button type="button" className={selected.mirrorX ? 'pressed' : ''} title="Mirror left to right" aria-label="Mirror horizontally" onClick={() => updateSelected({ mirrorX: !selected.mirrorX })}>↔</button><button type="button" className={selected.mirrorY ? 'pressed' : ''} title="Mirror top to bottom" aria-label="Mirror vertically" onClick={() => updateSelected({ mirrorY: !selected.mirrorY })}>↕</button></div>
           <button className="circuit-danger" onClick={() => { setCircuit((value) => ({ parts: value.parts.filter((part) => part.id !== selected.id), wires: value.wires.filter((wire) => !wire.from.startsWith(selected.id + ':') && !wire.to.startsWith(selected.id + ':')) })); setSelectedPart(null); setSimulation(null) }}>Delete component</button>
         </> : selectedParts.length ? <p className="circuit-empty">{selectedParts.length} components selected. Use Edit to duplicate, rotate, mirror, or delete them.</p> : selectedWire ? <><p className="circuit-empty">Wire selected</p><button className="circuit-danger" onClick={() => { setCircuit((value) => ({ ...value, wires: value.wires.filter((wire) => wire.id !== selectedWire) })); setSelectedWire(null); setSimulation(null) }}>Delete wire</button></> : <p className="circuit-empty">Select a part or wire to inspect it. Components, values, and circuit files stay in this browser.</p>}
-        <div className="circuit-library-note"><strong>Simulator model</strong><p>DC mode solves steady state; AC mode uses RMS phasors for resistors, capacitors, inductors, switches, and sources. AC diode analysis and time-domain transients are not modeled.</p></div>
+        {selected?.kind === 'diode' && selected.diodeModel === 'zener' && selectedReading && <section className="zener-readout" aria-label="Zener regulator readings"><strong>Zener readings</strong><div><span>{simulation?.ac ? 'RMS voltage' : 'Output voltage'}</span><b>{fmt(Math.abs(selectedReading.voltage), 'V')}</b></div><div><span>{simulation?.ac ? 'RMS current' : 'Zener current'}</span><b>{fmt(Math.abs(selectedReading.current), 'A')}</b></div><small>{simulation?.ac ? 'AC waveform values are RMS estimates; inspect the time-domain trace for peak behavior.' : Math.abs(selectedReading.voltage) >= (selected.zenerVoltage ?? 5.1) * .9 ? 'Breakdown region · regulating' : `Below the ${fmt(selected.zenerVoltage ?? 5.1, 'V')} breakdown target`}</small></section>}
+        <details className="circuit-saved-runs"><summary>Saved simulation runs <span>{savedRuns.length}/10</span></summary><button type="button" className="circuit-secondary-action" onClick={saveSimulationRun} disabled={!simulation}>＋ Save current run</button>{savedRuns.length ? <ul>{savedRuns.map((run) => <li key={run.id}><div><b>{run.name}</b><small>{run.analysis} · {new Date(run.createdAt).toLocaleString()}</small></div><button type="button" onClick={() => compareSavedRun(run)} disabled={!simulation}>Compare</button><button type="button" className="saved-circuit-delete" aria-label={`Delete run ${run.name}`} onClick={() => setSavedRuns((runs) => runs.filter((item) => item.id !== run.id))}>×</button></li>)}</ul> : <p>Save solved results to compare them with later runs. Up to 10 snapshots stay in this browser.</p>}</details>
+        <div className="circuit-library-note"><strong>Simulator model</strong><p>Diodes block reverse current; Zener models conduct at their breakdown voltage. AC circuits with diodes are sampled in the time domain for rectified waveform and RMS estimates. Reverse recovery and junction capacitance are simplified transient approximations.</p></div>
       </aside>
     </section>
 {(showShortcuts || showOtherOptions || showAbout) && <div className="circuit-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setShowShortcuts(false); setShowOtherOptions(false); setShowAbout(false) } }}><section className="circuit-options-dialog" role="dialog" aria-modal="true" aria-labelledby="circuit-options-dialog-title"><button className="circuit-dialog-close" aria-label="Close dialog" onClick={() => { setShowShortcuts(false); setShowOtherOptions(false); setShowAbout(false) }}>×</button><h2 id="circuit-options-dialog-title">{showShortcuts ? 'Keyboard shortcuts' : showAbout ? 'About Circuit Studio' : 'Other options'}</h2>{showShortcuts ? <ul><li><kbd>Ctrl</kbd> + <kbd>O</kbd> Open circuit file</li><li><kbd>Ctrl</kbd> + <kbd>S</kbd> Save circuit as</li><li><kbd>Ctrl</kbd> + <kbd>P</kbd> Print circuit</li><li><kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo</li><li><kbd>Ctrl</kbd> + <kbd>Y</kbd> Redo</li><li><kbd>Ctrl</kbd> + <kbd>D</kbd> Duplicate</li><li><kbd>Delete</kbd> Remove selection</li><li><kbd>Shift</kbd> while routing a wire Constrain its direction</li><li><kbd>0</kbd> Reset zoom</li><li><kbd>Home</kbd> Center the circuit</li><li><kbd>Esc</kbd> Cancel current action</li></ul> : showAbout ? <p>OzooNotes Circuit Studio lets you sketch and analyze basic DC and AC circuits. Circuit designs are autosaved in this browser. Current analysis supports sources, resistors, capacitors, inductors, switches, diodes in DC mode, and ground.</p> : <><p>These display and editing preferences are saved in this browser. Circuit designs and uploaded pictures are also stored locally on this device.</p><button className="circuit-reset-options" onClick={() => setOptions(defaultCircuitOptions)}>Restore default options</button></>}</section></div>}
