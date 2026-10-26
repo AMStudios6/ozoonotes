@@ -156,7 +156,7 @@ function sanitizeHtml(value: string) {
   return result.innerHTML
 }
 
-function RichTextEditor({ project, onChange, onAppearanceChange }: { project: ProjectDocument; onChange: (bodyHtml: string) => void; onAppearanceChange: (appearance: NonNullable<ProjectDocument['appearance']>) => void }) {
+function RichTextEditor({ project, onChange, onAppearanceChange, theme, onThemeChange }: { project: ProjectDocument; onChange: (bodyHtml: string) => void; onAppearanceChange: (appearance: NonNullable<ProjectDocument['appearance']>) => void; theme: ProjectTheme; onThemeChange: (theme: ProjectTheme) => void }) {
   const editorRef = useRef<HTMLDivElement>(null)
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedSelection = useRef<Range | null>(null)
@@ -750,7 +750,7 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
             <div className="project-title-fields"><span className="project-eyebrow">PROJECT DOCUMENT</span><input className="project-title-input" aria-label="Project title" value={activeProject.title} onChange={(event) => updateProject(activeProject.id, { title: event.target.value })} placeholder="Give this project a title" /><input className="project-description-input" aria-label="Project summary" value={activeProject.description} onChange={(event) => updateProject(activeProject.id, { description: event.target.value })} placeholder="Add a short summary or goal…" /></div>
             <div className="project-document-actions"><button type="button" className="project-export-button" onClick={() => setExportOpen(true)} aria-haspopup="dialog">⇧ Export</button><button type="button" className="project-delete-button" onClick={() => void deleteProject(activeProject)} title="Delete this project">Delete project</button></div>
           </div>
-          <RichTextEditor key={activeProject.id} project={activeProject} onChange={(bodyHtml) => updateProject(activeProject.id, { bodyHtml })} onAppearanceChange={(appearance) => updateProject(activeProject.id, { appearance })} />
+          <RichTextEditor key={activeProject.id} project={activeProject} theme={theme} onThemeChange={onThemeChange} onChange={(bodyHtml) => updateProject(activeProject.id, { bodyHtml })} onAppearanceChange={(appearance) => updateProject(activeProject.id, { appearance })} />
           <section className="project-attachments">
             <div className="project-attachments-heading"><div><span className="project-eyebrow">PROJECT MATERIALS</span><h2>Bring it all together</h2><p>Add supporting media, references, and an OzooNotes board file.</p></div><span className="project-material-count">{activeProject.assets.length} item{activeProject.assets.length === 1 ? '' : 's'}</span></div>
             <div className="project-asset-actions">
