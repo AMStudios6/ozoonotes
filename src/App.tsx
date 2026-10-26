@@ -3559,6 +3559,45 @@ function App() {
             {sitePage === 'dashboard' && dashboardDecorations.some((item) => item.position === 'left') && <aside className="dashboard-decoration-rail left" aria-label="Left dashboard decorations">{renderDashboardDecorations('left')}</aside>}
             <div className="landing-page">
               {sitePage === 'dashboard' && <div className="dashboard-decoration-row dashboard-decoration-top">{renderDashboardDecorations('top')}</div>}
+{sitePage === 'dashboard' && <section className="dashboard-overview" aria-label="Dashboard overview">
+              <div className="dashboard-main-toolbar">
+                <label className="dashboard-search"><span aria-hidden="true">⌕</span><input aria-label="Search your workspace" placeholder="Search your boards and notes…" value={fileSearch} onChange={(event) => setFileSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }} /></label>
+                <span className="dashboard-today"><span aria-hidden="true">▦</span> {new Intl.DateTimeFormat('en', { weekday: 'short', month: 'long', day: 'numeric' }).format(new Date())}</span>
+                <button className="dashboard-create-button" type="button" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}><span aria-hidden="true">＋</span> Create new</button>
+              </div>
+              <div className="dashboard-overview-grid">
+                <section className="dashboard-welcome-card">
+                  <div className="dashboard-welcome-copy">
+                    <span className="dashboard-card-eyebrow">YOUR OZOO WORKSPACE</span>
+                    <h1>Hi, {cloudUser?.displayName || cloudUser?.username || 'there'}!</h1>
+                    <p>What would you like to work on today?</p>
+                    <div className="dashboard-shortcuts">
+                      <button type="button" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}><span>✎</span> Start a board</button>
+                      <button type="button" onClick={() => documentInputRef.current?.click()}><span>↥</span> Open a file</button>
+                      <button type="button" onClick={() => setProjectsPageOpen(true)}><span>▤</span> Projects</button>
+                      <button type="button" onClick={launchGraphSimulator}><span>⌁</span> Graph simulator</button>
+                    </div>
+                  </div>
+                  <div className="dashboard-welcome-art" aria-hidden="true">
+                    <div className="dashboard-art-orbit dashboard-art-orbit-one" />
+                    <div className="dashboard-art-orbit dashboard-art-orbit-two" />
+                    <div className="dashboard-art-board"><span>OZOO NOTES</span><strong>Ideas,<br />in progress.</strong><i /><i /><i /></div>
+                    <div className="dashboard-art-pencil">✎</div>
+                    <div className="dashboard-art-spark">✦</div>
+                  </div>
+                </section>
+                <aside className="dashboard-recent-panel" aria-labelledby="dashboard-recent-title">
+                  <div className="dashboard-panel-heading"><div><span className="dashboard-card-eyebrow">PICK UP WHERE YOU LEFT OFF</span><h2 id="dashboard-recent-title">Recent boards</h2></div><button type="button" onClick={() => document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' })}>See all</button></div>
+                  {[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).slice(0, 3).length ? [...new Set(recentFiles)].filter((name) => name && !name.includes(':')).slice(0, 3).map((name, index) => <button type="button" className="dashboard-recent-item" key={name} onClick={() => openSavedFile(name)}><span className={'dashboard-recent-icon dashboard-recent-icon-' + index}><Icon name="notes" size={17} /></span><span><strong>{name}</strong><small>Saved on this device</small></span><Icon name="next" size={14} /></button>) : <div className="dashboard-recent-empty"><span aria-hidden="true">✦</span><strong>Your next idea starts here</strong><small>Create a board and it will show up in this list.</small><button type="button" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}>Create your first board</button></div>}
+                </aside>
+              </div>
+              <div className="dashboard-metric-grid" aria-label="Workspace summary">
+                <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-purple">▤</span><span className="dashboard-metric-label">Boards on this device</span><strong>{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).length}</strong><small>Saved in this browser</small></article>
+                <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-green">✓</span><span className="dashboard-metric-label">Open scratchpad tasks</span><strong>{scratchItems.filter((item) => !item.done).length}</strong><small>Quick thoughts to sort later</small></article>
+                <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-blue">☁</span><span className="dashboard-metric-label">Cloud boards</span><strong>{cloudBoards.length}</strong><small>{cloudUser ? 'Synced to your account' : 'Sign in to access cloud work'}</small></article>
+                <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-amber">✦</span><span className="dashboard-metric-label">Your workspace</span><strong>{cloudUser?.businessPlan ? 'Business' : cloudUser?.plan === 'pro' ? 'Class Plus' : 'Standard'}</strong><small>{cloudUser ? 'Your plan and tools' : 'Free, no account needed'}</small></article>
+              </div>
+            </section>}
             <section className="landing-hero">
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
