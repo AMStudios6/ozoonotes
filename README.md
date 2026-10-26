@@ -128,6 +128,30 @@ The Windows app opens OzooNotes in its own window and loads the live website, so
 
 On the build page, open the newest successful run and download the **OzooNotes-Windows** artifact.
 
+## 🚀 Where OzooNotes is headed
+
+OzooNotes is growing from a visual workspace into a product for learning, teaching, and project work. The website is the public home for product information and downloads; the app is intended to bring the working dashboard and tools together for people who move between laptops, tablets, and phones.
+
+### 🧭 Learning roadmaps — in development
+
+The roadmap idea is a visual learning path made from connected topics, milestones, and resources. The goal is for people to create a roadmap, search community roadmaps, and share useful learning paths. Treat community publishing and its editing rules as in development until they are available in the app.
+
+### 💻 App plans — proposed
+
+The current plan direction is **Basic**, **Plus**, and **Pro**:
+
+- **Basic:** free, with work saved locally.
+- **Plus:** intended as a one-time purchase.
+- **Pro:** intended as a monthly subscription.
+
+Final prices, included features, limits, and checkout are not confirmed here; use the live pricing page for current terms. Do not assume that every feature described in this plan direction has shipped.
+
+### 💾 Local storage, backups, and cloud sync
+
+Basic is intended to work without a required login or cloud account. Local storage still has a finite device/browser quota, especially when boards include large images or media. Download portable board files regularly and keep a backup outside the browser profile. Clearing browser data or losing a device can remove locally saved work.
+
+A packaged app may store its local work separately from a browser profile, but local app storage also uses device space and is not a backup. The longer-term goal is to offer dependable cloud sync on an eligible plan, with clear storage limits, privacy information, and recovery options before relying on it across devices.
+
 ## ℹ️ A quick note
 
 OzooNotes is designed for visual note-taking, learning, teaching, and lightweight experimentation. The electronics simulator focuses on supported resistive DC circuits; it is not a full engineering package. Download a portable OzooNotes file or export a PDF when you need a copy outside the browser or app profile.
