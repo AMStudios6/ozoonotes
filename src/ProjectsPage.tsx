@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type FormEvent, type CSSProperties } from 'react'
 import './ProjectsPage.css'
 
-type ProjectTheme = 'forest' | 'purple' | 'white-purple' | 'red-white' | 'red-black' | 'doom'
+type ProjectTheme = 'purple' | 'white-purple'
 type AssetKind = 'image' | 'video' | 'link' | 'ozoonotes'
 type ProjectAsset = {
   id: string
@@ -464,7 +464,8 @@ function RichTextEditor({ project, onChange, onAppearanceChange }: { project: Pr
           <button type="button" title="Insert a page number label" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p style="text-align: right">Page 1</p>') }}>#<small>Page Number</small></button>
           <button type="button" title="Insert a signature line" onMouseDown={(event) => { event.preventDefault(); insertHtml('<p>Signature: ______________________________</p>') }}>✎<small>Signature</small></button>
         </div>
-      </> : ribbonTab === 'personalize' ? <div className="project-personalize-panel"><span>Make this project yours</span><label>Paper color<select value={project.appearance?.paper ?? '#fffefa'} onChange={(event) => onAppearanceChange({ paper: event.target.value, accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option value="#fffefa">Warm white</option><option value="#ffffff">White</option><option value="#fff5d8">Cream</option><option value="#f0f6ff">Soft blue</option><option value="#f5efff">Lavender</option></select></label><label>Accent color<select value={project.appearance?.accent ?? '#8057d8'} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: event.target.value, font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option value="#8057d8">Purple</option><option value="#207a6a">Teal</option><option value="#2969b0">Blue</option><option value="#b74760">Rose</option><option value="#a66318">Amber</option></select></label><label>Writing font<select value={project.appearance?.font ?? 'Arial'} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: event.target.value, size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Times New Roman</option><option>Courier New</option></select></label><label>Text size<select value={project.appearance?.size ?? 14} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: Number(event.target.value), width: project.appearance?.width ?? 820 })}>{[12,13,14,16,18,20].map((size) => <option key={size} value={size}>{size}px</option>)}</select></label><label>Page width<select value={project.appearance?.width ?? 820} onChange={(event) => onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: Number(event.target.value) })}><option value={680}>Compact</option><option value={820}>Comfortable</option><option value={960}>Wide</option></select></label><button type="button" onClick={() => onAppearanceChange({ paper: '#fffefa', accent: '#8057d8', font: 'Arial', size: 14, width: 820 })}>Reset</button></div> : <>
+      </> 
+: ribbonTab === 'personalize' ? <div className="project-personalize-panel"><span>Color mode follows the app theme</span><p className="project-personalize-note">Dark mode uses a black page with white text. Light mode uses a white page with black text.</p><label>Writing font<select value={project.appearance?.font ?? 'Arial'} onChange={(event) => onAppearanceChange({ paper: theme === 'purple' ? '#000000' : '#ffffff', accent: theme === 'purple' ? '#ffffff' : '#000000', font: event.target.value, size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Times New Roman</option><option>Courier New</option></select></label><label>Text size<select value={project.appearance?.size ?? 14} onChange={(event) => onAppearanceChange({ paper: theme === 'purple' ? '#000000' : '#ffffff', accent: theme === 'purple' ? '#ffffff' : '#000000', font: project.appearance?.font ?? 'Arial', size: Number(event.target.value), width: project.appearance?.width ?? 820 })}>{[12,13,14,16,18,20].map((size) => <option key={size} value={size}>{size}px</option>)}</select></label><label>Page width<select value={project.appearance?.width ?? 820} onChange={(event) => onAppearanceChange({ paper: theme === 'purple' ? '#000000' : '#ffffff', accent: theme === 'purple' ? '#ffffff' : '#000000', font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: Number(event.target.value) })}><option value={680}>Compact</option><option value={820}>Comfortable</option><option value={960}>Wide</option></select></label><button type="button" onClick={() => onAppearanceChange({ paper: theme === 'purple' ? '#000000' : '#ffffff', accent: theme === 'purple' ? '#ffffff' : '#000000', font: 'Arial', size: 14, width: 820 })}>Reset text settings</button></div> : <>
         <div className="project-math-entry">
           <label htmlFor="project-equation-input">Equation</label>
           <input id="project-equation-input" value={equationDraft} onChange={(event) => setEquationDraft(event.target.value)} onMouseDown={rememberSelection} onKeyDown={(event) => { if (event.key === 'Enter' || (event.key === ' ' && hasMathSyntax(equationDraft))) { event.preventDefault(); insertEquation(equationDraft); setEquationDraft('') } }} placeholder="Type an equation, e.g. 1/2 or x^2" />
@@ -507,14 +508,11 @@ function RichTextEditor({ project, onChange, onAppearanceChange }: { project: Pr
   </div>
   <aside className="project-style-sidebar" aria-label="Quick document formatting">
     <section className="project-style-section"><h3>Theme style</h3>
-      <div className="project-theme-swatches" role="group" aria-label="Paper theme">
+      <div className="project-theme-swatches" role="group" aria-label="Color mode">
         {[
-          { paper: '#fffefa', accent: '#8057d8', label: 'Warm white' },
-          { paper: '#edf4ff', accent: '#3976bd', label: 'Soft blue' },
-          { paper: '#eaf8ef', accent: '#31855c', label: 'Soft green' },
-          { paper: '#fff6d8', accent: '#a77716', label: 'Warm yellow' },
-          { paper: '#f7edff', accent: '#9a55c6', label: 'Lavender' },
-        ].map((swatch) => <button key={swatch.label} type="button" className={'project-theme-swatch ' + ((project.appearance?.paper ?? '#fffefa') === swatch.paper ? 'selected' : '')} style={{ '--swatch-paper': swatch.paper, '--swatch-accent': swatch.accent } as CSSProperties} aria-label={swatch.label} aria-pressed={(project.appearance?.paper ?? '#fffefa') === swatch.paper} onMouseDown={(event) => event.preventDefault()} onClick={() => onAppearanceChange({ paper: swatch.paper, accent: swatch.accent, font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><span>Aa</span></button>)}
+          { mode: 'white-purple' as const, paper: '#ffffff', ink: '#000000', label: 'Light · white background, black text' },
+          { mode: 'purple' as const, paper: '#000000', ink: '#ffffff', label: 'Dark · black background, white text' },
+        ].map((swatch) => <button key={swatch.mode} type="button" className={'project-theme-swatch ' + (theme === swatch.mode ? 'selected' : '')} style={{ '--swatch-paper': swatch.paper, '--swatch-accent': swatch.ink } as CSSProperties} aria-label={swatch.label} aria-pressed={theme === swatch.mode} onMouseDown={(event) => event.preventDefault()} onClick={() => onThemeChange(swatch.mode)}><span>Aa</span></button>)}
       </div>
     </section>
     <section className="project-style-section"><h3>Text editor</h3>
@@ -571,7 +569,7 @@ function ProjectAssetCard({ asset, onDelete }: { asset: ProjectAsset; onDelete: 
   </article>
 }
 
-function ProjectStudio({ onBack, theme, initialProjectId }: { onBack: () => void; theme: ProjectTheme; initialProjectId?: string }) {
+function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onBack: () => void; theme: ProjectTheme; onThemeChange: (theme: ProjectTheme) => void; initialProjectId?: string }) {
   const [projects, setProjects] = useState<ProjectDocument[]>([])
   const projectsRef = useRef<ProjectDocument[]>([])
   const [activeId, setActiveId] = useState<string | null>(initialProjectId ?? null)
