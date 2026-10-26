@@ -337,3 +337,17 @@ svg {
   }
 }
 
+
+/* Mobile dashboard drawer overrides: kept after responsive layout rules so it stays available on phones */
+@media(max-width:760px) {
+  .dashboard-window .landing-topbar{position:fixed!important;z-index:1000!important;inset:0 auto 0 0!important;width:min(292px,86vw)!important;height:100vh!important;height:100dvh!important;max-height:100dvh!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:12px!important;overflow-y:auto!important;padding:16px 14px 14px!important;border:1px solid var(--line)!important;border-left:0!important;border-radius:0 20px 20px 0!important;background:var(--panel)!important;box-shadow:0 16px 48px #08060c55!important;backdrop-filter:blur(18px);transition:transform .22s ease!important;transform:translateX(0)!important;scrollbar-width:thin}
+  .dashboard-window.sidebar-collapsed .landing-topbar{transform:translateX(-105%)!important}
+  .dashboard-window:not(.sidebar-collapsed) .landing-topbar{transform:translateX(0)!important}
+  .dashboard-window.sidebar-collapsed .landing-nav{display:flex!important}
+  .dashboard-window.sidebar-collapsed .dashboard-sidebar-toggle{display:none!important}
+  .dashboard-mobile-sidebar-toggle{position:fixed!important;z-index:1002!important;top:12px!important;left:12px!important;width:44px!important;height:44px!important;display:grid!important;place-items:center!important;border:1px solid var(--line)!important;border-radius:12px!important;background:var(--panel)!important;color:var(--ink)!important;font:inherit!important;font-size:22px!important;line-height:1!important;cursor:pointer!important;box-shadow:0 5px 18px #0004!important}
+  .dashboard-mobile-sidebar-toggle:hover,.dashboard-mobile-sidebar-toggle:focus-visible{background:var(--accent-soft)!important;color:var(--accent)!important;outline:2px solid var(--accent)!important;outline-offset:2px!important}
+  .dashboard-mobile-sidebar-backdrop{position:fixed!important;z-index:999!important;inset:0!important;display:block!important;border:0!important;background:#08060dcc!important;cursor:pointer!important}
+  .dashboard-window .dashboard-custom-layout{padding-top:54px!important}
+}
+@media(min-width:761px){.dashboard-mobile-sidebar-toggle,.dashboard-mobile-sidebar-backdrop{display:none!important}}
