@@ -1308,10 +1308,3 @@
   .dashboard-theme-grid { grid-template-columns:1fr }
   .dashboard-theme-card { padding:13px }
 }
-
-
-.dashboard-mode-switch { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:16px; padding:8px; border:1px solid var(--line); border-radius:12px; background:var(--workspace) }
-.dashboard-mode-switch>span { margin:0 5px; color:var(--muted); font-size:10px; font-weight:700 }
-.dashboard-mode-switch button { min-height:32px; padding:0 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--ink); font:inherit; font-size:10px; font-weight:650; cursor:pointer }
-.dashboard-mode-switch button.selected { border-color:var(--accent); background:var(--accent-soft); color:var(--accent) }
-.dashboard-appearance-editor>div p { margin:5px 0 0; color:var(--muted); font-size:10px; line-height:1.5 }
