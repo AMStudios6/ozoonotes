@@ -940,7 +940,7 @@
 .dashboard-window .dashboard-editor-toggle {height:40px}
 .dashboard-window .profile-menu-trigger {width:100%;min-height:42px;justify-content:flex-start;border-radius:11px}
 .dashboard-window .profile-trigger-copy {flex:1}
-.dashboard-window .profile-dropdown {position:fixed;top:auto;right:auto;bottom:18px;left:270px;width:min(320px,calc(100vw - 290px))}
+.dashboard-window .profile-dropdown {position:fixed;top:18px;right:18px;bottom:auto;left:auto;width:min(320px,calc(100vw - 36px))}
 .dashboard-window .theme-toggle {height:40px}
 .dashboard-window .theme-picker select {max-width:none;flex:1}
 .dashboard-custom-layout {width:auto;max-width:none;margin:0 28px 0 282px;grid-template-columns:minmax(0,1fr)}
