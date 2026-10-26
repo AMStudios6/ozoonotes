@@ -3563,7 +3563,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
             </section>
 
             <section className="auth-card" aria-labelledby="auth-heading">
-              <div className="auth-card-icon" aria-hidden="true"><img src={brandLogo} alt="" /></div>
+              <div className="auth-card-icon" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}ozoo-pen-icon.png`} alt="" /></div>
               <p className="auth-card-eyebrow">YOUR PERSONAL WORKSPACE</p>
               <h2 id="auth-heading">{authMode === 'register' ? 'Create your account' : authMode === 'verify' ? 'Verify your email' : authMode === 'forgot' ? 'Reset your password' : authMode === 'reset' ? 'Choose a new password' : gateTitle}</h2>
               <p className="auth-card-copy">{authMode === 'register' ? 'Create an account for cloud storage, profile tools, and sharing.' : authMode === 'verify' ? 'We’ll send a fresh one-time verification link to your inbox.' : authMode === 'forgot' ? 'Enter the email address on your account and we’ll send a reset link.' : authMode === 'reset' ? 'Choose a new password for your OzooNotes account.' : 'Sign in for cloud storage, account tools, and sharing. You can use the free workspace without an account.'}</p>
