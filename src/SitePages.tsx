@@ -1,7 +1,7 @@
 import { useState, type MouseEvent as ReactMouseEvent } from 'react'
 import './SitePages.css'
 
-export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'diary' | 'roadmaps' | 'contact' | 'notes' | 'signin' | 'profile' | 'admin'
+export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'diary' | 'roadmaps' | 'contact' | 'notes' | 'signin' | 'profile' | 'account' | 'admin'
 
 type SharedProps = {
   logo: string
