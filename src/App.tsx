@@ -40,6 +40,30 @@ type Point = { x: number; y: number }
 type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; cornerRadius?: number; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle; smoothing?: number; strokeCap?: 'round' | 'square' }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 type SelectionBox = { start: Point; current: Point }
+type DecorationPosition = 'top' | 'middle' | 'bottom' | 'left' | 'right'
+type DashboardDecoration = { id: string; kind: 'banner'; position: DecorationPosition; title: string; subtitle: string; color: string; image?: string; url?: string } | { id: string; kind: 'sticker'; position: DecorationPosition; emoji: string; image?: string; alt: string; url?: string }
+function readDashboardValue<T>(key: string, fallback: T): T {
+  try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback } catch { return fallback }
+}
+function safeDashboardUrl(value: string) {
+  const candidate = value.trim()
+  if (!candidate) return undefined
+  try { const parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(candidate) ? candidate : 'https://' + candidate); return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : undefined } catch { return undefined }
+}
+async function compressDashboardImage(file: File, maxWidth: number, maxHeight: number) {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPEG, or WebP image.')
+  if (file.size > 10 * 1024 * 1024) throw new Error('Images must be smaller than 10 MB.')
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(1, maxWidth / bitmap.width, maxHeight / bitmap.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+  const context = canvas.getContext('2d')
+  if (!context) { bitmap.close(); throw new Error('This browser could not prepare the image.') }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close()
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The image could not be compressed.')), 'image/webp', 0.76))
+  if (blob.size > 180 * 1024) throw new Error('This image is still too large after compression. Try a smaller image.')
+  return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('The image could not be read.')); reader.readAsDataURL(blob) })
+}
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
 function themedCanvasBackground(theme: ColorTheme) {
@@ -1182,7 +1206,48 @@ function App() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [autoSaveError, setAutoSaveError] = useState('')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
+  const [dashboardDecorations, setDashboardDecorations] = useState<DashboardDecoration[]>(() => readDashboardValue('ozoo:dashboard-decorations', []))
+  const [dashboardCustomizerOpen, setDashboardCustomizerOpen] = useState(false)
+  const [customizerMessage, setCustomizerMessage] = useState('')
+  const [bannerTitle, setBannerTitle] = useState('')
+  const [bannerSubtitle, setBannerSubtitle] = useState('')
+  const [bannerColor, setBannerColor] = useState('#bce9e8')
+  const [bannerImage, setBannerImage] = useState('')
+  const [bannerUrl, setBannerUrl] = useState('')
+  const [bannerPosition, setBannerPosition] = useState<DecorationPosition>('top')
+  const [stickerEmoji, setStickerEmoji] = useState('✨')
+  const [stickerAlt, setStickerAlt] = useState('')
+  const [stickerImage, setStickerImage] = useState('')
+  const [stickerUrl, setStickerUrl] = useState('')
+  const [stickerPosition, setStickerPosition] = useState<DecorationPosition>('top')
+  const [dashboardFooterNote, setDashboardFooterNote] = useState<string>(() => readDashboardValue('ozoo:dashboard-footer-note', ''))
+  const [footerNoteDraft, setFooterNoteDraft] = useState<string>(() => readDashboardValue('ozoo:dashboard-footer-note', ''))
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
+  const saveDashboardDecoration = (decoration: DashboardDecoration) => {
+    if (dashboardDecorations.length >= 24) { setCustomizerMessage('You can add up to 24 banners and stickers.'); return false }
+    const next = [...dashboardDecorations, decoration]
+    if (JSON.stringify(next).length > 1_200_000) { setCustomizerMessage('Dashboard decorations are using too much browser storage. Remove an image or choose a smaller one.'); return false }
+    setDashboardDecorations(next); setCustomizerMessage(''); return true
+  }
+  const addDashboardBanner = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const title = bannerTitle.trim()
+    if (!title && !bannerImage) { setCustomizerMessage('Add a title or image for your banner.'); return }
+    const url = safeDashboardUrl(bannerUrl)
+    if (bannerUrl.trim() && !url) { setCustomizerMessage('Enter a valid http or https link.'); return }
+    if (saveDashboardDecoration({ id: crypto.randomUUID(), kind: 'banner', position: bannerPosition, title, subtitle: bannerSubtitle.trim(), color: bannerColor, ...(bannerImage ? { image: bannerImage } : {}), ...(url ? { url } : {}) })) { setBannerTitle(''); setBannerSubtitle(''); setBannerImage(''); setBannerUrl('') }
+  }
+  const addDashboardSticker = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const url = safeDashboardUrl(stickerUrl)
+    if (stickerUrl.trim() && !url) { setCustomizerMessage('Enter a valid http or https link.'); return }
+    if (saveDashboardDecoration({ id: crypto.randomUUID(), kind: 'sticker', position: stickerPosition, emoji: stickerEmoji.trim() || '✨', alt: stickerAlt.trim() || 'Dashboard sticker', ...(stickerImage ? { image: stickerImage } : {}), ...(url ? { url } : {}) })) { setStickerImage(''); setStickerAlt(''); setStickerUrl('') }
+  }
+  const updateDecorationPosition = (id: string, position: DecorationPosition) => setDashboardDecorations((current) => current.map((item) => item.id === id ? { ...item, position } as DashboardDecoration : item))
+  const removeDashboardDecoration = (id: string) => setDashboardDecorations((current) => current.filter((item) => item.id !== id))
+  const renderDashboardDecorations = (position: DecorationPosition) => dashboardDecorations.filter((item) => item.position === position).map((item) => item.kind === 'banner'
+    ? <article className={"dashboard-decoration-banner" + (item.image ? ' has-image' : '')} key={item.id} style={{ backgroundColor: item.color }}>{item.image && <img src={item.image} alt="" />}{item.title && <strong>{item.title}</strong>}{item.subtitle && <span>{item.subtitle}</span>}{item.url && <a className="dashboard-decoration-click-target" href={safeDashboardUrl(item.url)} target="_blank" rel="noopener noreferrer" aria-label={'Open link: ' + (item.title || 'dashboard banner')} />}</article>
+    : <div className="dashboard-decoration-sticker" key={item.id} title={item.alt}>{item.image ? <img src={item.image} alt={item.alt} /> : <span aria-hidden="true">{item.emoji}</span>}{item.url && <a className="dashboard-decoration-click-target" href={safeDashboardUrl(item.url)} target="_blank" rel="noopener noreferrer" aria-label={'Open link: ' + item.alt} />}</div>)
   const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
     if (!name || name.includes(':')) return false
     try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? 'null') as { infinite?: boolean } | null)?.infinite !== true }
@@ -1221,6 +1286,8 @@ function App() {
     if (recorder && recorder.state !== 'inactive') recorder.stop()
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
   }, [])
+  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-decorations', JSON.stringify(dashboardDecorations)) } catch { setCustomizerMessage('Browser storage is full. Remove a large image or delete a decoration, then try again.') } }, [dashboardDecorations])
+  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-footer-note', JSON.stringify(dashboardFooterNote)) } catch { setCustomizerMessage('Browser storage is full. Your footer note could not be saved.') } }, [dashboardFooterNote])
   useEffect(() => { try { localStorage.setItem('ozoo:notebooks', JSON.stringify(notebooks)) } catch { /* Notebook organization remains optional if storage is full. */ } }, [notebooks])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
   const [page, setPage] = useState(initialWorkspace.page)
@@ -3445,6 +3512,7 @@ function App() {
               </div>
             </nav>
             <div className="landing-top-actions">
+              {sitePage === 'dashboard' && <button aria-label="Customize dashboard" className="dashboard-editor-toggle" onClick={() => { setCustomizerMessage(''); setDashboardCustomizerOpen(true) }}>✦ <span>Customize</span></button>}
               {!localOnly && (cloudUser ? <details ref={profileMenuRef} className="profile-menu" onToggle={(event) => { if (event.currentTarget.open) { try { setStudentProfileSummary(JSON.parse(localStorage.getItem('ozoo:student-profile') ?? 'null')) } catch { setStudentProfileSummary(null) } } }}>
                 <summary className="profile-menu-trigger" aria-label={`Open profile menu for ${cloudUser.username}`}>
                   {cloudUser.avatar ? <img className="profile-avatar profile-avatar-photo" src={cloudUser.avatar} alt="" /> : <span className="profile-avatar" aria-hidden="true">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase() || 'O'}</span>}
@@ -3480,7 +3548,10 @@ function App() {
               <label className="theme-toggle theme-picker"><span>Theme</span><select aria-label="Color scheme" value={colorTheme} onChange={(event) => setColorTheme(event.target.value as ColorTheme)}>{colorThemes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             </div>
           </header>
-          <div className="landing-page">
+          <div className={sitePage === 'dashboard' ? 'dashboard-custom-layout' : 'landing-custom-layout'}>
+            {sitePage === 'dashboard' && dashboardDecorations.some((item) => item.position === 'left') && <aside className="dashboard-decoration-rail left" aria-label="Left dashboard decorations">{renderDashboardDecorations('left')}</aside>}
+            <div className="landing-page">
+              {sitePage === 'dashboard' && <div className="dashboard-decoration-row dashboard-decoration-top">{renderDashboardDecorations('top')}</div>}
             <section className="landing-hero">
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
@@ -3514,6 +3585,7 @@ function App() {
                 <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
               </div>
             </section>
+            {sitePage === 'dashboard' && <div className="dashboard-decoration-row dashboard-decoration-middle">{renderDashboardDecorations('middle')}</div>}
             <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
               <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : landingAudience === 'teacher' ? 'TEACHER STARTERS' : 'BUSINESS STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
               <div className="starter-card-grid" role="tabpanel" aria-label={landingAudience === 'student' ? 'Student board starters' : landingAudience === 'teacher' ? 'Teacher board starters' : 'Business board starters'}>
@@ -3563,9 +3635,10 @@ function App() {
               {(() => { const files = [...new Set(recentFiles)].filter((name) => name && !name.includes(':')); const query = tagFilter.trim().replace(/^#/, '').toLowerCase(); const filtered = files.filter((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} const noteText = ((meta as { pageStrokes?: { text?: string }[][] }).pageStrokes ?? []).flat().map((stroke) => stroke.text ?? '').join(' '); const haystack = `${name} ${meta.notebook ?? 'Inbox'} ${(meta.tags ?? []).join(' ')} ${noteText}`.toLowerCase(); const tags = (meta.tags ?? []).map((tag) => tag.toLowerCase().replace(/^#/, '')); const tagMatches = !query || (query === 'active' || query === 'favorite' ? tags.includes(query) : tags.some((tag) => tag.includes(query))); return haystack.includes(fileSearch.trim().toLowerCase()) && (notebookFilter === 'All notebooks' || (meta.notebook ?? 'Inbox') === notebookFilter) && tagMatches }); return filtered.length ? <div className="landing-recent-list">{filtered.map((name) => { let meta: { notebook?: string; tags?: string[] } = {}; try { meta = JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? '{}') } catch {} return <article className="library-file-card" key={name}><button className="library-file-open" onClick={() => openSavedFile(name)}><span className="recent-icon"><ThemeIcon source={notesPng} size={19} /></span><span>{name}<small>Saved in this browser</small></span><b>Open <Icon name="next" size={13} /></b></button><button type="button" className="library-file-settings" onClick={() => openFileSettings(name)}><Icon name="settings" size={15} /> File settings</button>{Boolean(meta.tags?.length) && <div className="file-tag-list">{meta.tags?.map((tag) => <span key={tag}>#{tag.replace(/^#/, '')}</span>)}</div>}</article> })}</div> : <div className="library-no-results">{files.length ? 'No files match those filters.' : 'Your saved boards will appear here. Create one to get started, or open an OzooNotes file.'}</div> })()}
               {!localOnly && cloudUser && <div className="landing-cloud-files"><h3>Cloud boards</h3>{cloudBoards.length ? <div className="landing-recent-list">{cloudBoards.map((board) => <button key={board.id} onClick={() => loadCloudBoard(board)}><span className="recent-icon"><Icon name="cloud" size={18} /></span><span>{board.ownerId && board.ownerId !== cloudUser.id ? `${board.ownerName || 'Student'} — ${board.name}` : board.name}<small>{board.ownerId && board.ownerId !== cloudUser.id ? `Student note · ${board.role === 'edit' ? 'edit access' : 'view access'}` : 'Saved on your server'}</small></span><b>Open <Icon name="next" size={13} /></b></button>)}</div> : <p className="empty-hint">No cloud boards yet.</p>}</div>}
             </section>
+{sitePage === 'dashboard' && <div className="dashboard-decoration-row dashboard-decoration-bottom">{renderDashboardDecorations('bottom')}</div>}
 <footer className="landing-footer">
             <div className="landing-brand"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></div>
-            <span>Don’t Doomscroll, just OzooNotes</span>
+            <span>Don’t Doomscroll, just OzooNotes</span>{sitePage === 'dashboard' && dashboardFooterNote && <span className="dashboard-footer-note">{dashboardFooterNote}</span>}
             <div className="landing-footer-socials">
               <a className="landing-footer-contact" href="/?page=contact" onClick={(event) => { event.preventDefault(); navigatePage('contact') }}>Contact</a>
               <a className="landing-footer-feedback" href="https://github.com/AMStudios6/ozoonotes/issues/new" target="_blank" rel="noreferrer">Feedback</a>
@@ -3576,8 +3649,16 @@ function App() {
             </div>
           </footer>
           </div>
+            {sitePage === 'dashboard' && dashboardDecorations.some((item) => item.position === 'right') && <aside className="dashboard-decoration-rail right" aria-label="Right dashboard decorations">{renderDashboardDecorations('right')}</aside>}
+          </div>
         </section>
-        {newFileDialog}
+                {dashboardCustomizerOpen && sitePage === 'dashboard' && <div className="dashboard-editor-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDashboardCustomizerOpen(false) }}><section className="dashboard-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboard-editor-title"><button className="dashboard-editor-close" onClick={() => setDashboardCustomizerOpen(false)} aria-label="Close dashboard editor">×</button><p className="dashboard-kicker">MAKE IT YOURS</p><h2 id="dashboard-editor-title">Customize dashboard</h2><p className="dashboard-editor-intro">Add banners and stickers, choose where they appear, and save a short footer note. This layout stays in this browser.</p>
+          <form className="dashboard-footer-note-form" onSubmit={(event) => { event.preventDefault(); setDashboardFooterNote(footerNoteDraft.trim().slice(0, 160)); setCustomizerMessage('Footer note saved.') }}><label>Optional short footer note<input value={footerNoteDraft} onChange={(event) => setFooterNoteDraft(event.target.value)} maxLength={160} placeholder="A short note shown at the bottom of your dashboard" /></label><button className="dashboard-editor-save-note">Save note</button><button type="button" className="dashboard-editor-clear-note" onClick={() => { setFooterNoteDraft(''); setDashboardFooterNote('') }}>Clear</button></form>
+          <div className="dashboard-editor-forms">
+            <form className="dashboard-editor-form" onSubmit={addDashboardBanner}><h3>✦ Add a banner</h3><label>Heading<input value={bannerTitle} onChange={(event) => setBannerTitle(event.target.value)} maxLength={80} placeholder="e.g. This week’s focus" /></label><label>Supporting text<input value={bannerSubtitle} onChange={(event) => setBannerSubtitle(event.target.value)} maxLength={140} placeholder="A short message or reminder" /></label><div className="dashboard-editor-form-row"><label>Banner color<input type="color" value={bannerColor} onChange={(event) => setBannerColor(event.target.value)} /></label><label>Placement<select value={bannerPosition} onChange={(event) => setBannerPosition(event.target.value as DecorationPosition)}><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option><option value="left">Left side · vertical</option><option value="right">Right side · vertical</option></select></label></div><label>Optional link<input type="url" value={bannerUrl} onChange={(event) => setBannerUrl(event.target.value)} maxLength={500} placeholder="https://example.com" /></label><label className="dashboard-editor-upload">Optional banner image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void compressDashboardImage(file, 1500, 500).then(setBannerImage).then(() => setCustomizerMessage('Banner image ready.')).catch((error: Error) => setCustomizerMessage(error.message)); event.currentTarget.value = '' }} /></label>{bannerImage && <button className="dashboard-editor-clear-image" type="button" onClick={() => setBannerImage('')}>Remove selected image</button>}<button className="dashboard-form-submit">Add banner</button></form>
+            <form className="dashboard-editor-form" onSubmit={addDashboardSticker}><h3>❋ Add a sticker</h3><label>Emoji<input value={stickerEmoji} onChange={(event) => setStickerEmoji(event.target.value)} maxLength={8} placeholder="✨" /></label><div className="dashboard-emoji-picks">{['✨','🌱','📚','💡','⭐','🎯','🪴','☀️'].map((emoji) => <button type="button" key={emoji} onClick={() => setStickerEmoji(emoji)} aria-label={'Choose ' + emoji + ' sticker'}>{emoji}</button>)}</div><label>Accessible description<input value={stickerAlt} onChange={(event) => setStickerAlt(event.target.value)} maxLength={70} placeholder="e.g. Study reminder" /></label><label>Optional link<input type="url" value={stickerUrl} onChange={(event) => setStickerUrl(event.target.value)} maxLength={500} placeholder="https://example.com" /></label><label>Optional sticker image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void compressDashboardImage(file, 512, 512).then(setStickerImage).then(() => setCustomizerMessage('Sticker image ready.')).catch((error: Error) => setCustomizerMessage(error.message)); event.currentTarget.value = '' }} /></label>{stickerImage && <button className="dashboard-editor-clear-image" type="button" onClick={() => setStickerImage('')}>Remove selected image</button>}<label>Placement<select value={stickerPosition} onChange={(event) => setStickerPosition(event.target.value as DecorationPosition)}><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option><option value="left">Left side · vertical</option><option value="right">Right side · vertical</option></select></label><button className="dashboard-form-submit">Add sticker</button></form>
+          </div><div className="dashboard-editor-items-heading"><h3>Your decorations</h3><span>{dashboardDecorations.length}/24</span></div>{dashboardDecorations.length ? <ul className="dashboard-editor-items">{dashboardDecorations.map((item) => <li key={item.id}><span className="dashboard-editor-item-preview">{item.kind === 'banner' ? item.image ? <img src={item.image} alt="" /> : '▰' : item.image ? <img src={item.image} alt="" /> : item.emoji}</span><strong>{item.kind === 'banner' ? item.title || 'Image banner' : item.alt || 'Sticker'}</strong><select aria-label={'Placement for ' + (item.kind === 'banner' ? item.title || 'banner' : item.alt || 'sticker')} value={item.position} onChange={(event) => updateDecorationPosition(item.id, event.target.value as DecorationPosition)}><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option><option value="left">Left side</option><option value="right">Right side</option></select><button onClick={() => removeDashboardDecoration(item.id)} aria-label="Remove decoration">Remove</button></li>)}</ul> : <p className="dashboard-editor-empty">No decorations yet. Add a banner or sticker above to personalize your workspace.</p>}{customizerMessage && <p className="dashboard-editor-message" role="status">{customizerMessage}</p>}</section></div>}
+{newFileDialog}
         {renameDialog}
         {fileSettingsDialog}
         {quickStartDialog}
