@@ -1272,3 +1272,39 @@
 /* Monochrome app themes */
 .app[data-theme="purple"] {--frame:#000000;--frame-top:#080808;--workspace:#000000;--panel:#090909;--panel-raised:#171717;--ink:#ffffff;--muted:#c4c4c4;--line:#333333;--accent:#ffffff;--accent-soft:#242424;background:#000000}
 .app[data-theme="white-purple"] {--frame:#ffffff;--frame-top:#ffffff;--workspace:#ffffff;--panel:#ffffff;--panel-raised:#f7f7f7;--ink:#000000;--muted:#555555;--line:#dddddd;--accent:#000000;--accent-soft:#f0f0f0;background:#ffffff}
+.dashboard-mobile-sidebar-toggle,.dashboard-mobile-sidebar-backdrop { display:none }
+@media(max-width:760px) {
+  .dashboard-window .landing-topbar { position:fixed; z-index:1000; inset:0 auto 0 0; width:min(292px,86vw); height:100vh; max-height:100dvh; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; gap:12px; overflow-y:auto; padding:16px 14px 14px; border:1px solid var(--line); border-left:0; border-radius:0 20px 20px 0; background:var(--panel); box-shadow:0 16px 48px #08060c55; backdrop-filter:blur(18px); transition:transform .22s ease; transform:translateX(-105%); scrollbar-width:thin }
+  .dashboard-window:not(.sidebar-collapsed) .landing-topbar { transform:translateX(0) }
+  .dashboard-window .dashboard-sidebar-toggle { position:absolute; top:12px; right:12px; z-index:2; width:34px; height:34px; margin:0 }
+  .dashboard-window .landing-brand { justify-content:flex-start; margin:0 42px 4px 0; padding:0 }
+  .dashboard-window .landing-brand .brand-mark { width:148px; height:46px; object-fit:contain }
+  .dashboard-window > .landing-topbar > .dashboard-sidebar-label { display:block; padding:0 10px; color:var(--ink); font-size:12px }
+  .dashboard-window .landing-dashboard-link { width:100%; min-height:42px; justify-content:flex-start; gap:10px; margin:0; padding:0 12px }
+  .dashboard-window .landing-nav { display:flex; flex:0 0 auto; flex-direction:column; align-items:stretch; gap:3px; width:100%; overflow:visible; grid-column:auto; grid-row:auto }
+  .dashboard-window .dashboard-nav-section { display:flex; flex-direction:column; align-items:stretch; width:100% }
+  .dashboard-window .dashboard-nav-section-separated { margin-top:10px; padding-top:10px; border-top:1px solid var(--line) }
+  .dashboard-window .landing-nav-project,.dashboard-window .landing-simulator-wrap { width:100%; flex:none }
+  .dashboard-window .landing-nav-project,.dashboard-window .landing-simulator-trigger { min-height:39px; justify-content:flex-start; padding:0 12px; white-space:normal }
+  .dashboard-window .landing-simulator-trigger { justify-content:space-between }
+  .dashboard-window .dashboard-folder-heading { display:flex }
+  .dashboard-window .dashboard-folder-tree { display:block }
+  .dashboard-window .dashboard-folder-children { display:flex }
+  .dashboard-window .landing-top-actions { display:flex; flex:0 0 auto; flex-direction:column; align-items:stretch; justify-content:flex-start; flex-wrap:nowrap; gap:8px; width:100%; margin-top:auto; padding-top:12px; border-top:1px solid var(--line) }
+  .dashboard-window .landing-top-actions>* { width:100% }
+  .dashboard-window .dashboard-editor-toggle,.dashboard-window .account-button,.dashboard-window .theme-toggle,.dashboard-window .profile-menu-trigger { width:100%; min-width:0; min-height:40px; justify-content:flex-start; padding:0 11px }
+  .dashboard-window .profile-trigger-copy { display:flex }
+  .dashboard-window .profile-dropdown { position:fixed; top:14px; right:10px; bottom:auto; left:auto; width:min(320px,calc(100vw - 20px)) }
+  .dashboard-window.sidebar-collapsed .landing-nav { display:flex }
+  .dashboard-window.sidebar-collapsed .dashboard-sidebar-label,
+  .dashboard-window.sidebar-collapsed .landing-dashboard-link span,
+  .dashboard-window.sidebar-collapsed .landing-nav-project span,
+  .dashboard-window.sidebar-collapsed .landing-simulator-trigger span,
+  .dashboard-window.sidebar-collapsed .landing-simulator-trigger>svg:last-child,
+  .dashboard-window.sidebar-collapsed .dashboard-folder-link>span:nth-child(2),
+  .dashboard-window.sidebar-collapsed .profile-trigger-copy { display:initial }
+  .dashboard-mobile-sidebar-toggle { position:fixed; z-index:1001; top:12px; left:12px; width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--ink); font:inherit; font-size:22px; line-height:1; cursor:pointer; box-shadow:0 5px 18px #0003 }
+  .dashboard-mobile-sidebar-toggle:hover,.dashboard-mobile-sidebar-toggle:focus-visible { background:var(--accent-soft); color:var(--accent); outline:2px solid var(--accent); outline-offset:2px }
+  .dashboard-mobile-sidebar-backdrop { position:fixed; z-index:999; inset:0; display:block; border:0; background:#08060dcc; cursor:pointer }
+  .dashboard-window .dashboard-custom-layout { padding-top:54px }
+}
