@@ -87,8 +87,8 @@ function themedCanvasBackground(theme: ColorTheme) {
   return theme === 'purple' ? '#08060d' : '#f8f5ff'
 }
 const colorThemes: { id: ColorTheme; name: string; dark: boolean }[] = [
-  { id: 'purple', name: 'Purple & Black', dark: true },
-  { id: 'white-purple', name: 'White & Purple', dark: false },
+  { id: 'purple', name: 'Black & White', dark: true },
+  { id: 'white-purple', name: 'White & Black', dark: false },
 ]
 function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation: 'portrait' | 'landscape', theme: ColorTheme = 'purple'): Stroke[] {
   if (template === 'Blank') return []
@@ -3582,7 +3582,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
   if (codeSimulatorMode === 'cpp') return <CppSimulator onBack={() => setCodeSimulatorMode(null)} />
   if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
-  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} initialProjectId={projectFocusId ?? undefined} onBack={() => { setProjectsPageOpen(false); setProjectFocusId(null) }} />
+  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onThemeChange={setColorTheme} initialProjectId={projectFocusId ?? undefined} onBack={() => { setProjectsPageOpen(false); setProjectFocusId(null) }} />
 
   if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
