@@ -279,3 +279,45 @@
 .project-rich-editor h1,.project-rich-editor h2,.project-rich-editor h3{color:var(--project-accent,#8057d8)}
 .project-rich-editor blockquote{border-left-color:var(--project-accent,#8057d8)}
 @media(max-width:700px){.project-personalize-panel{align-items:stretch}.project-personalize-panel label{flex:1 1 42%}.project-personalize-panel select{width:100%;min-width:0}}
+
+/* Three-pane project writing workspace */
+.project-editor-columns {max-width:1280px;display:grid;grid-template-columns:minmax(0,1fr) 232px;align-items:start;gap:16px;margin:0 auto}
+.project-editor-columns .project-editor-wrap {min-width:0;max-width:none;margin:0}
+.project-editor-columns .project-editor-status {max-width:none;padding-inline:8px}
+.project-style-sidebar {position:sticky;top:18px;min-width:0;display:grid;gap:0;padding:2px 15px 12px;border:1px solid var(--p-line);border-radius:15px;background:var(--p-panel);box-shadow:0 8px 26px #1611220a}
+.project-style-section {padding:15px 0;border-bottom:1px dashed var(--p-line)}
+.project-style-section:last-child {border:0}
+.project-style-section h3 {margin:0 0 12px;color:var(--p-ink);font-size:12px;font-weight:720}
+.project-theme-swatches {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.project-theme-swatch {position:relative;height:43px;display:grid;place-items:center;border:1px solid var(--p-line);border-radius:11px;background:var(--swatch-paper);color:var(--swatch-accent);font-size:13px;font-weight:700;cursor:pointer}
+.project-theme-swatch:hover,.project-theme-swatch.selected {outline:2px solid color-mix(in srgb,var(--swatch-accent) 48%,transparent);outline-offset:1px}
+.project-theme-swatch.selected::after {position:absolute;top:-5px;right:-4px;width:15px;height:15px;display:grid;place-items:center;border-radius:50%;background:var(--swatch-accent);color:white;font-size:10px;content:"✓"}
+.project-style-select {display:grid;gap:5px;margin-bottom:10px;color:var(--p-muted);font-size:9px;font-weight:650}
+.project-style-select select {width:100%;height:35px;padding:0 10px;border:1px solid var(--p-line);border-radius:9px;background:var(--p-surface);color:var(--p-ink);font:inherit;font-size:10px}
+.project-style-button-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0}
+.project-style-button-grid button {height:43px;display:grid;place-items:center;border:1px solid transparent;border-radius:12px;background:var(--p-surface);color:var(--p-ink);font-size:14px;cursor:pointer}
+.project-style-button-grid button:hover,.project-style-insert-grid button:hover {border-color:var(--p-accent);background:var(--p-soft);color:var(--p-accent)}
+.project-style-align-grid button {height:37px}
+.project-style-size-row {display:grid;grid-template-columns:1fr 30px 46px 30px;align-items:center;gap:5px;margin:11px 0;color:var(--p-muted);font-size:9px}
+.project-style-size-row button {height:28px;border:1px solid var(--p-line);border-radius:8px;background:var(--p-surface);color:var(--p-ink);font-size:14px;cursor:pointer}
+.project-style-size-row output {color:var(--p-ink);text-align:center;font-size:10px}
+.project-style-color-row {display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.project-style-color-row label {display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--p-muted);font-size:9px}
+.project-style-color-row input {width:32px;height:27px;padding:2px;border:1px solid var(--p-line);border-radius:7px;background:var(--p-surface);cursor:pointer}
+.project-style-insert-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.project-style-insert-grid button {min-width:0;height:54px;display:grid;align-content:center;justify-items:center;gap:3px;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--p-ink);cursor:pointer}
+.project-style-insert-grid button span {font-size:17px}
+.project-style-insert-grid button small {color:var(--p-muted);font-size:8px}
+.project-style-sidebar :is(button,select,input):focus-visible {outline:2px solid var(--p-accent);outline-offset:2px}
+@media(max-width:1120px) {
+  .project-editor-columns {grid-template-columns:minmax(0,1fr)}
+  .project-style-sidebar {position:static;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:0 16px}
+  .project-style-section {min-width:0}
+}
+@media(max-width:700px) {
+  .project-editor-columns {gap:10px}
+  .project-style-sidebar {grid-template-columns:minmax(0,1fr);padding:0 12px}
+  .project-style-section {padding:12px 0}
+  .project-theme-swatches {grid-template-columns:repeat(5,minmax(0,1fr))}
+  .project-style-insert-grid button {height:48px}
+}
