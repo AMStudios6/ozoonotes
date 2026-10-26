@@ -1384,3 +1384,12 @@
 /* Keep the graph toolbar readable in the charcoal theme. */
 .app.dark .graph-canvas-tools button { background:#242424; color:#f5f5f5; border-color:#454545; }
 .app.dark .graph-canvas-tools button:hover { background:#323232; }
+
+/* Use charcoal action buttons in dark mode so primary controls do not appear as white blocks. */
+.app.dark .timer-actions button:first-child,
+.app.dark .dashboard-create-button,
+.app.dark .dashboard-folder-create button,
+.app.dark .diary-week-strip>button.selected,
+.app.dark .diary-save-button,
+.app.dark .dashboard-inline-add button,
+.app.dark .dashboard-task-form button { background:#272727; color:#f4f4f4; border-color:#424242; }
