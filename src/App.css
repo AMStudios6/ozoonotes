@@ -1165,3 +1165,7 @@
   .dashboard-file-inspector {top:auto;right:10px;bottom:10px;left:10px;width:auto;max-height:min(48vh,420px);transform:none}
   .folder-contents-actions {align-items:stretch;flex-direction:column}
 }
+.landing-create-file {min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 16px;border:1px solid transparent;border-radius:11px;background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:750;box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 22%,transparent);cursor:pointer;transition:transform .16s,box-shadow .16s,filter .16s}
+.landing-create-file:hover {transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 11px 24px color-mix(in srgb,var(--accent) 30%,transparent)}
+.landing-create-file svg {flex:none}
+@media(max-width:650px){.landing-files-heading .landing-create-file {min-height:38px;padding:0 11px;font-size:11px;white-space:nowrap}}
