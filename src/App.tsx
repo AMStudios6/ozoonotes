@@ -1021,7 +1021,7 @@ function App() {
   useEffect(() => installAppContextMenu(), [])
   const localOnly = import.meta.env.VITE_LOCAL_ONLY === 'true'
   const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
-  const [dashboardSidebarCollapsed, setDashboardSidebarCollapsed] = useState(() => readDashboardValue('ozoo:dashboard-sidebar-collapsed', false))
+  const [dashboardSidebarCollapsed, setDashboardSidebarCollapsed] = useState(() => (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 760px)').matches) || readDashboardValue('ozoo:dashboard-sidebar-collapsed', false))
   const [folderNavExpanded, setFolderNavExpanded] = useState(() => readDashboardValue('ozoo:dashboard-folders-expanded', true))
 
   const navigatePage = (target: string) => {
@@ -1054,6 +1054,13 @@ function App() {
   const [notebooks, setNotebooks] = useState<string[]>(() => { try { const value = JSON.parse(localStorage.getItem('ozoo:notebooks') ?? '[]'); return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [] } catch { return [] } })
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   useEffect(() => { try { localStorage.setItem('ozoo:dashboard-sidebar-collapsed', String(dashboardSidebarCollapsed)) } catch {} }, [dashboardSidebarCollapsed])
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const mobile = window.matchMedia('(max-width: 760px)')
+    const collapseForMobile = (event: MediaQueryListEvent) => { if (event.matches) setDashboardSidebarCollapsed(true) }
+    mobile.addEventListener('change', collapseForMobile)
+    return () => mobile.removeEventListener('change', collapseForMobile)
+  }, [])
   useEffect(() => { try { localStorage.setItem('ozoo:dashboard-folders-expanded', String(folderNavExpanded)) } catch {} }, [folderNavExpanded])
   const [folderLinks, setFolderLinks] = useState<Record<string, FolderToolLink[]>>(() => { try { const value = JSON.parse(localStorage.getItem('ozoo:folder-links') ?? '{}'); return value && typeof value === 'object' ? value as Record<string, FolderToolLink[]> : {} } catch { return {} } })
   const [folderAddOpen, setFolderAddOpen] = useState(false)
@@ -3597,6 +3604,8 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
         <section className={'landing-window ' + (sitePage === 'dashboard' ? 'dashboard-window' + (dashboardSidebarCollapsed ? ' sidebar-collapsed' : '') : '')} style={sitePage === 'dashboard' ? ({ '--dashboard-background': dashboardAppearance.backgroundMode === 'gradient' ? 'linear-gradient(' + dashboardAppearance.gradientAngle + 'deg, ' + dashboardAppearance.background + ', ' + dashboardAppearance.backgroundEnd + ')' : dashboardAppearance.background, '--dashboard-file-color': dashboardAppearance.fileColor } as CSSProperties) : undefined}>
+          {sitePage === 'dashboard' && dashboardSidebarCollapsed && <button type="button" className="dashboard-mobile-sidebar-toggle" aria-label="Open dashboard menu" aria-expanded="false" aria-controls="dashboard-navigation" title="Open menu" onClick={() => setDashboardSidebarCollapsed(false)}><span aria-hidden="true">☰</span></button>}
+          {sitePage === 'dashboard' && !dashboardSidebarCollapsed && <button type="button" className="dashboard-mobile-sidebar-backdrop" aria-label="Close dashboard menu" onClick={() => setDashboardSidebarCollapsed(true)} />}
           <header className="landing-topbar">
             {sitePage === 'dashboard' && <button type="button" className="dashboard-sidebar-toggle" onClick={() => setDashboardSidebarCollapsed((collapsed) => !collapsed)} aria-label={dashboardSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!dashboardSidebarCollapsed} aria-controls="dashboard-navigation" title={dashboardSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}><span aria-hidden="true">{dashboardSidebarCollapsed ? '›' : '‹'}</span></button>}
             <a className="landing-brand" href="/?page=home" onClick={(event) => { event.preventDefault(); navigatePage('home') }} aria-label="OzooNotes home"><img className="brand-mark" src={sitePage === 'dashboard' && dashboardSidebarCollapsed ? `${import.meta.env.BASE_URL}ozoo-pen-icon.png` : brandLogo} alt="OzooNotes" /></a>
