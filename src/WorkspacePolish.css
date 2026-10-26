@@ -1374,3 +1374,43 @@
 .classroom-link-list button{padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-size:10px;cursor:pointer}
 .classroom-link-list button:hover{border-color:var(--accent);color:var(--accent)}
 .classroom-link-list article>span:last-child{display:flex;gap:5px}
+
+/* Sign-in refresh: form left, visual workspace panel right. */
+.auth-app.dark { color-scheme: dark; }
+.auth-app.light { color-scheme: light; }
+.auth-screen { isolation:isolate; background:var(--workspace); }
+.auth-layout { grid-template-columns:minmax(300px,.72fr) minmax(0,1.28fr); align-items:stretch; gap:clamp(24px,6vw,88px); }
+.auth-card { grid-column:1; grid-row:1; width:min(100%,440px); margin:auto 0; background:var(--panel); }
+.auth-intro { grid-column:2; grid-row:1; position:relative; min-height:clamp(480px,72vh,720px); display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; isolation:isolate; padding:clamp(28px,5vw,58px); border:1px solid var(--line); border-radius:24px; background:linear-gradient(145deg,var(--panel-raised),var(--workspace)); }
+.auth-intro::before { content:""; position:absolute; z-index:-1; inset:0; opacity:.3; background:radial-gradient(circle,color-mix(in srgb,var(--accent) 48%,transparent) 1px,transparent 1.5px) 0 0 / 11px 11px; mask-image:linear-gradient(135deg,#000 0%,transparent 83%); }
+.auth-intro::after { content:""; position:absolute; z-index:-1; top:-20%; right:-20%; width:75%; height:100%; border:1px solid color-mix(in srgb,var(--accent) 12%,transparent); border-radius:50%; box-shadow:0 0 0 28px color-mix(in srgb,var(--accent) 3%,transparent),0 0 0 58px color-mix(in srgb,var(--accent) 2%,transparent); }
+.auth-intro > :not(.auth-preview) { position:relative; z-index:1; }
+.auth-intro h1 { max-width:650px; font-size:clamp(38px,4.5vw,62px); }
+.auth-intro-copy { max-width:500px; }
+.auth-benefits { margin-bottom:0; }
+.auth-preview { position:absolute; z-index:0; top:7%; right:7%; width:min(510px,78%); max-width:none; margin:0; padding:16px; transform:rotate(1.5deg); background:color-mix(in srgb,var(--panel) 92%,transparent); }
+.auth-preview-paper { min-height:clamp(190px,30vh,280px); padding:clamp(20px,3vw,34px); }
+.auth-preview-paper strong { max-width:280px; font-size:clamp(24px,3vw,36px); }
+.auth-preview-doodle { width:clamp(110px,15vw,180px); }
+.auth-card-icon img { width:34px; height:34px; }
+.auth-submit { color:var(--on-accent,#fff); }
+@media(max-width:850px) {
+  .auth-layout { width:min(100%,520px); min-height:auto; padding:34px 0 27px; grid-template-columns:minmax(0,1fr); gap:24px; }
+  .auth-card { grid-column:1; grid-row:1; width:100%; max-width:520px; margin:0 auto; }
+  .auth-intro { grid-column:1; grid-row:2; min-height:420px; }
+}
+@media(max-width:680px) {
+  .auth-intro { min-height:390px; padding:24px; }
+  .auth-preview { top:6%; right:5%; width:80%; padding:11px; }
+  .auth-preview-paper { min-height:175px; }
+  .auth-intro h1 { font-size:clamp(34px,9vw,48px); }
+}
+@media(max-width:420px) {
+  .auth-intro { min-height:360px; padding:20px; }
+  .auth-preview { width:86%; }
+  .auth-preview-paper { min-height:155px; }
+}
+
+/* Explicit contrast and native control palette for the monochrome themes. */
+.app[data-theme="purple"] { --on-accent:#151515; color-scheme:dark; }
+.app[data-theme="white-purple"] { --frame:#e8e8e8; --frame-top:#fff; --workspace:#f1f1f1; --panel:#fff; --panel-raised:#e9e9e9; --ink:#171717; --muted:#666; --line:#d8d8d8; --accent:#222; --accent-soft:#e8e8e8; --on-accent:#fff; color:#171717; color-scheme:light; background:#f1f1f1; }
