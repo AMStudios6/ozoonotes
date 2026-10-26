@@ -538,10 +538,10 @@ function ProjectAssetCard({ asset, onDelete }: { asset: ProjectAsset; onDelete: 
   </article>
 }
 
-function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTheme }) {
+function ProjectStudio({ onBack, theme, initialProjectId }: { onBack: () => void; theme: ProjectTheme; initialProjectId?: string }) {
   const [projects, setProjects] = useState<ProjectDocument[]>([])
   const projectsRef = useRef<ProjectDocument[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(initialProjectId ?? null)
   const [saveState, setSaveState] = useState<SaveState>('loading')
   const [storageError, setStorageError] = useState('')
   const [linkOpen, setLinkOpen] = useState(false)
@@ -561,7 +561,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
       if (!mounted) return
       projectsRef.current = loaded
       setProjects(loaded)
-      setActiveId(loaded[0]?.id ?? null)
+      setActiveId(loaded.find((project) => project.id === initialProjectId)?.id ?? loaded[0]?.id ?? null)
       setSaveState('saved')
     }).catch((error) => {
       if (!mounted) return
@@ -569,7 +569,7 @@ function ProjectStudio({ onBack, theme }: { onBack: () => void; theme: ProjectTh
       setSaveState('error')
     })
     return () => { mounted = false }
-  }, [])
+  }, [initialProjectId])
 
   useEffect(() => () => {
     pendingSaves.current.forEach((timer) => clearTimeout(timer))
