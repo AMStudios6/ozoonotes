@@ -1063,8 +1063,8 @@ function App() {
     return () => mobile.removeEventListener('change', collapseForMobile)
   }, [])
   useEffect(() => { try { localStorage.setItem('ozoo:dashboard-folders-expanded', String(folderNavExpanded)) } catch {} }, [folderNavExpanded])
-  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-file-view', dashboardFileView) } catch {} }, [dashboardFileView])
-  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-shortcuts', JSON.stringify(dashboardShortcuts)) } catch {} }, [dashboardShortcuts])
+
+
   const [folderLinks, setFolderLinks] = useState<Record<string, FolderToolLink[]>>(() => { try { const value = JSON.parse(localStorage.getItem('ozoo:folder-links') ?? '{}'); return value && typeof value === 'object' ? value as Record<string, FolderToolLink[]> : {} } catch { return {} } })
   const [folderAddOpen, setFolderAddOpen] = useState(false)
   const [folderToolDraft, setFolderToolDraft] = useState<FolderToolLink>('projects')
@@ -1084,6 +1084,8 @@ const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashbo
   const [dashboardFileView, setDashboardFileView] = useState<'grid' | 'list'>(() => readDashboardValue<'grid' | 'list'>('ozoo:dashboard-file-view', 'grid'))
   const [dashboardShortcuts, setDashboardShortcuts] = useState<DashboardShortcut[]>(() => readDashboardValue<DashboardShortcut[]>('ozoo:dashboard-shortcuts', []))
   const [dashboardShortcutDraft, setDashboardShortcutDraft] = useState('')
+  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-file-view', dashboardFileView) } catch {} }, [dashboardFileView])
+  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-shortcuts', JSON.stringify(dashboardShortcuts)) } catch {} }, [dashboardShortcuts])
   const [selectedDashboardColor, setSelectedDashboardColor] = useState('#dcecff')
   const [selectedDashboardNotebook, setSelectedDashboardNotebook] = useState('Inbox')
   const [dragOverNotebook, setDragOverNotebook] = useState<string | null>(null)
