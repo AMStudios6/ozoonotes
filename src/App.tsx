@@ -842,7 +842,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1026,7 +1026,7 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1046,7 +1046,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -1154,6 +1154,7 @@ const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashbo
   const cloudBoardOriginalNames = useRef<Record<string, string>>({})
   const [accountOpen, setAccountOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(() => new URLSearchParams(window.location.search).get('page') === 'profile')
+  const [accountOverviewTab, setAccountOverviewTab] = useState<'Info' | 'Objectives' | 'Documents' | 'Reviews'>('Info')
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null)
   const [profileCurrentPassword, setProfileCurrentPassword] = useState('')
@@ -1595,7 +1596,7 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
   }, [authStatus, sitePage, cloudUser?.isAdmin])
 
   useEffect(() => {
-    if (sitePage === 'profile' && authStatus === 'signed-out') navigatePage('signin')
+    if ((sitePage === 'profile' || sitePage === 'account') && authStatus === 'signed-out') navigatePage('signin')
   }, [sitePage, authStatus])
 
   useEffect(() => {
@@ -3597,6 +3598,27 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'diary') return <DiaryPage theme={colorTheme} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
+  if (sitePage === 'account') {
+    const accountGoals = dashboardGoals.filter((goal) => goal.month === dashboardMonthKey())
+    const completedGoals = accountGoals.filter((goal) => goal.done).length
+    const goalProgress = accountGoals.length ? Math.round(completedGoals / accountGoals.length * 100) : 0
+    const deviceFiles = [...new Set(recentFiles)].filter((name) => name && !name.includes(':'))
+    const accountPlan = cloudUser?.businessPlan ? 'Business' : cloudUser?.plan === 'pro' ? 'Class Plus' : 'Standard'
+    return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="account-overview-page"><div className="account-overview-shell">
+      <button className="account-back-button" type="button" onClick={() => navigatePage('dashboard')}>← <span>Back to dashboard</span></button>
+      <header className="account-overview-header">{cloudUser.avatar ? <img className="account-overview-avatar" src={cloudUser.avatar} alt="" /> : <span className="account-overview-avatar account-overview-avatar-fallback">{(cloudUser.displayName || cloudUser.username).trim().slice(0, 1).toUpperCase()}</span>}<div><p className="account-overview-eyebrow">YOUR OZOONOTES ACCOUNT</p><h1>{cloudUser.displayName || cloudUser.username}</h1><p className="account-overview-meta"><span>@{cloudUser.username}</span><i />{accountType[0].toUpperCase() + accountType.slice(1)}</p></div><button className="account-report-button" type="button" onClick={() => window.print()}>Download PDF</button></header>
+      <nav className="account-overview-tabs" aria-label="Account sections">{(['Info', 'Objectives', 'Documents', 'Reviews'] as const).map((tab) => <button type="button" key={tab} className={accountOverviewTab === tab ? 'active' : ''} aria-current={accountOverviewTab === tab ? 'page' : undefined} onClick={() => setAccountOverviewTab(tab)}>{tab}</button>)}</nav>
+      {accountOverviewTab === 'Info' && <div className="account-overview-content">
+        <section className="account-progress-card"><div className="account-section-title"><div><span className="account-overview-eyebrow">THIS MONTH</span><h2>Objective progress</h2></div><strong>{goalProgress}<small>%</small></strong></div><div className="account-progress-track"><span style={{ width: `${goalProgress}%` }} /></div><p>{completedGoals} of {accountGoals.length} objectives completed</p><small>Updates as you check off goals on your dashboard.</small></section>
+        <section className="account-plan-card"><span className="account-overview-eyebrow">CURRENT PLAN</span><h2>{accountPlan}</h2><p>{accountPlan === 'Standard' ? 'Your free workspace plan.' : `${accountPlan} access is enabled for this account.`}</p><button type="button" onClick={() => navigatePage('pricing')}>View plans</button></section>
+        <section className="account-info-card"><div className="account-section-title"><div><span className="account-overview-eyebrow">ACCOUNT DETAILS</span><h2>Your information</h2></div><button type="button" onClick={() => openProfileEditor()}>Edit profile</button></div><dl><div><dt>Display name</dt><dd>{cloudUser.displayName || cloudUser.username}</dd></div><div><dt>Username</dt><dd>@{cloudUser.username}</dd></div><div><dt>Email</dt><dd>{cloudUser.email || 'Not provided'}</dd></div><div><dt>Account type</dt><dd>{accountType[0].toUpperCase() + accountType.slice(1)}</dd></div><div><dt>Theme</dt><dd>{colorThemes.find((theme) => theme.id === colorTheme)?.name ?? 'Custom'}</dd></div></dl></section>
+        <section className="account-count-card"><span className="account-overview-eyebrow">YOUR WORKSPACE</span><div><strong>{deviceFiles.length}</strong><span>Files on this device</span></div><div><strong>{cloudBoards.length}</strong><span>Cloud boards</span></div><div><strong>{cloudFolders.length}</strong><span>Cloud folders</span></div></section>
+      </div>}
+      {accountOverviewTab === 'Objectives' && <section className="account-overview-content account-list-panel"><div className="account-section-title"><div><span className="account-overview-eyebrow">PERSONAL PROGRESS</span><h2>Monthly objectives</h2></div><button type="button" onClick={() => navigatePage('dashboard')}>Open dashboard</button></div>{accountGoals.length ? <ul>{accountGoals.map((goal) => <li key={goal.id}><span className={goal.done ? 'account-objective-done' : ''}>{goal.done ? '✓' : '○'}</span><strong>{goal.title}</strong><small>{goal.done ? 'Completed' : 'In progress'}</small></li>)}</ul> : <p className="account-empty-state">No objectives yet. Add goals on your dashboard to track your progress here.</p>}</section>}
+      {accountOverviewTab === 'Documents' && <section className="account-overview-content account-list-panel"><div className="account-section-title"><div><span className="account-overview-eyebrow">YOUR SAVED WORK</span><h2>Documents</h2></div><button type="button" onClick={() => navigatePage('dashboard')}>Open dashboard</button></div><h3>Saved on this device</h3>{deviceFiles.length ? <ul>{deviceFiles.map((name) => <li key={name}><span>▤</span><strong>{name}</strong><small>Device file</small></li>)}</ul> : <p className="account-empty-state">No device files saved yet.</p>}<h3>Cloud boards</h3>{cloudBoards.length ? <ul>{cloudBoards.map((board) => <li key={board.id}><span>☁</span><strong>{board.name}</strong><small>{board.role === 'owner' ? 'Owned by you' : `Shared${board.ownerName ? ` by ${board.ownerName}` : ''}`}</small></li>)}</ul> : <p className="account-empty-state">No cloud boards are connected to this account yet.</p>}</section>}
+      {accountOverviewTab === 'Reviews' && <section className="account-overview-content account-review-empty"><span aria-hidden="true">✦</span><h2>Reviews &amp; feedback</h2><p>Feedback and comments are attached to individual shared boards. Open a board from your dashboard to view its collaboration discussion.</p><button type="button" onClick={() => navigatePage('dashboard')}>Go to dashboard</button></section>}
+    </div>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="account-overview-page"><p>Opening your account…</p></section></main>
+  }
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
   if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
 
@@ -3669,7 +3691,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                     {cloudUser.isAdmin && <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); navigatePage('admin') }}><Icon name="settings" size={15} /> Admin dashboard</button>}
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' }) }}><Icon name="notes" size={15} /> My files</button>
                     <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setProjectsPageOpen(true) }}><Icon name="duplicate" size={15} /> Projects</button>
-                    <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); setAccountOpen(true) }}><Icon name="cloud" size={15} /> Account & storage</button>
+                    <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); navigatePage('account') }}><Icon name="cloud" size={15} /> Account overview</button>
                     <button type="button" className="profile-signout" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); void logout() }}><Icon name="close" size={15} /> Sign out</button>
                   </div>
                 </div>
