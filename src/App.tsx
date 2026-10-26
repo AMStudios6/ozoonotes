@@ -1023,7 +1023,7 @@ function App() {
   const [sitePage, setSitePage] = useState<SiteRoute>(readSiteRoute)
   const [dashboardSidebarCollapsed, setDashboardSidebarCollapsed] = useState(() => readDashboardValue('ozoo:dashboard-sidebar-collapsed', false))
   const [folderNavExpanded, setFolderNavExpanded] = useState(() => readDashboardValue('ozoo:dashboard-folders-expanded', true))
-  const [folderCreateOpen, setFolderCreateOpen] = useState(false)
+
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
     const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
