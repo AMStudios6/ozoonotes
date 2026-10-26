@@ -3501,8 +3501,10 @@ function App() {
         <section className={`landing-window ${sitePage === 'dashboard' ? 'dashboard-window' : ''}`}>
           <header className="landing-topbar">
             <a className="landing-brand" href="/?page=home" onClick={(event) => { event.preventDefault(); navigatePage('home') }} aria-label="OzooNotes home"><img className="brand-mark" src={brandLogo} alt="OzooNotes" /></a>
+            {sitePage === 'dashboard' && <span className="dashboard-sidebar-label">Menu</span>}
             <a className="landing-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }} aria-label="Open dashboard">Dashboard</a>
             <nav className="landing-nav" aria-label="Main navigation">
+              {sitePage === 'dashboard' && <span className="dashboard-sidebar-label">Workspace</span>}
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)}>Projects</button>
               <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')}>Road map</button>
               <button type="button" className="landing-nav-project" onClick={openInfiniteBoard}>∞ Infinite board</button>
@@ -3510,6 +3512,11 @@ function App() {
                 <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)}>Simulator <Icon name="chevronDown" size={12} /></button>
                 {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
               </div>
+              {sitePage === 'dashboard' && <>
+                <span className="dashboard-sidebar-label dashboard-sidebar-secondary">Library</span>
+                <button type="button" className="landing-nav-project" onClick={() => document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' })}>▤ &nbsp; My files</button>
+                {accountType === 'student' && <button type="button" className="landing-nav-project" onClick={() => document.querySelector('.student-space')?.scrollIntoView({ behavior: 'smooth' })}>◎ &nbsp; Study space</button>}
+              </>}
             </nav>
             <div className="landing-top-actions">
               {sitePage === 'dashboard' && <button aria-label="Customize dashboard" className="dashboard-editor-toggle" onClick={() => { setCustomizerMessage(''); setDashboardCustomizerOpen(true) }}>✦ <span>Customize</span></button>}
