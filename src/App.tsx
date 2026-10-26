@@ -3621,7 +3621,7 @@ function App() {
                 <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-amber">✦</span><span className="dashboard-metric-label">Your workspace</span><strong>{cloudUser?.businessPlan ? 'Business' : cloudUser?.plan === 'pro' ? 'Class Plus' : 'Standard'}</strong><small>{cloudUser ? 'Your plan and tools' : 'Free, no account needed'}</small></article>
               </div>
             </section>}
-            <section className="landing-hero">
+            {sitePage !== 'dashboard' && <section className="landing-hero">
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
                 <h1>Think through ideas.<br /><span>See the whole picture.</span></h1>
@@ -3653,7 +3653,7 @@ function App() {
                 </div>
                 <div className="art-spark art-spark-one">✳</div><div className="art-spark art-spark-two">✦</div>
               </div>
-            </section>
+            </section>}
             {sitePage === 'dashboard' && <div className="dashboard-decoration-row dashboard-decoration-middle">{renderDashboardDecorations('middle')}</div>}
             <section className="audience-starters" id="audience-starters" aria-labelledby="audience-title">
               <div className="landing-section-heading"><span>{landingAudience === 'student' ? 'STUDENT STARTERS' : landingAudience === 'teacher' ? 'TEACHER STARTERS' : 'BUSINESS STARTERS'}</span><h2 id="audience-title">Start with what you need.</h2></div>
