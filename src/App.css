@@ -919,7 +919,7 @@
 .dashboard-sidebar-toggle {width:34px;height:34px;display:grid;place-items:center;flex:none;margin:0 0 2px auto;border:1px solid var(--line);border-radius:10px;background:var(--workspace);color:var(--ink);font:inherit;font-size:22px;line-height:1;cursor:pointer;transition:background .16s,color .16s}
 .dashboard-sidebar-toggle:hover {background:var(--accent-soft);color:var(--accent)}
 .dashboard-window .landing-brand {justify-content:center;margin:0 0 8px;padding:0 2px}
-.dashboard-window .landing-brand .brand-mark {width:100%;height:72px;max-width:100%;object-fit:contain}
+.dashboard-window .landing-brand .brand-mark {display:block;width:100%;height:auto;max-height:72px;max-width:100%;aspect-ratio:3 / 1;object-fit:contain;object-position:center;image-rendering:auto}
 .dashboard-sidebar-label {padding:6px 10px 2px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
 .dashboard-sidebar-secondary {margin-top:12px}
 .dashboard-window .landing-dashboard-link {width:100%;min-height:42px;justify-content:flex-start;padding:0 12px;border-color:transparent;border-radius:11px;background:var(--accent-soft);color:var(--accent)}
@@ -955,10 +955,12 @@
 .dashboard-custom-layout .landing-page > .landing-hero .landing-copy h1 {font-size:clamp(38px,4.4vw,62px)}
 .dashboard-custom-layout .landing-page > .dashboard-decoration-middle {order:2}
 .dashboard-custom-layout .landing-page > .audience-starters {order:3}
-.dashboard-custom-layout .landing-page > .landing-files {order:4}
-.dashboard-custom-layout .landing-page > .student-space {order:5}
-.dashboard-custom-layout .landing-page > .dashboard-decoration-bottom {order:6}
-.dashboard-custom-layout .landing-page > .landing-footer {order:7;margin-top:24px}
+.dashboard-custom-layout .landing-page > .dashboard-shortcuts-panel {order:4}
+.dashboard-custom-layout .landing-page > .dashboard-shared-activity {order:5}
+.dashboard-custom-layout .landing-page > .landing-files {order:6}
+.dashboard-custom-layout .landing-page > .student-space {order:7}
+.dashboard-custom-layout .landing-page > .dashboard-decoration-bottom {order:8}
+.dashboard-custom-layout .landing-page > .landing-footer {order:9;margin-top:24px}
 .dashboard-custom-layout .landing-tools,
 .dashboard-custom-layout .landing-use-cases,
 .dashboard-custom-layout .landing-how {display:none}
@@ -1393,3 +1395,11 @@
 .app.dark .diary-save-button,
 .app.dark .dashboard-inline-add button,
 .app.dark .dashboard-task-form button { background:#272727; color:#f4f4f4; border-color:#424242; }
+
+
+/* Dark theme primary buttons must stay charcoal, including file creation. */
+.app.dark .dashboard-create-button,
+.app.dark .landing-create-file { background:#272727; color:#f4f4f4; border-color:#424242; box-shadow:0 6px 18px #0005; }
+.app.dark .dashboard-create-button:hover,
+.app.dark .landing-create-file:hover { background:#333333; }
+/* Keep quick access and shared work directly before the file library. */
