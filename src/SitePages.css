@@ -37,3 +37,17 @@
 .site-page[data-theme="white-purple"]{--site-bg:#ffffff;--site-paper:#ffffff;--site-ink:#000000;--site-muted:#555555;--site-line:#dddddd;--site-purple:#000000;--site-violet:#000000;--site-soft:#f0f0f0;--site-mint:#777777;background:#fff;color:#000}
 .site-page :is(.story-goal,.pricing-highlight,.landing-quote-card){background:#111;color:#fff}
 .site-page[data-theme="white-purple"] :is(.story-goal,.pricing-highlight,.landing-quote-card){background:#f2f2f2;color:#000}
+/* Keep the light theme visibly light without losing contrast. */
+.site-page[data-theme="white-purple"] {
+  --site-bg:#f1f1f1;
+  --site-paper:#fff;
+  --site-ink:#171717;
+  --site-muted:#666;
+  --site-line:#dcdcdc;
+  --site-purple:#252525;
+  --site-violet:#555;
+  --site-soft:#e8e8e8;
+  color:var(--site-ink);
+  color-scheme:light;
+  background-color:var(--site-bg);
+}
