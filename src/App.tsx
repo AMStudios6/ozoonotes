@@ -9,6 +9,7 @@ import CodeSimulator from './CodeSimulator'
 import CircuitSimulator from './CircuitSimulator'
 import CalculusSimulator from './CalculusSimulator'
 import ProjectStudio from './ProjectsPage'
+import DiaryPage from './DiaryPage'
 import RoadmapsPage from './RoadmapsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
@@ -826,7 +827,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'admin') return page
   return 'home'
 }
 
@@ -1008,7 +1009,7 @@ function App() {
   const [dashboardSidebarCollapsed, setDashboardSidebarCollapsed] = useState(() => readDashboardValue('ozoo:dashboard-sidebar-collapsed', false))
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1028,7 +1029,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -3537,6 +3538,7 @@ function App() {
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
+  if (sitePage === 'diary') return <DiaryPage theme={colorTheme} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
   if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
@@ -3553,6 +3555,7 @@ function App() {
             <nav id="dashboard-navigation" className="landing-nav" aria-label="Main navigation">
               {sitePage === 'dashboard' && <span className="dashboard-sidebar-label">Workspace</span>}
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
+              {sitePage === 'dashboard' && <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>}
               <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
               <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
