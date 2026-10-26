@@ -1272,3 +1272,39 @@
 /* Monochrome app themes */
 .app[data-theme="purple"] {--frame:#000000;--frame-top:#080808;--workspace:#000000;--panel:#090909;--panel-raised:#171717;--ink:#ffffff;--muted:#c4c4c4;--line:#333333;--accent:#ffffff;--accent-soft:#242424;background:#000000}
 .app[data-theme="white-purple"] {--frame:#ffffff;--frame-top:#ffffff;--workspace:#ffffff;--panel:#ffffff;--panel-raised:#f7f7f7;--ink:#000000;--muted:#555555;--line:#dddddd;--accent:#000000;--accent-soft:#f0f0f0;background:#ffffff}
+
+/* Dashboard theme chooser */
+.dashboard-window { --accent:var(--dashboard-palette-primary,#ffffff); --accent-soft:var(--dashboard-palette-soft,#242424) }
+.dashboard-window .dashboard-editor-toggle,.dashboard-window .dashboard-theme-open { border-color:var(--line); background:var(--panel); color:var(--accent) }
+.dashboard-window .dashboard-theme-open { min-height:36px; display:inline-flex; align-items:center; gap:7px; padding:0 12px; border:1px solid var(--line); border-radius:10px; font:inherit; font-size:11px; font-weight:600; cursor:pointer; transition:background .15s ease,transform .15s ease }
+.dashboard-window .dashboard-theme-open:hover { background:var(--accent-soft); transform:translateY(-1px) }
+.dashboard-theme-overlay { position:fixed; z-index:1300; inset:0; display:grid; place-items:center; overflow:auto; padding:22px; background:#101014b8; backdrop-filter:blur(8px) }
+.dashboard-theme-dialog { position:relative; width:min(900px,100%); max-height:min(90vh,920px); overflow:auto; padding:28px; border:1px solid var(--line); border-radius:22px; background:var(--panel); color:var(--ink); box-shadow:0 26px 90px #0006 }
+.dashboard-theme-close { position:absolute; top:17px; right:17px; width:36px; height:36px; border:1px solid var(--line); border-radius:11px; background:var(--workspace); color:var(--ink); font-size:23px; cursor:pointer }
+.dashboard-theme-heading { max-width:640px; margin:0 46px 22px 0 }
+.dashboard-theme-heading .dashboard-kicker { color:var(--accent); font-size:10px; font-weight:800; letter-spacing:.15em }
+.dashboard-theme-heading h2 { margin:8px 0 6px; font-size:clamp(22px,3vw,30px); letter-spacing:-.04em }
+.dashboard-theme-heading p { margin:0; color:var(--muted); font-size:13px; line-height:1.55 }
+.dashboard-theme-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px }
+.dashboard-theme-card { display:grid; grid-template-columns:1fr auto; align-items:center; gap:10px 12px; padding:15px; border:1px solid var(--line); border-radius:16px; background:var(--workspace); transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease }
+.dashboard-theme-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px #00000012 }
+.dashboard-theme-card.active { border-color:var(--theme-card-primary); box-shadow:0 0 0 2px color-mix(in srgb,var(--theme-card-primary) 18%,transparent) }
+.dashboard-theme-card h3 { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0; font-size:14px }
+.dashboard-theme-current { padding:4px 8px; border-radius:99px; background:var(--theme-card-soft); color:var(--theme-card-secondary); font-size:9px; font-weight:750 }
+.dashboard-theme-rule { grid-column:1/-1; height:1px; background:var(--line) }
+.dashboard-theme-label { grid-column:1/-1; color:var(--muted); font-size:9px; font-weight:750; letter-spacing:.05em }
+.dashboard-theme-swatches { grid-column:1/-1; display:flex; gap:7px }
+.dashboard-theme-swatches span { width:26px; height:26px; border:1px solid color-mix(in srgb,var(--ink) 14%,transparent); border-radius:7px }
+.dashboard-theme-swatches.brand-swatches span { width:30px; height:25px }
+.dashboard-theme-preview,.dashboard-theme-apply { min-height:36px; padding:0 12px; border:0; border-radius:10px; font:inherit; font-size:11px; font-weight:650; cursor:pointer }
+.dashboard-theme-preview { grid-column:1; background:var(--panel-raised); color:var(--ink) }
+.dashboard-theme-preview:hover { outline:2px solid var(--theme-card-primary); outline-offset:1px }
+.dashboard-theme-preview[aria-pressed="true"] { box-shadow:inset 0 0 0 1px var(--theme-card-primary) }
+.dashboard-theme-apply { grid-column:2; background:var(--theme-card-secondary); color:#fff }
+.dashboard-theme-apply:hover { filter:brightness(1.08) }
+@media(max-width:640px) {
+  .dashboard-theme-overlay { align-items:end; padding:8px }
+  .dashboard-theme-dialog { max-height:94vh; padding:22px 14px 15px; border-radius:18px 18px 12px 12px }
+  .dashboard-theme-grid { grid-template-columns:1fr }
+  .dashboard-theme-card { padding:13px }
+}
