@@ -30,6 +30,9 @@ type LayerName = 'writing' | 'text' | 'images'
 type DrawingStyle = 'solid' | 'handwriting' | 'dashed' | 'dotted' | 'calligraphy'
 type Board = { name: string; pages: number; pageSize?: PageSize; infinite?: boolean; orientation?: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground?: string; notebook?: string; tags?: string[]; titles?: SectionTitle[]; hiddenLayers?: LayerName[] }
 type ScratchItem = { id: string; text: string; done: boolean }
+type DashboardTask = { id: string; title: string; dueDate: string; createdAt: number; done: boolean; completedAt?: number }
+type DashboardGoal = { id: string; title: string; month: string; done: boolean }
+type DashboardProjectSummary = { id: string; title: string; description: string; updatedAt: number }
 type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; businessPlan?: boolean; accountType?: AccountType; isAdmin?: boolean }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
@@ -46,6 +49,18 @@ type DashboardAppearance = { backgroundMode: 'solid' | 'gradient'; background: s
 type FolderToolLink = 'projects' | 'roadmaps' | 'graph' | 'electronics' | 'calculus' | 'code'
 function readDashboardValue<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback } catch { return fallback }
+}
+function dashboardMonthKey(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` }
+function readDashboardTasks(): DashboardTask[] {
+  try { const value = JSON.parse(localStorage.getItem('ozoo:dashboard-tasks') ?? '[]'); return Array.isArray(value) ? value.filter((task): task is DashboardTask => task && typeof task.id === 'string' && typeof task.title === 'string' && typeof task.done === 'boolean' && typeof task.createdAt === 'number') : [] } catch { return [] }
+}
+function readDashboardGoals(): DashboardGoal[] {
+  const month = dashboardMonthKey()
+  try {
+    const stored = localStorage.getItem(`ozoo:dashboard-monthly-goals:${month}`)
+    if (stored) return (JSON.parse(stored) as DashboardGoal[]).filter((goal) => goal && goal.month === month && typeof goal.id === 'string' && typeof goal.title === 'string' && typeof goal.done === 'boolean')
+  } catch {}
+  return ['Review my notes each week', 'Finish one project', 'Make time to plan'].map((title, index) => ({ id: `goal-${month}-${index}`, title, month, done: false }))
 }
 function safeDashboardUrl(value: string) {
   const candidate = value.trim()
@@ -1043,6 +1058,13 @@ function App() {
   const [newNotebookName, setNewNotebookName] = useState('')
   const [scratchText, setScratchText] = useState('')
   const [scratchItems, setScratchItems] = useState<ScratchItem[]>(() => { try { const value = JSON.parse(localStorage.getItem('ozoo:scratchpad') ?? '[]'); return Array.isArray(value) ? value.filter((item): item is ScratchItem => item && typeof item.id === 'string' && typeof item.text === 'string' && typeof item.done === 'boolean') : [] } catch { return [] } })
+const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashboardTasks)
+  const [dashboardTaskDraft, setDashboardTaskDraft] = useState('')
+  const [dashboardTaskDueDraft, setDashboardTaskDueDraft] = useState('')
+  const [dashboardGoals, setDashboardGoals] = useState<DashboardGoal[]>(readDashboardGoals)
+  const [dashboardGoalDraft, setDashboardGoalDraft] = useState('')
+  const [dashboardProjects, setDashboardProjects] = useState<DashboardProjectSummary[]>([])
+  const [projectFocusId, setProjectFocusId] = useState<string | null>(null)
   const [fileSearch, setFileSearch] = useState('')
   const [notebookFilter, setNotebookFilter] = useState('All notebooks')
   const [selectedDashboardFile, setSelectedDashboardFile] = useState<string | null>(null)
@@ -1306,6 +1328,22 @@ function App() {
   useEffect(() => { try { localStorage.setItem('ozoo:folder-links', JSON.stringify(folderLinks)) } catch {} }, [folderLinks])
   useEffect(() => { try { localStorage.setItem('ozoo:dashboard-appearance', JSON.stringify(dashboardAppearance)) } catch { setCustomizerMessage('Browser storage is full. Appearance could not be saved.') } }, [dashboardAppearance])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
+useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.stringify(dashboardTasks)) } catch {} }, [dashboardTasks])
+  useEffect(() => { try { localStorage.setItem(`ozoo:dashboard-monthly-goals:${dashboardMonthKey()}`, JSON.stringify(dashboardGoals)) } catch {} }, [dashboardGoals])
+  useEffect(() => {
+    let active = true
+    let database: IDBDatabase | null = null
+    try {
+      const request = indexedDB.open('ozoo-project-documents', 1)
+      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('projects')) request.result.createObjectStore('projects', { keyPath: 'id' }) }
+      request.onsuccess = () => {
+        database = request.result
+        const query = database.transaction('projects', 'readonly').objectStore('projects').getAll()
+        query.onsuccess = () => { if (active) setDashboardProjects((query.result as DashboardProjectSummary[]).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6)); database?.close(); database = null }
+      }
+    } catch {}
+    return () => { active = false; database?.close() }
+  }, [projectsPageOpen])
   const [page, setPage] = useState(initialWorkspace.page)
   const [indexView, setIndexView] = useState(() => (initialWorkspace.boards[initialWorkspace.activeBoard]?.titles?.length ?? 0) > 1)
   const [indexPage, setIndexPage] = useState(1)
@@ -1335,6 +1373,13 @@ function App() {
     return () => window.removeEventListener('ozoo:color-theme-change', syncSimulatorTheme)
   }, [])
   const brandLogo = `${import.meta.env.BASE_URL}ozoo-logo.png`
+const brandLogo = `${import.meta.env.BASE_URL}ozoo-logo.png`
+  const dashboardWeekStart = (() => { const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return date })()
+  const dashboardWeekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(dashboardWeekStart); date.setDate(date.getDate() + index); return date })
+  const dashboardDailyCompletions = dashboardWeekDays.map((date) => dashboardTasks.filter((task) => task.completedAt && new Date(task.completedAt).toDateString() === date.toDateString()).length)
+  const dashboardWeekMax = Math.max(1, ...dashboardDailyCompletions)
+  const dashboardMonthlyGoals = dashboardGoals.filter((goal) => goal.month === dashboardMonthKey())
+  const dashboardMonthlyProgress = dashboardMonthlyGoals.length ? Math.round(dashboardMonthlyGoals.filter((goal) => goal.done).length / dashboardMonthlyGoals.length * 100) : 0
   const [strokesByPage, setStrokesByPage] = useState<Record<string, Stroke[]>>(initialWorkspace.strokesByPage)
   const strokesByPageRef = useRef<Record<string, Stroke[]>>({})
   const historyByPage = useRef<Record<string, { past: Stroke[][]; future: Stroke[][] }>>({})
@@ -3177,6 +3222,9 @@ function App() {
   const openFolderTool = (tool: FolderToolLink) => { if (tool === 'projects') setProjectsPageOpen(true); else if (tool === 'roadmaps') navigatePage('roadmaps'); else if (tool === 'graph') launchGraphSimulator(); else if (tool === 'electronics') launchCircuitSimulator(); else if (tool === 'calculus') launchCalculusSimulator(); else launchCodeSimulator('python') }
   const removeFolderTool = (folder: string, tool: FolderToolLink) => setFolderLinks((current) => ({ ...current, [folder]: (current[folder] ?? []).filter((item) => item !== tool) }))
   const addScratchItem = () => { const text = scratchText.trim(); if (!text) return; setScratchItems((items) => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, done: false }, ...items]); setScratchText('') }
+const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const title = dashboardTaskDraft.trim(); if (!title) return; setDashboardTasks((items) => [{ id: crypto.randomUUID(), title, dueDate: dashboardTaskDueDraft, createdAt: Date.now(), done: false }, ...items]); setDashboardTaskDraft(''); setDashboardTaskDueDraft('') }
+  const addDashboardGoal = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const title = dashboardGoalDraft.trim(); if (!title) return; setDashboardGoals((goals) => [...goals, { id: crypto.randomUUID(), title, month: dashboardMonthKey(), done: false }]); setDashboardGoalDraft('') }
+  const toggleDashboardTask = (id: string) => setDashboardTasks((items) => items.map((task) => task.id === id ? { ...task, done: !task.done, completedAt: !task.done ? Date.now() : undefined } : task))
   const isBoardNameTaken = (candidate: string, exceptName?: string) => {
     const normalized = normalizeBoardName(candidate)
     if (!normalized) return false
@@ -3532,7 +3580,7 @@ function App() {
   if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
   if (codeSimulatorMode === 'cpp') return <CppSimulator onBack={() => setCodeSimulatorMode(null)} />
   if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
-  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onBack={() => setProjectsPageOpen(false)} />
+  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} initialProjectId={projectFocusId ?? undefined} onBack={() => { setProjectsPageOpen(false); setProjectFocusId(null) }} />
 
   if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
@@ -3556,6 +3604,9 @@ function App() {
               {sitePage === 'dashboard' && <span className="dashboard-sidebar-label">Workspace</span>}
               <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
               {sitePage === 'dashboard' && <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>}
+              {sitePage === 'dashboard' && <button type="button" className="landing-nav-project" onClick={() => document.getElementById('dashboard-tasks')?.scrollIntoView({ behavior: 'smooth' })} aria-label="Focus tasks"><Icon name="study" size={16} /><span>Focus tasks</span></button>}
+              {sitePage === 'dashboard' && <button type="button" className="landing-nav-project" onClick={() => document.getElementById('dashboard-progress')?.scrollIntoView({ behavior: 'smooth' })} aria-label="Progress"><Icon name="graph" size={16} /><span>Progress</span></button>}
+              <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
               <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
               <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>
               <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
@@ -3649,7 +3700,16 @@ function App() {
                 <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-blue">☁</span><span className="dashboard-metric-label">Cloud boards</span><strong>{cloudBoards.length}</strong><small>{cloudUser ? 'Synced to your account' : 'Sign in to access cloud work'}</small></article>
                 <article className="dashboard-metric-card"><span className="dashboard-metric-icon metric-amber">✦</span><span className="dashboard-metric-label">Your workspace</span><strong>{cloudUser?.businessPlan ? 'Business' : cloudUser?.plan === 'pro' ? 'Class Plus' : 'Standard'}</strong><small>{cloudUser ? 'Your plan and tools' : 'Free, no account needed'}</small></article>
               </div>
-            </section>}
+            <div className="dashboard-insights-grid" id="dashboard-progress" aria-label="Progress and goals">
+                <section className="dashboard-insight-card dashboard-weekly-card"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">YOUR MOMENTUM</span><h2>Weekly progress</h2></div><span className="dashboard-insight-badge">{dashboardTasks.filter((task) => task.completedAt && task.completedAt >= dashboardWeekStart.getTime()).length} done</span></div><div className="dashboard-week-legend"><span><i /> Focus tasks</span><span>Mon — Sun</span></div><div className="dashboard-week-chart" role="img" aria-label="Completed focus tasks per day this week">{dashboardWeekDays.map((date, index) => <div className="dashboard-week-column" key={date.toISOString()}><div className="dashboard-week-bar-track"><i style={{ height: Math.max(8, dashboardDailyCompletions[index] / dashboardWeekMax * 100) + '%' }} /></div><small>{date.toLocaleDateString(undefined, { weekday: 'narrow' })}</small></div>)}</div><p className="dashboard-insight-footnote">Tick off a task to see your progress grow here.</p></section>
+                <section className="dashboard-insight-card dashboard-month-card"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">A LITTLE AT A TIME</span><h2>Month progress</h2></div><span className="dashboard-month-delta">{dashboardMonthlyGoals.filter((goal) => goal.done).length}/{dashboardMonthlyGoals.length} goals</span></div><div className="dashboard-month-progress-content"><div className="dashboard-month-ring" style={{ '--progress-value': dashboardMonthlyProgress } as CSSProperties}><div><strong>{dashboardMonthlyProgress}%</strong><small>complete</small></div></div><div className="dashboard-month-key"><span><i className="goal-key-done" /> Done</span><span><i className="goal-key-open" /> To go</span></div></div><p className="dashboard-insight-footnote">Your monthly goals are saved on this device.</p></section>
+              </div>
+              <div className="dashboard-work-grid">
+                <section className="dashboard-insight-card dashboard-goals-card" aria-labelledby="dashboard-goals-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">THIS MONTH</span><h2 id="dashboard-goals-title">Monthly goals</h2></div><span className="dashboard-insight-badge">{dashboardMonthlyGoals.filter((goal) => goal.done).length}/{dashboardMonthlyGoals.length}</span></div><ul className="dashboard-goals-list">{dashboardMonthlyGoals.map((goal) => <li key={goal.id}><label><input type="checkbox" checked={goal.done} onChange={() => setDashboardGoals((goals) => goals.map((item) => item.id === goal.id ? { ...item, done: !item.done } : item))} /><span className={goal.done ? 'is-done' : ''}>{goal.title}</span></label><button type="button" aria-label={'Remove goal: ' + goal.title} onClick={() => setDashboardGoals((goals) => goals.filter((item) => item.id !== goal.id))}>×</button></li>)}</ul><form className="dashboard-inline-add" onSubmit={addDashboardGoal}><input aria-label="New monthly goal" placeholder="Add a goal…" value={dashboardGoalDraft} onChange={(event) => setDashboardGoalDraft(event.target.value)} maxLength={90} /><button type="submit" aria-label="Add monthly goal">＋</button></form></section>
+                <section className="dashboard-insight-card dashboard-tasks-card" id="dashboard-tasks" aria-labelledby="dashboard-tasks-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">ONE STEP AT A TIME</span><h2 id="dashboard-tasks-title">Focus tasks <small>({dashboardTasks.filter((task) => !task.done).length} open)</small></h2></div><button type="button" className="dashboard-small-link" onClick={() => document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' })}>My files ↗</button></div><form className="dashboard-task-form" onSubmit={addDashboardTask}><input aria-label="New focus task" placeholder="What would you like to do?" value={dashboardTaskDraft} onChange={(event) => setDashboardTaskDraft(event.target.value)} maxLength={100} /><input aria-label="Task due date" type="date" value={dashboardTaskDueDraft} onChange={(event) => setDashboardTaskDueDraft(event.target.value)} /><button type="submit" aria-label="Add task">＋</button></form>{dashboardTasks.length ? <ul className="dashboard-task-list">{[...dashboardTasks].sort((a, b) => Number(a.done) - Number(b.done) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).slice(0, 5).map((task) => <li key={task.id}><label><input type="checkbox" checked={task.done} onChange={() => toggleDashboardTask(task.id)} /><span className={task.done ? 'is-done' : ''}>{task.title}<small>{task.done ? 'Completed' : task.dueDate ? 'Due ' + new Date(task.dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'In progress'}</small></span></label><button type="button" aria-label={'Delete task: ' + task.title} onClick={() => setDashboardTasks((items) => items.filter((item) => item.id !== task.id))}>×</button></li>)}</ul> : <div className="dashboard-task-empty"><span>✦</span><strong>Nothing on your task list yet</strong><small>Add one small next step to get started.</small></div>}</section>
+              </div>
+              <section className="dashboard-projects-card" aria-labelledby="dashboard-projects-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">KEEP YOUR WORK MOVING</span><h2 id="dashboard-projects-title">Last projects</h2></div><button type="button" className="dashboard-small-link" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>All projects ↗</button></div>{dashboardProjects.length ? <div className="dashboard-project-strip">{dashboardProjects.slice(0, 4).map((project, index) => <button type="button" className={'dashboard-project-tile dashboard-project-tile-' + index} key={project.id} onClick={() => { setProjectFocusId(project.id); setProjectsPageOpen(true) }}><span className="dashboard-project-tile-top"><i>▧</i><small>Edited {new Date(project.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</small></span><strong>{project.title || 'Untitled project'}</strong><span>{project.description || 'Open this project and keep building your ideas.'}</span></button>)}</div> : <div className="dashboard-project-empty"><span>▧</span><div><strong>Your projects will show up here</strong><small>Create a project document to keep plans, notes, and resources together.</small></div><button type="button" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>Open Projects</button></div>}</section>
+</section>}
             {sitePage !== 'dashboard' && <section className="landing-hero">
               <div className="landing-copy">
                 <p className="landing-kicker"><span className="status-dot" /> Your space to think on paper</p>
