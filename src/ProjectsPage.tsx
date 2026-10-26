@@ -372,7 +372,7 @@ function RichTextEditor({ project, onChange, onAppearanceChange }: { project: Pr
     onKeyDown: rememberSelection,
     'aria-label': 'Document formatting',
   }
-  return <div className="project-editor-wrap">
+  return <div className="project-editor-columns"><div className="project-editor-wrap">
     <div className="project-ribbon-tabs" role="tablist" aria-label="Project document tools">
       <button type="button" role="tab" aria-selected={ribbonTab === 'home'} className={ribbonTab === 'home' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('home')}>Home</button>
       <button type="button" role="tab" aria-selected={ribbonTab === 'insert'} className={ribbonTab === 'insert' ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => setRibbonTab('insert')}>Insert</button>
@@ -505,7 +505,40 @@ function RichTextEditor({ project, onChange, onAppearanceChange }: { project: Pr
     />
     <div className="project-editor-status" aria-live="polite"><span>{wordCount.toLocaleString()} words</span><span>{characterCount.toLocaleString()} characters</span><span>About {Math.ceil(wordCount / 200)} min read</span></div>
   </div>
+  <aside className="project-style-sidebar" aria-label="Quick document formatting">
+    <section className="project-style-section"><h3>Theme style</h3>
+      <div className="project-theme-swatches" role="group" aria-label="Paper theme">
+        {[
+          { paper: '#fffefa', accent: '#8057d8', label: 'Warm white' },
+          { paper: '#edf4ff', accent: '#3976bd', label: 'Soft blue' },
+          { paper: '#eaf8ef', accent: '#31855c', label: 'Soft green' },
+          { paper: '#fff6d8', accent: '#a77716', label: 'Warm yellow' },
+          { paper: '#f7edff', accent: '#9a55c6', label: 'Lavender' },
+        ].map((swatch) => <button key={swatch.label} type="button" className={'project-theme-swatch ' + ((project.appearance?.paper ?? '#fffefa') === swatch.paper ? 'selected' : '')} style={{ '--swatch-paper': swatch.paper, '--swatch-accent': swatch.accent } as CSSProperties} aria-label={swatch.label} aria-pressed={(project.appearance?.paper ?? '#fffefa') === swatch.paper} onMouseDown={(event) => event.preventDefault()} onClick={() => onAppearanceChange({ paper: swatch.paper, accent: swatch.accent, font: project.appearance?.font ?? 'Arial', size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 })}><span>Aa</span></button>)}
+      </div>
+    </section>
+    <section className="project-style-section"><h3>Text editor</h3>
+      <label className="project-style-select">Font family<select value={project.appearance?.font ?? 'Arial'} onMouseDown={rememberSelection} onChange={(event) => { onAppearanceChange({ paper: project.appearance?.paper ?? '#fffefa', accent: project.appearance?.accent ?? '#8057d8', font: event.target.value, size: project.appearance?.size ?? 14, width: project.appearance?.width ?? 820 }); restoreSelection() }}><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Times New Roman</option><option>Verdana</option></select></label>
+      <div className="project-style-button-grid">
+        <button type="button" title="Bold" aria-label="Bold" onMouseDown={run('bold')}><b>B</b></button><button type="button" title="Italic" aria-label="Italic" onMouseDown={run('italic')}><i>I</i></button><button type="button" title="Underline" aria-label="Underline" onMouseDown={run('underline')}><u>U</u></button><button type="button" title="Strikethrough" aria-label="Strikethrough" onMouseDown={run('strikeThrough')}>S̶</button>
+      </div>
+      <div className="project-style-button-grid project-style-align-grid"><button type="button" title="Align left" aria-label="Align left" onMouseDown={run('justifyLeft')}>☰</button><button type="button" title="Center text" aria-label="Center text" onMouseDown={run('justifyCenter')}>≡</button><button type="button" title="Align right" aria-label="Align right" onMouseDown={run('justifyRight')}>☷</button><button type="button" title="Justify text" aria-label="Justify text" onMouseDown={run('justifyFull')}>▤</button></div>
+      <div className="project-style-size-row"><span>Text size</span><button type="button" aria-label="Decrease text size" onMouseDown={(event) => { event.preventDefault(); resizeSelection(-2) }}>−</button><output>{project.appearance?.size ?? 14}px</output><button type="button" aria-label="Increase text size" onMouseDown={(event) => { event.preventDefault(); resizeSelection(2) }}>＋</button></div>
+      <label className="project-style-select">Line spacing<select defaultValue="1.5" onMouseDown={rememberSelection} onChange={(event) => applyInlineStyle('line-height', event.target.value)}><option value="1">Single</option><option value="1.15">Compact</option><option value="1.5">Comfortable</option><option value="2">Double</option></select></label>
+      <div className="project-style-color-row"><label><span>Text color</span><input type="color" aria-label="Text color" defaultValue="#222222" onMouseDown={rememberSelection} onChange={(event) => applyInlineStyle('color', event.target.value)} /></label><label><span>Highlight</span><input type="color" aria-label="Text highlight" defaultValue="#fff176" onMouseDown={rememberSelection} onChange={(event) => applyInlineStyle('background-color', event.target.value)} /></label></div>
+    </section>
+    <section className="project-style-section"><h3>Others</h3>
+      <div className="project-style-insert-grid">
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); imageInput.current?.click() }}><span>▧</span><small>Image</small></button>
+        <button type="button" onMouseDown={addInlineLink}><span>↗</span><small>Link</small></button>
+        <button type="button" onMouseDown={run('insertUnorderedList')}><span>☷</span><small>Bullets</small></button>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); const emoji = window.prompt('Choose an emoji to insert', '✨'); if (emoji) insertHtml(escapeHtml(emoji)) }}><span>☺</span><small>Emoji</small></button>
+      </div>
+    </section>
+  </aside>
+  </div>
 }
+
 
 function ProjectAssetCard({ asset, onDelete }: { asset: ProjectAsset; onDelete: () => void }) {
   const [objectUrl, setObjectUrl] = useState('')
