@@ -3625,7 +3625,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (boards.length === 0 || sitePage === 'dashboard') {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
-        <section className={'landing-window ' + (sitePage === 'dashboard' ? 'dashboard-window' + (dashboardSidebarCollapsed ? ' sidebar-collapsed' : '') : '')} style={sitePage === 'dashboard' ? ({ '--dashboard-background': dashboardAppearance.backgroundMode === 'gradient' ? 'linear-gradient(' + dashboardAppearance.gradientAngle + 'deg, ' + dashboardAppearance.background + ', ' + dashboardAppearance.backgroundEnd + ')' : dashboardAppearance.background, '--dashboard-file-color': dashboardAppearance.fileColor } as CSSProperties) : undefined}>
+        <section className={'landing-window ' + (sitePage === 'dashboard' ? 'dashboard-window' + (dashboardSidebarCollapsed ? ' sidebar-collapsed' : '') : '')} style={sitePage === 'dashboard' ? ({ '--dashboard-background': colorTheme === 'purple' ? (dashboardAppearance.backgroundMode === 'gradient' ? 'linear-gradient(' + dashboardAppearance.gradientAngle + 'deg, #252525, #080808)' : '#000000') : (dashboardAppearance.backgroundMode === 'gradient' ? 'linear-gradient(' + dashboardAppearance.gradientAngle + 'deg, ' + (dashboardAppearance.background === '#f4f2f8' ? '#f2f2f2' : dashboardAppearance.background) + ', ' + (dashboardAppearance.backgroundEnd === '#e9e3f2' ? '#e7e7e7' : dashboardAppearance.backgroundEnd) + ')' : (dashboardAppearance.background === '#f4f2f8' ? '#f2f2f2' : dashboardAppearance.background)), '--dashboard-file-color': dashboardAppearance.fileColor } as CSSProperties) : undefined}>
           {sitePage === 'dashboard' && dashboardSidebarCollapsed && <button type="button" className="dashboard-mobile-sidebar-toggle" aria-label="Open dashboard menu" aria-expanded="false" aria-controls="dashboard-navigation" title="Open menu" onClick={() => setDashboardSidebarCollapsed(false)}><span aria-hidden="true">☰</span></button>}
           {sitePage === 'dashboard' && !dashboardSidebarCollapsed && <button type="button" className="dashboard-mobile-sidebar-backdrop" aria-label="Close dashboard menu" onClick={() => setDashboardSidebarCollapsed(true)} />}
           <header className="landing-topbar">
@@ -3633,8 +3633,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
             <a className="landing-brand" href="/?page=home" onClick={(event) => { event.preventDefault(); navigatePage('home') }} aria-label="OzooNotes home"><img className="brand-mark" src={sitePage === 'dashboard' && dashboardSidebarCollapsed ? `${import.meta.env.BASE_URL}ozoo-pen-icon.png` : brandLogo} alt="OzooNotes" /></a>
             {sitePage === 'dashboard' && <span className="dashboard-sidebar-label">Menu</span>}
             <a className="landing-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }} aria-label="Open dashboard">Dashboard</a>
-            T
-<nav id="dashboard-navigation" className="landing-nav" aria-label="Main navigation">
+            <nav id="dashboard-navigation" className="landing-nav" aria-label="Main navigation">
               {sitePage === 'dashboard' ? <>
                 <div className="dashboard-nav-section"><span className="dashboard-sidebar-label">Workspace</span>
                   <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
