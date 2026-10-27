@@ -332,4 +332,4 @@
 .project-style-section .project-theme-swatches {grid-template-columns:repeat(2,minmax(0,1fr))}
 .project-theme-swatch {height:48px;border-color:var(--p-line);background:var(--swatch-paper);color:var(--swatch-accent)}
 .project-theme-swatch.selected::after {background:var(--swatch-accent);color:var(--swatch-paper)}
-.project-personalize-note {grid-column:1/-1;margin:0;color:var(--p-muted);font-size:10px;line-height:1.5}.project-studio[data-theme="purple"] .project-brand-logo{filter:brightness(0) invert(1)}
+.project-personalize-note {grid-column:1/-1;margin:0;color:var(--p-muted);font-size:10px;line-height:1.5}

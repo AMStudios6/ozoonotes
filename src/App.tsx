@@ -1327,7 +1327,7 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
     window.addEventListener('ozoo:color-theme-change', syncSimulatorTheme)
     return () => window.removeEventListener('ozoo:color-theme-change', syncSimulatorTheme)
   }, [])
-  const brandLogo = `${import.meta.env.BASE_URL}ozoo-logo.png`
+  const brandLogo = `${import.meta.env.BASE_URL}${colorTheme === 'purple' ? 'ozoo-logo-dark.png' : 'ozoo-logo.png'}`
   const dashboardWeekStart = (() => { const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return date })()
   const dashboardWeekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(dashboardWeekStart); date.setDate(date.getDate() + index); return date })
   const dashboardDailyCompletions = dashboardWeekDays.map((date) => dashboardTasks.filter((task) => task.completedAt && new Date(task.completedAt).toDateString() === date.toDateString()).length)

@@ -756,7 +756,6 @@
 .landing-footer-github:hover, .landing-footer-github:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); outline: none; }
 
 /* Keep the charcoal wordmark legible across the dark color themes. */
-.app.dark :is(.brand-mark,.auth-brand img,.project-brand-logo) { filter: brightness(0) invert(1); }
 
 
 /* Homepage story sections: create, choose a use case, and take the next step. */

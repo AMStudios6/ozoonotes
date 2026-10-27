@@ -51,4 +51,3 @@
   color-scheme:light;
   background-color:var(--site-bg);
 }
-.site-page[data-theme="purple"] :is(.site-brand img,.site-footer-brand img){filter:brightness(0) invert(1)}

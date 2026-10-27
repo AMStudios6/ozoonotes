@@ -729,7 +729,7 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
   return <main className="project-studio" data-theme={theme}>
     <header className="project-topbar">
       <button type="button" className="project-back" onClick={onBack}>← <span>Home</span></button>
-      <div className="project-brand"><img className="project-brand-logo" src={`${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /><div><strong>Projects</strong><small>Your work, all in one place</small></div></div>
+      <div className="project-brand"><img className="project-brand-logo" src={theme === 'purple' ? `${import.meta.env.BASE_URL}ozoo-logo-dark.png` : `${import.meta.env.BASE_URL}ozoo-logo.png`} alt="OzooNotes" /><div><strong>Projects</strong><small>Your work, all in one place</small></div></div>
       <div className="project-top-actions"><span className={`project-save-state ${saveState}`}><i />{saveLabel}</span><button type="button" className="project-primary" onClick={createProject}>＋ New project</button></div>
     </header>
     <div className="project-layout">
