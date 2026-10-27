@@ -10,6 +10,8 @@ import CircuitSimulator from './CircuitSimulator'
 import CalculusSimulator from './CalculusSimulator'
 import ProjectStudio from './ProjectsPage'
 import DiaryPage from './DiaryPage'
+import BooksToRead from './BooksToRead'
+import Watchlist from './Watchlist'
 import RoadmapsPage from './RoadmapsPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
@@ -183,31 +185,30 @@ function makeTemplateStrokes(template: PageTemplate, size: PageSize, orientation
     sections.forEach((label, index) => { const y = 47 + index * Math.max(38, (heightMm - 68) / 4); lines.push(text(label, 14, y, 2.4), line(14, y + 13, widthMm - 14, y + 13, soft, 38, 0.65), line(14, y + 25, widthMm - 14, y + 25, soft, 38, 0.65)) })
   } else if (template === 'Mood board') {
     const portrait = heightMm >= widthMm
-    const columns = portrait ? 2 : 3
-    const rows = portrait ? (heightMm >= 280 ? 3 : 2) : (heightMm < 180 ? 1 : 2)
-    const top = heightMm < 180 ? 34 : 45
-    const footer = heightMm < 180 ? 22 : 48
-    const bottom = heightMm - footer
-    const gap = 6
-    const cardWidth = (widthMm - 28 - gap * (columns - 1)) / columns
-    const cardHeight = (bottom - top - gap * (rows - 1)) / rows
-    const swatches = ['#e5a45b', '#e77a78', '#80b99a', '#7197c9', '#a487c8']
-    const ellipse = (x: number, y: number, diameter: number, color: string, width = 1.3): Stroke => ({ tool: 'Shape', shapeKind: 'Ellipse', color, width, opacity: 78, points: [{ x: x / widthMm, y: y / heightMm }, { x: (x + diameter) / widthMm, y: (y + diameter) / heightMm }] })
-    const outline = (x: number, y: number, w: number, h: number, color: string, opacity = 62) => [line(x, y, x + w, y, color, opacity), line(x + w, y, x + w, y + h, color, opacity), line(x + w, y + h, x, y + h, color, opacity), line(x, y + h, x, y, color, opacity)]
-    lines.push(text('MOOD BOARD', 14, 9, 3.8), text('THEME / PROJECT', 14, 27, 2.7), line(14, 37, widthMm - 14, 37, accent, 48, 0.9))
-    for (let index = 0; index < columns * rows; index++) {
-      const column = index % columns, row = Math.floor(index / columns)
-      const x = 14 + column * (cardWidth + gap), y = top + row * (cardHeight + gap)
-      lines.push(...outline(x, y, cardWidth, cardHeight, accent), text(`IMAGE / REF ${index + 1}`, x + 3, y + 3, 1.8))
-      const baseY = y + cardHeight * 0.77
-      lines.push(line(x + cardWidth * 0.12, baseY, x + cardWidth * 0.38, baseY - cardHeight * 0.22, soft, 42, 0.8), line(x + cardWidth * 0.38, baseY - cardHeight * 0.22, x + cardWidth * 0.55, baseY - cardHeight * 0.08, soft, 42, 0.8), line(x + cardWidth * 0.55, baseY - cardHeight * 0.08, x + cardWidth * 0.73, baseY - cardHeight * 0.31, soft, 42, 0.8), line(x + cardWidth * 0.73, baseY - cardHeight * 0.31, x + cardWidth * 0.88, baseY, soft, 42, 0.8))
-    }
-    const paletteY = heightMm - (heightMm < 180 ? 13 : 34)
-    lines.push(text('COLOR PALETTE', 14, paletteY, 2.1))
-    const swatchDiameter = Math.max(4, Math.min(8, heightMm / 34))
-    const swatchStart = widthMm * 0.42
-    swatches.forEach((color, index) => lines.push(ellipse(swatchStart + index * (swatchDiameter + 5), paletteY - 1, swatchDiameter, color, 1.8)))
-    if (heightMm >= 180) lines.push(text('WORDS / NOTES', 14, heightMm - 18, 2.2), line(44, heightMm - 14, widthMm - 14, heightMm - 14, soft, 42, 0.7))
+    const colors = ['#e5a45b', '#e77a78', '#80b99a', '#7197c9', '#a487c8']
+    const circle = (x: number, y: number, r: number, color: string): Stroke => ({ tool: 'Shape', shapeKind: 'Ellipse', color, width: 1, opacity: 78, points: [{ x: x / widthMm, y: y / heightMm }, { x: (x + r) / widthMm, y: (y + r) / heightMm }] })
+    const frame = (x: number, y: number, w: number, h: number, color: string) => [line(x,y,x+w,y,color,42),line(x+w,y,x+w,y+h,color,42),line(x+w,y+h,x,y+h,color,42),line(x,y+h,x,y,color,42)]
+    const cards: [string,number,number,number,number,string,string][] = portrait
+      ? [['photo',.02,.03,.40,.23,'COLOR & LIGHT',colors[2]],['note',.48,.02,.43,.16,'IDEAS',colors[4]],['note',.47,.20,.42,.17,'DETAILS',colors[0]],['photo',.10,.32,.34,.25,'VISUAL REF',colors[3]],['note',.53,.40,.36,.16,'PALETTE NOTES',colors[1]],['note',.02,.63,.39,.15,'WORDS',colors[4]],['photo',.50,.62,.40,.23,'INSPIRATION',colors[2]]]
+      : [['photo',.01,.06,.25,.48,'COLOR & LIGHT',colors[2]],['note',.29,.02,.17,.29,'IDEAS',colors[4]],['photo',.50,.03,.21,.54,'VISUAL REF',colors[3]],['note',.76,.04,.21,.32,'DETAILS',colors[0]],['note',.30,.37,.16,.24,'PALETTE',colors[1]],['photo',.01,.62,.24,.30,'INSPIRATION',colors[4]],['note',.31,.69,.24,.20,'WORDS',colors[2]],['note',.60,.67,.16,.22,'TO TRY',colors[0]],['photo',.79,.48,.18,.40,'TEXTURE',colors[1]]]
+    const left=widthMm*.07, wide=widthMm*.86, top=heightMm*.15, tall=heightMm*.73
+    lines.push(text('MOOD BOARD',14,9,3.8),text('COLLECT COLORS, IMAGES & LITTLE IDEAS',14,24,1.9),line(14,34,widthMm-14,34,accent,35,.7))
+    cards.slice(0,-1).forEach((card,index)=>{const next=cards[index+1];const x1=left+wide*(card[1]+card[3]/2),y1=top+tall*(card[2]+card[4]/2),x2=left+wide*(next[1]+next[3]/2),y2=top+tall*(next[2]+next[4]/2);lines.push(line(x1,y1,x2,y2,soft,20,.45))})
+    cards.forEach(([kind,cx,cy,cw,ch,name,color],i)=>{
+      const x=left+wide*cx,y=top+tall*cy,w=wide*cw,h=tall*ch
+      lines.push(...frame(x,y,w,h,color),{...text(name,x+2.5,y+2.5,1.55),color})
+      if(kind==='photo'){
+        const base=y+h*.70
+        lines.push(line(x+w*.08,y+h*.21,x+w*.92,y+h*.21,soft,34,.55),line(x+w*.08,y+h*.21,x+w*.08,y+h*.78,soft,34,.55),line(x+w*.92,y+h*.21,x+w*.92,y+h*.78,soft,34,.55),line(x+w*.08,y+h*.78,x+w*.92,y+h*.78,soft,34,.55),circle(x+w*.68,y+h*.31,Math.max(2.2,Math.min(w,h)*.10),color),line(x+w*.13,base,x+w*.36,base-h*.20,color,48,.75),line(x+w*.36,base-h*.20,x+w*.56,base-h*.08,color,48,.75),line(x+w*.56,base-h*.08,x+w*.76,base-h*.29,color,48,.75),line(x+w*.76,base-h*.29,x+w*.87,base,color,48,.75),{...text(i%2?'DROP A PHOTO':'ADD AN IMAGE',x+w*.12,y+h*.82,1.1),color:soft})
+      }else{
+        for(let row=0;row<3;row++){const yy=y+h*(.40+row*.17);lines.push(line(x+w*.10,yy,x+w*(row===1?.78:.88),yy,soft,40,.55))}
+        lines.push(line(x+w*.10,y+h*.38,x+w*.62,y+h*.38,color,53,1.3))
+      }
+    })
+    const d=Math.max(3.2,Math.min(6.5,heightMm/38)), py=heightMm*.94
+    lines.push(text('MOOD COLORS',14,py-2,1.8))
+    colors.forEach((color,i)=>lines.push(circle(widthMm*.43+i*(d+3),py-2.4,d,color)))
+
   }
   return lines
 }
@@ -822,7 +823,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1006,7 +1007,7 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1026,7 +1027,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -3557,6 +3558,8 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'diary') return <DiaryPage theme={colorTheme} onBack={() => navigatePage('dashboard')} />
+  if (sitePage === 'books') return <BooksToRead theme={colorTheme} onBack={() => navigatePage('dashboard')} />
+  if (sitePage === 'watchlist') return <Watchlist theme={colorTheme} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'account') {
     const accountGoals = dashboardGoals.filter((goal) => goal.month === dashboardMonthKey())
@@ -3598,7 +3601,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                 <div className="dashboard-nav-section"><span className="dashboard-sidebar-label">Workspace</span>
                   <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
                   <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>
-                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
+                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
                   <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>
                   <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                     <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)} aria-label="Simulator"><Icon name="graph" size={16} /><span>Simulator</span><Icon name="chevronDown" size={12} /></button>
@@ -3620,7 +3623,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                     </div>
                   </div>}
                 </div>
-              </> : <><button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button></>}
+              </> : <><button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button></>}
             </nav>
             <div className="landing-top-actions">
               

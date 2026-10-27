@@ -3,7 +3,7 @@ import './RoadmapsPage.css'
 
 type BlockKind = 'step' | 'text' | 'image' | 'link' | 'video' | 'map'
 type MapShape = 'rounded' | 'circle' | 'diamond' | 'pill' | 'hexagon'
-type MapNode = { id: string; label: string; description: string; shape: MapShape; color: string; x: number; y: number }
+type MapNode = { id: string; label: string; description: string; shape: MapShape; color: string; x: number; y: number; kind?: 'goal' | 'step' | 'resource' | 'note' }
 type MapConnection = { id: string; from: string; to: string }
 type RoadmapBlock = { id: string; kind: BlockKind; title?: string; body?: string; url?: string; mediaType?: string; nodes?: MapNode[]; connections?: MapConnection[] }
 type Roadmap = { id: number; title: string; summary: string; category: string; tags: string[]; author: string; createdAt: string; updatedAt: string; isOwner: boolean; content: RoadmapBlock[]; nextUpdateAt: string | null }
@@ -12,9 +12,16 @@ type RoadmapDraft = Pick<Roadmap, 'title' | 'summary' | 'category' | 'tags' | 'c
 const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE || 'https://api.ozoonotes.com')
 const blockNames: Record<BlockKind, string> = { step: 'Learning step', text: 'Text section', image: 'Image', link: 'Useful link', video: 'Video link', map: 'Concept map' }
 const mapColors = ['#ffe49b', '#b8d8ff', '#baf0d1', '#d9c3ff', '#ffc4cd', '#ffd0a3', '#aee8e8', '#eeeeef']
-const newBlock = (kind: BlockKind): RoadmapBlock => kind === 'map'
-  ? { id: crypto.randomUUID(), kind, title: 'Concept map', nodes: [{ id: crypto.randomUUID(), label: 'Learning goal', description: 'The main idea or outcome for this roadmap.', shape: 'rounded', color: '#ffe49b', x: 500, y: 105 }, { id: crypto.randomUUID(), label: 'First concept', description: 'A foundational idea to explore first.', shape: 'rounded', color: '#b8d8ff', x: 285, y: 335 }, { id: crypto.randomUUID(), label: 'Next concept', description: 'Build on the first idea here.', shape: 'rounded', color: '#baf0d1', x: 715, y: 335 }], connections: [] }
-  : { id: crypto.randomUUID(), kind, title: kind === 'step' ? 'New step' : '', body: '', url: '' }
+const newBlock = (kind: BlockKind): RoadmapBlock => {
+  if (kind !== 'map') return { id: crypto.randomUUID(), kind, title: kind === 'step' ? 'New step' : '', body: '', url: '' }
+  const nodes: MapNode[] = [
+    { id: crypto.randomUUID(), label: 'Start here', description: 'Set the outcome learners are working toward.', shape: 'pill', color: '#d9c3ff', x: 135, y: 300, kind: 'goal' },
+    { id: crypto.randomUUID(), label: 'Learn the basics', description: 'Introduce key ideas and vocabulary.', shape: 'rounded', color: '#b8d8ff', x: 380, y: 300, kind: 'step' },
+    { id: crypto.randomUUID(), label: 'Practice', description: 'Try an exercise, project, or real example.', shape: 'rounded', color: '#baf0d1', x: 630, y: 300, kind: 'step' },
+    { id: crypto.randomUUID(), label: 'Next milestone', description: 'Describe what learners can do after this path.', shape: 'pill', color: '#ffe49b', x: 875, y: 300, kind: 'goal' },
+  ]
+  return { id: crypto.randomUUID(), kind, title: 'Learning path', nodes, connections: nodes.slice(1).map((node, index) => ({ id: crypto.randomUUID(), from: nodes[index].id, to: node.id })) }
+}
 
 function mapNodeStyle(node: MapNode) {
   return { left: `${node.x / 10}%`, top: `${node.y / 6}%`, '--map-node-color': node.color, '--map-node-shape': node.shape } as CSSProperties
@@ -23,7 +30,7 @@ function mapNodeStyle(node: MapNode) {
 function RoadmapMap({ block, editable, onChange }: { block: RoadmapBlock; editable: boolean; onChange?: (next: RoadmapBlock) => void }) {
   const nodes = block.nodes ?? []
   const connections = block.connections ?? []
-  const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  const [selectedNode, setSelectedNode] = useState<string | null>(nodes[0]?.id ?? null)
   const [connectMode, setConnectMode] = useState(false)
   const selected = nodes.find((node) => node.id === selectedNode) ?? null
   const updateNode = (id: string, patch: Partial<MapNode>) => onChange?.({ ...block, nodes: nodes.map((node) => node.id === id ? { ...node, ...patch } : node) })
@@ -37,11 +44,13 @@ function RoadmapMap({ block, editable, onChange }: { block: RoadmapBlock; editab
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop, { once: true })
   }
-  const addNode = () => {
-    const node: MapNode = { id: crypto.randomUUID(), label: 'New idea', description: '', shape: 'rounded', color: mapColors[nodes.length % mapColors.length], x: 180 + Math.random() * 640, y: 180 + Math.random() * 280 }
-    onChange?.({ ...block, nodes: [...nodes, node] })
-    setSelectedNode(node.id)
+  const addNode = (kind: NonNullable<MapNode['kind']> = 'step') => {
+    const defaults = { goal: ['New milestone', 'Describe the outcome learners should reach.', '#ffe49b'], step: ['New learning step', 'Add a concept, activity, or exercise.', '#b8d8ff'], resource: ['Useful resource', 'Add a helpful link or reference in the notes.', '#baf0d1'], note: ['Note', 'Add context or a reminder.', '#d9c3ff'] } as const
+    const [label, description, color] = defaults[kind], index = nodes.length
+    const node: MapNode = { id: crypto.randomUUID(), label, description, kind, shape: kind === 'goal' ? 'pill' : 'rounded', color, x: Math.min(900, 120 + (index % 5) * 175), y: 175 + Math.floor(index / 5) * 180 }
+    onChange?.({ ...block, nodes: [...nodes, node] }); setSelectedNode(node.id)
   }
+  const autoArrange = () => onChange?.({ ...block, nodes: nodes.map((node, index) => ({ ...node, x: nodes.length === 1 ? 500 : 80 + index * 840 / (nodes.length - 1), y: 300 + (index % 2 ? 76 : -76) })) })
   const chooseNode = (id: string) => {
     if (connectMode && selectedNode && selectedNode !== id) {
       if (!connections.some((connection) => (connection.from === selectedNode && connection.to === id) || (connection.from === id && connection.to === selectedNode))) onChange?.({ ...block, connections: [...connections, { id: crypto.randomUUID(), from: selectedNode, to: id }] })
@@ -52,13 +61,13 @@ function RoadmapMap({ block, editable, onChange }: { block: RoadmapBlock; editab
     setSelectedNode(id)
   }
   return <div className={`roadmap-map-wrap ${editable ? 'is-editable' : ''}`}>
-    {editable && <div className="roadmap-map-toolbar"><button type="button" onClick={addNode}>＋ Add object</button><button type="button" className={connectMode ? 'is-active' : ''} onClick={() => { setConnectMode((value) => !value); setSelectedNode(null) }}>{connectMode ? 'Choose another object…' : '↗ Connect objects'}</button><span>{connectMode ? 'Select two objects to link them.' : 'Drag objects to arrange your map.'}</span></div>}
+    {editable && <div className="roadmap-map-toolbar"><button type="button" onClick={() => addNode('step')}>＋ Step</button><button type="button" onClick={() => addNode('goal')}>＋ Milestone</button><button type="button" onClick={() => addNode('resource')}>＋ Resource</button><button type="button" onClick={() => addNode('note')}>＋ Note</button><button type="button" className={connectMode ? 'is-active' : ''} onClick={() => { setConnectMode((value) => !value); setSelectedNode(null) }}>{connectMode ? 'Cancel linking' : '↗ Connect nodes'}</button><button type="button" onClick={autoArrange}>Arrange path</button><span>{connectMode ? selectedNode ? 'Select the node to connect to.' : 'Select a starting node.' : 'Drag nodes · select to edit'}</span></div>}
     <div className="roadmap-map-canvas" aria-label="Roadmap concept map">
-      <svg className="roadmap-map-lines" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">{connections.map((connection) => { const from = nodes.find((node) => node.id === connection.from); const to = nodes.find((node) => node.id === connection.to); return from && to ? <line key={connection.id} x1={from.x} y1={from.y} x2={to.x} y2={to.y} /> : null })}</svg>
-      {nodes.map((node) => <button type="button" key={node.id} className={`roadmap-map-node shape-${node.shape} ${selectedNode === node.id ? 'is-selected' : ''} ${connectMode ? 'connect-ready' : ''}`} style={mapNodeStyle(node)} onPointerDown={(event) => moveNode(node.id, event)} onClick={() => chooseNode(node.id)} title={node.description || node.label}>{node.label}</button>)}
+      <svg className="roadmap-map-lines" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true"><defs><marker id={`roadmap-arrow-${block.id}`} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" /></marker></defs>{connections.map((connection) => { const from = nodes.find((node) => node.id === connection.from); const to = nodes.find((node) => node.id === connection.to); if (!from || !to) return null; const mid = (from.x + to.x) / 2; return <path key={connection.id} d={`M ${from.x} ${from.y} C ${mid} ${from.y}, ${mid} ${to.y}, ${to.x} ${to.y}`} markerEnd={`url(#roadmap-arrow-${block.id})`} /> })}</svg>
+      {nodes.map((node) => <button type="button" key={node.id} className={`roadmap-map-node shape-${node.shape} node-${node.kind ?? 'step'} ${selectedNode === node.id ? 'is-selected' : ''} ${connectMode ? 'connect-ready' : ''}`} style={mapNodeStyle(node)} onPointerDown={(event) => moveNode(node.id, event)} onClick={() => chooseNode(node.id)} title={node.description || node.label}><span className="roadmap-map-node-icon" aria-hidden="true">{node.kind === 'goal' ? '◎' : node.kind === 'resource' ? '↗' : node.kind === 'note' ? '▤' : '✦'}</span><span className="roadmap-map-node-title">{node.label}</span><small>{node.description || 'Add a short description'}</small></button>)}
     </div>
     {!editable && selected && <div className="roadmap-map-description"><strong>{selected.label}</strong><p>{selected.description || 'No extra notes for this idea.'}</p></div>}
-    {editable && selected && <div className="roadmap-node-settings"><div className="roadmap-node-fields"><label>Object label<input maxLength={40} value={selected.label} onChange={(event) => updateNode(selected.id, { label: event.target.value })} /></label><label>What does it represent?<textarea maxLength={500} rows={2} value={selected.description} onChange={(event) => updateNode(selected.id, { description: event.target.value })} placeholder="Add context or learning notes for this object." /></label><label>Shape<select value={selected.shape} onChange={(event) => updateNode(selected.id, { shape: event.target.value as MapShape })}><option value="rounded">Rounded rectangle</option><option value="circle">Circle</option><option value="diamond">Diamond</option><option value="pill">Pill</option><option value="hexagon">Hexagon</option></select></label></div><div className="roadmap-map-colors" aria-label="Object color">{mapColors.map((color) => <button type="button" key={color} aria-label={`Set object color ${color}`} aria-pressed={selected.color === color} style={{ backgroundColor: color }} onClick={() => updateNode(selected.id, { color })} />)}</div><div className="roadmap-node-actions"><button type="button" onClick={() => { onChange?.({ ...block, nodes: nodes.filter((node) => node.id !== selected.id), connections: connections.filter((connection) => connection.from !== selected.id && connection.to !== selected.id) }); setSelectedNode(null) }}>Remove object</button></div></div>}
+    {editable && selected && <div className="roadmap-node-settings"><div className="roadmap-node-fields"><label>Object label<input maxLength={40} value={selected.label} onChange={(event) => updateNode(selected.id, { label: event.target.value })} /></label><label>What does it represent?<textarea maxLength={500} rows={2} value={selected.description} onChange={(event) => updateNode(selected.id, { description: event.target.value })} placeholder="Add context or learning notes for this object." /></label><label>Node type<select value={selected.kind ?? 'step'} onChange={(event) => updateNode(selected.id, { kind: event.target.value as NonNullable<MapNode['kind']> })}><option value="goal">Milestone</option><option value="step">Learning step</option><option value="resource">Resource</option><option value="note">Note</option></select></label><label>Shape<select value={selected.shape} onChange={(event) => updateNode(selected.id, { shape: event.target.value as MapShape })}><option value="rounded">Rounded rectangle</option><option value="circle">Circle</option><option value="diamond">Diamond</option><option value="pill">Pill</option><option value="hexagon">Hexagon</option></select></label></div><div className="roadmap-map-colors" aria-label="Object color">{mapColors.map((color) => <button type="button" key={color} aria-label={`Set object color ${color}`} aria-pressed={selected.color === color} style={{ backgroundColor: color }} onClick={() => updateNode(selected.id, { color })} />)}</div><div className="roadmap-node-actions"><button type="button" onClick={() => { onChange?.({ ...block, nodes: nodes.filter((node) => node.id !== selected.id), connections: connections.filter((connection) => connection.from !== selected.id && connection.to !== selected.id) }); setSelectedNode(null) }}>Remove object</button></div></div>}
     {editable && connections.length > 0 && <div className="roadmap-map-connection-list"><span>CONNECTIONS</span>{connections.map((connection) => <button type="button" key={connection.id} onClick={() => onChange?.({ ...block, connections: connections.filter((item) => item.id !== connection.id) })}>{nodes.find((node) => node.id === connection.from)?.label ?? 'Object'} ↔ {nodes.find((node) => node.id === connection.to)?.label ?? 'Object'} <b>×</b></button>)}</div>}
   </div>
 }
@@ -83,7 +92,7 @@ export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme:
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All topics')
   const [selected, setSelected] = useState<Roadmap | null>(null)
-  const [draft, setDraft] = useState<RoadmapDraft>({ title: '', summary: '', category: 'General', tags: [], content: [newBlock('step')] })
+  const [draft, setDraft] = useState<RoadmapDraft>({ title: '', summary: '', category: 'General', tags: [], content: [newBlock('map')] })
   const [tagDraft, setTagDraft] = useState('')
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -127,7 +136,7 @@ export default function RoadmapsPage({ theme, user, onBack, onSignIn }: { theme:
     if (!user) { onSignIn(); return }
     setSelected(null); setEditing(true); setCreateOpen(true); setError(''); setNotice('')
     setTagDraft('')
-    setDraft({ title: '', summary: '', category: 'General', tags: [], content: [newBlock('step')] })
+    setDraft({ title: '', summary: '', category: 'General', tags: [], content: [newBlock('map')] })
   }
   const editRoadmap = () => {
     if (!selected) return
