@@ -44,8 +44,6 @@ type Point = { x: number; y: number }
 type Stroke = { tool: 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Shape' | 'Line' | 'Text' | 'Image' | 'Eraser'; color: string; width: number; opacity: number; points: Point[]; text?: string; shapeKind?: ShapeKind; cornerRadius?: number; imageData?: string; layer?: LayerName; drawingStyle?: DrawingStyle; smoothing?: number; strokeCap?: 'round' | 'square' }
 type MoveSession = { indices: number[]; start: Point; originals: Stroke[]; preview: Stroke[] }
 type SelectionBox = { start: Point; current: Point }
-type DecorationPosition = 'top' | 'middle' | 'bottom' | 'left' | 'right'
-type DashboardDecoration = { id: string; kind: 'banner'; position: DecorationPosition; title: string; subtitle: string; color: string; image?: string; url?: string } | { id: string; kind: 'sticker'; position: DecorationPosition; emoji: string; image?: string; alt: string; url?: string }
 type DashboardAppearance = { backgroundMode: 'solid' | 'gradient'; background: string; backgroundEnd: string; gradientAngle: number; fileColor: string }
 type FolderToolLink = 'projects' | 'roadmaps' | 'graph' | 'electronics' | 'calculus' | 'code'
 function readDashboardValue<T>(key: string, fallback: T): T {
@@ -62,25 +60,6 @@ function readDashboardGoals(): DashboardGoal[] {
     if (stored) return (JSON.parse(stored) as DashboardGoal[]).filter((goal) => goal && goal.month === month && typeof goal.id === 'string' && typeof goal.title === 'string' && typeof goal.done === 'boolean')
   } catch {}
   return ['Review my notes each week', 'Finish one project', 'Make time to plan'].map((title, index) => ({ id: `goal-${month}-${index}`, title, month, done: false }))
-}
-function safeDashboardUrl(value: string) {
-  const candidate = value.trim()
-  if (!candidate) return undefined
-  try { const parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(candidate) ? candidate : 'https://' + candidate); return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : undefined } catch { return undefined }
-}
-async function compressDashboardImage(file: File, maxWidth: number, maxHeight: number) {
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPEG, or WebP image.')
-  if (file.size > 10 * 1024 * 1024) throw new Error('Images must be smaller than 10 MB.')
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, maxWidth / bitmap.width, maxHeight / bitmap.height)
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-  const context = canvas.getContext('2d')
-  if (!context) { bitmap.close(); throw new Error('This browser could not prepare the image.') }
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close()
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('The image could not be compressed.')), 'image/webp', 0.76))
-  if (blob.size > 180 * 1024) throw new Error('This image is still too large after compression. Try a smaller image.')
-  return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('The image could not be read.')); reader.readAsDataURL(blob) })
 }
 const penColors = ['#8b5cf6', '#18202a', '#e65353', '#ee8b33', '#48a879', '#378cdb', '#9762d5']
 const pageColors = ['auto', 'white', '#19171e', '#fff9e8', '#e9f2ff', '#f3e9ff']
@@ -1260,49 +1239,8 @@ const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashbo
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [autoSaveError, setAutoSaveError] = useState('')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
-  const [dashboardDecorations, setDashboardDecorations] = useState<DashboardDecoration[]>(() => readDashboardValue('ozoo:dashboard-decorations', []))
-  const [dashboardCustomizerOpen, setDashboardCustomizerOpen] = useState(false)
-  const [dashboardAppearance, setDashboardAppearance] = useState<DashboardAppearance>(() => { const fallback: DashboardAppearance = { backgroundMode: 'solid', background: '#f4f2f8', backgroundEnd: '#e9e3f2', gradientAngle: 135, fileColor: '#dcecff' }; const saved = readDashboardValue<Partial<DashboardAppearance>>( 'ozoo:dashboard-appearance', {}); return { ...fallback, ...saved, background: /^#[0-9a-f]{6}$/i.test(saved.background ?? '') ? saved.background! : fallback.background, backgroundEnd: /^#[0-9a-f]{6}$/i.test(saved.backgroundEnd ?? '') ? saved.backgroundEnd! : fallback.backgroundEnd, fileColor: /^#[0-9a-f]{6}$/i.test(saved.fileColor ?? '') ? saved.fileColor! : fallback.fileColor, backgroundMode: saved.backgroundMode === 'gradient' ? 'gradient' : 'solid', gradientAngle: [0,45,90,135,180,225,270,315].includes(Number(saved.gradientAngle)) ? Number(saved.gradientAngle) : fallback.gradientAngle } })
-  const [customizerMessage, setCustomizerMessage] = useState('')
-  const [bannerTitle, setBannerTitle] = useState('')
-  const [bannerSubtitle, setBannerSubtitle] = useState('')
-  const [bannerColor, setBannerColor] = useState('#bce9e8')
-  const [bannerImage, setBannerImage] = useState('')
-  const [bannerUrl, setBannerUrl] = useState('')
-  const [bannerPosition, setBannerPosition] = useState<DecorationPosition>('top')
-  const [stickerEmoji, setStickerEmoji] = useState('✨')
-  const [stickerAlt, setStickerAlt] = useState('')
-  const [stickerImage, setStickerImage] = useState('')
-  const [stickerUrl, setStickerUrl] = useState('')
-  const [stickerPosition, setStickerPosition] = useState<DecorationPosition>('top')
-  const [dashboardFooterNote, setDashboardFooterNote] = useState<string>(() => readDashboardValue('ozoo:dashboard-footer-note', ''))
-  const [footerNoteDraft, setFooterNoteDraft] = useState<string>(() => readDashboardValue('ozoo:dashboard-footer-note', ''))
+  const [dashboardAppearance] = useState<DashboardAppearance>(() => { const fallback: DashboardAppearance = { backgroundMode: 'solid', background: '#f4f2f8', backgroundEnd: '#e9e3f2', gradientAngle: 135, fileColor: '#dcecff' }; const saved = readDashboardValue<Partial<DashboardAppearance>>( 'ozoo:dashboard-appearance', {}); return { ...fallback, ...saved, background: /^#[0-9a-f]{6}$/i.test(saved.background ?? '') ? saved.background! : fallback.background, backgroundEnd: /^#[0-9a-f]{6}$/i.test(saved.backgroundEnd ?? '') ? saved.backgroundEnd! : fallback.backgroundEnd, fileColor: /^#[0-9a-f]{6}$/i.test(saved.fileColor ?? '') ? saved.fileColor! : fallback.fileColor, backgroundMode: saved.backgroundMode === 'gradient' ? 'gradient' : 'solid', gradientAngle: [0,45,90,135,180,225,270,315].includes(Number(saved.gradientAngle)) ? Number(saved.gradientAngle) : fallback.gradientAngle } })
   const [recentFiles, setRecentFiles] = useState<string[]>(() => Object.keys(localStorage).filter((key) => key.startsWith('doomnotes:') && key !== 'doomnotes:cloud-board-ids').filter((key) => { try { const saved = JSON.parse(localStorage.getItem(key) ?? 'null'); return typeof saved?.name === 'string' && typeof saved.pages === 'number' && Array.isArray(saved.pageStrokes) } catch { return false } }).map((key) => key.slice('doomnotes:'.length)))
-  const saveDashboardDecoration = (decoration: DashboardDecoration) => {
-    if (dashboardDecorations.length >= 24) { setCustomizerMessage('You can add up to 24 banners and stickers.'); return false }
-    const next = [...dashboardDecorations, decoration]
-    if (JSON.stringify(next).length > 1_200_000) { setCustomizerMessage('Dashboard decorations are using too much browser storage. Remove an image or choose a smaller one.'); return false }
-    setDashboardDecorations(next); setCustomizerMessage(''); return true
-  }
-  const addDashboardBanner = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const title = bannerTitle.trim()
-    if (!title && !bannerImage) { setCustomizerMessage('Add a title or image for your banner.'); return }
-    const url = safeDashboardUrl(bannerUrl)
-    if (bannerUrl.trim() && !url) { setCustomizerMessage('Enter a valid http or https link.'); return }
-    if (saveDashboardDecoration({ id: crypto.randomUUID(), kind: 'banner', position: bannerPosition, title, subtitle: bannerSubtitle.trim(), color: bannerColor, ...(bannerImage ? { image: bannerImage } : {}), ...(url ? { url } : {}) })) { setBannerTitle(''); setBannerSubtitle(''); setBannerImage(''); setBannerUrl('') }
-  }
-  const addDashboardSticker = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const url = safeDashboardUrl(stickerUrl)
-    if (stickerUrl.trim() && !url) { setCustomizerMessage('Enter a valid http or https link.'); return }
-    if (saveDashboardDecoration({ id: crypto.randomUUID(), kind: 'sticker', position: stickerPosition, emoji: stickerEmoji.trim() || '✨', alt: stickerAlt.trim() || 'Dashboard sticker', ...(stickerImage ? { image: stickerImage } : {}), ...(url ? { url } : {}) })) { setStickerImage(''); setStickerAlt(''); setStickerUrl('') }
-  }
-  const updateDecorationPosition = (id: string, position: DecorationPosition) => setDashboardDecorations((current) => current.map((item) => item.id === id ? { ...item, position } as DashboardDecoration : item))
-  const removeDashboardDecoration = (id: string) => setDashboardDecorations((current) => current.filter((item) => item.id !== id))
-  const renderDashboardDecorations = (position: DecorationPosition) => dashboardDecorations.filter((item) => item.position === position).map((item) => item.kind === 'banner'
-    ? <article className={"dashboard-decoration-banner" + (item.image ? ' has-image' : '')} key={item.id} style={{ backgroundColor: item.color }}>{item.image && <img src={item.image} alt="" />}{item.title && <strong>{item.title}</strong>}{item.subtitle && <span>{item.subtitle}</span>}{item.url && <a className="dashboard-decoration-click-target" href={safeDashboardUrl(item.url)} target="_blank" rel="noopener noreferrer" aria-label={'Open link: ' + (item.title || 'dashboard banner')} />}</article>
-    : <div className="dashboard-decoration-sticker" key={item.id} title={item.alt}>{item.image ? <img src={item.image} alt={item.alt} /> : <span aria-hidden="true">{item.emoji}</span>}{item.url && <a className="dashboard-decoration-click-target" href={safeDashboardUrl(item.url)} target="_blank" rel="noopener noreferrer" aria-label={'Open link: ' + item.alt} />}</div>)
   const countSavedDocuments = () => [...new Set([...recentFiles, ...boards.filter((board) => !board.infinite).map((board) => board.name)])].filter((name) => {
     if (!name || name.includes(':')) return false
     try { return (JSON.parse(localStorage.getItem(`doomnotes:${name}`) ?? 'null') as { infinite?: boolean } | null)?.infinite !== true }
@@ -1341,11 +1279,9 @@ const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashbo
     if (recorder && recorder.state !== 'inactive') recorder.stop()
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
   }, [])
-  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-decorations', JSON.stringify(dashboardDecorations)) } catch { setCustomizerMessage('Browser storage is full. Remove a large image or delete a decoration, then try again.') } }, [dashboardDecorations])
-  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-footer-note', JSON.stringify(dashboardFooterNote)) } catch { setCustomizerMessage('Browser storage is full. Your footer note could not be saved.') } }, [dashboardFooterNote])
   useEffect(() => { try { localStorage.setItem('ozoo:notebooks', JSON.stringify(notebooks)) } catch { /* Notebook organization remains optional if storage is full. */ } }, [notebooks])
   useEffect(() => { try { localStorage.setItem('ozoo:folder-links', JSON.stringify(folderLinks)) } catch {} }, [folderLinks])
-  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-appearance', JSON.stringify(dashboardAppearance)) } catch { setCustomizerMessage('Browser storage is full. Appearance could not be saved.') } }, [dashboardAppearance])
+  useEffect(() => { try { localStorage.setItem('ozoo:dashboard-appearance', JSON.stringify(dashboardAppearance)) } catch { /* Keep the dashboard usable if browser storage is full. */ } }, [dashboardAppearance])
   useEffect(() => { try { localStorage.setItem('ozoo:scratchpad', JSON.stringify(scratchItems)) } catch { /* Keep the board usable if browser storage is full. */ } }, [scratchItems])
 useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.stringify(dashboardTasks)) } catch {} }, [dashboardTasks])
   useEffect(() => { try { localStorage.setItem(`ozoo:dashboard-monthly-goals:${dashboardMonthKey()}`, JSON.stringify(dashboardGoals)) } catch {} }, [dashboardGoals])
@@ -3875,7 +3811,6 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
             
           </div>
         </section>
-                {false && dashboardCustomizerOpen && sitePage === 'dashboard' && <div className="dashboard-editor-overlay" />}
 {newFileDialog}
         {renameDialog}
         {fileSettingsDialog}
