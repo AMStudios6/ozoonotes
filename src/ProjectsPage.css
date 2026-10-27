@@ -268,7 +268,7 @@
  .project-rich-editor hr {break-after:page;page-break-after:always;border:0}
 }
 
-.project-brand-logo { width: 148px; height: 55px; flex:none; object-fit:contain; padding:4px 6px; border-radius:9px; background:#fff; }
+.project-brand-logo { width: 148px; height: 55px; flex:none; object-fit:contain; padding:0; border-radius:0; background:transparent; }
 .project-personalize-panel{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:9px 13px;padding:10px 13px}
 .project-personalize-panel>span{width:100%;color:var(--p-muted);font-size:10px;font-weight:700}
 .project-personalize-panel label{display:grid;gap:4px;color:var(--p-muted);font-size:9px;font-weight:700}
@@ -332,4 +332,4 @@
 .project-style-section .project-theme-swatches {grid-template-columns:repeat(2,minmax(0,1fr))}
 .project-theme-swatch {height:48px;border-color:var(--p-line);background:var(--swatch-paper);color:var(--swatch-accent)}
 .project-theme-swatch.selected::after {background:var(--swatch-accent);color:var(--swatch-paper)}
-.project-personalize-note {grid-column:1/-1;margin:0;color:var(--p-muted);font-size:10px;line-height:1.5}
+.project-personalize-note {grid-column:1/-1;margin:0;color:var(--p-muted);font-size:10px;line-height:1.5}.project-studio[data-theme="purple"] .project-brand-logo{filter:brightness(0) invert(1)}

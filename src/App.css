@@ -756,7 +756,7 @@
 .landing-footer-github:hover, .landing-footer-github:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); outline: none; }
 
 /* Keep the charcoal wordmark legible across the dark color themes. */
-.app.dark .brand-mark { box-sizing: border-box; padding: 4px 7px; border-radius: 9px; background: #fff; }
+.app.dark :is(.brand-mark,.auth-brand img,.project-brand-logo) { filter: brightness(0) invert(1); }
 
 
 /* Homepage story sections: create, choose a use case, and take the next step. */
@@ -1379,7 +1379,7 @@
 .dashboard-file-details>div{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
 .dashboard-file-details dt{color:var(--muted);font-size:10px}.dashboard-file-details dd{max-width:60%;margin:0;color:var(--ink);font-size:10px;text-align:right;overflow-wrap:anywhere}
 .dashboard-file-pin-action{width:100%;min-height:32px;margin:3px 0 5px;border:1px solid var(--line);border-radius:9px;background:var(--panel-raised);color:var(--ink);font:inherit;font-size:10px;font-weight:700;cursor:pointer}
-.landing-brand .brand-mark,.auth-brand img,.project-brand-logo{background:#fff;border-radius:10px;padding:3px 7px;box-sizing:border-box}
+.landing-brand .brand-mark,.auth-brand img,.project-brand-logo{background:transparent;border-radius:0;padding:0;box-sizing:border-box}
 @media(max-width:650px){.dashboard-shortcuts-heading{align-items:flex-start;flex-direction:column}.dashboard-shortcuts-heading form{width:100%}.dashboard-shortcuts-heading select{max-width:none;flex:1}.landing-files-heading{align-items:flex-start;flex-direction:column}.landing-files-actions{width:100%;justify-content:space-between}.dashboard-shared-activity-empty{align-items:flex-start;flex-direction:column}}
 
 
