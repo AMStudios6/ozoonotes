@@ -26,8 +26,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS team_board_access (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('view','edit')), PRIMARY KEY(team_id,board_id));
   CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS roadmaps (id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, summary TEXT NOT NULL, category TEXT NOT NULL, tags_json TEXT NOT NULL, content_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS resource_collections (id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, summary TEXT NOT NULL, category TEXT NOT NULL, tags_json TEXT NOT NULL, videos_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS resource_videos (id TEXT PRIMARY KEY, collection_id INTEGER NOT NULL REFERENCES resource_collections(id) ON DELETE CASCADE, filename TEXT NOT NULL, media_type TEXT NOT NULL, data_text TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS teacher_students (teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','declined')), permission TEXT NOT NULL DEFAULT 'view' CHECK(permission IN ('view','edit')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(teacher_id,student_id), CHECK(teacher_id<>student_id));
   CREATE INDEX IF NOT EXISTS roadmaps_updated_at_idx ON roadmaps(updated_at DESC);
+  CREATE INDEX IF NOT EXISTS resource_collections_updated_at_idx ON resource_collections(updated_at DESC);
 `)
 const accessColumns = db.prepare('PRAGMA table_info(board_access)').all().map((column) => column.name)
 if (!accessColumns.includes('can_download')) db.exec('ALTER TABLE board_access ADD COLUMN can_download INTEGER NOT NULL DEFAULT 0')
@@ -201,6 +204,18 @@ const roadmapSummary = (row, viewerId = null) => ({
   updatedAt: row.updated_at,
   isOwner: viewerId === row.owner_id,
 })
+const resourceSummary = (row, viewerId = null) => ({
+  id: row.id,
+  title: row.title,
+  summary: row.summary,
+  category: row.category,
+  tags: JSON.parse(row.tags_json),
+  videos: JSON.parse(row.videos_json).map(({ id, title, description, kind, url, mediaType, filename }) => ({ id, title, description, kind, url, mediaType, filename })),
+  author: db.prepare('SELECT username FROM users WHERE id=?').get(row.owner_id)?.username ?? 'OzooNotes member',
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  isOwner: viewerId === row.owner_id,
+})
 const normalizeRoadmapContent = (content) => {
   if (!Array.isArray(content) || content.length < 1 || content.length > 100) throw new Error('A roadmap needs 1–100 content blocks.')
   const allowedKinds = new Set(['step', 'text', 'image', 'link', 'video', 'map'])
@@ -284,6 +299,42 @@ async function handler(req, res) {
       const viewer = sessionUser(req)
       const categories = db.prepare('SELECT DISTINCT category FROM roadmaps ORDER BY category COLLATE NOCASE').all().map((row) => row.category)
       return sendJson(res, 200, { roadmaps: visible.map((row) => roadmapSummary(row, viewer?.id ?? null)), categories })
+    }
+    if (route === '/api/resources' && method === 'GET') {
+      const search = String(url.searchParams.get('q') ?? '').trim().slice(0, 100).toLowerCase()
+      const category = String(url.searchParams.get('category') ?? '').trim().slice(0, 60)
+      const rows = db.prepare('SELECT * FROM resource_collections ORDER BY updated_at DESC, id DESC LIMIT 300').all()
+      const visible = rows.filter((row) => {
+        if (category && row.category !== category) return false
+        return !search || `${row.title} ${row.summary} ${row.category} ${row.tags_json} ${row.videos_json}`.toLowerCase().includes(search)
+      }).slice(0, 100)
+      const viewer = sessionUser(req)
+      const categories = db.prepare('SELECT DISTINCT category FROM resource_collections ORDER BY category COLLATE NOCASE').all().map((row) => row.category)
+      return sendJson(res, 200, { collections: visible.map((row) => resourceSummary(row, viewer?.id ?? null)), categories })
+    }
+    const resourceVideoRoute = route.match(/^\/api\/resources\/(\d+)\/videos\/([a-f0-9]{24})$/)
+    if (resourceVideoRoute && method === 'GET') {
+      const asset = db.prepare('SELECT v.filename,v.media_type AS mediaType,v.data_text AS data FROM resource_videos v JOIN resource_collections c ON c.id=v.collection_id WHERE c.id=? AND v.id=?').get(Number(resourceVideoRoute[1]), resourceVideoRoute[2])
+      if (!asset) return sendJson(res, 404, { error: 'That video could not be found.' })
+      const bytes = Buffer.from(decryptAtRest(asset.data), 'base64')
+      const headers = { 'Content-Type': asset.mediaType, 'Content-Disposition': `inline; filename="${String(asset.filename).replace(/["\\\r\n]/g, '_')}"`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' }
+      const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/)
+      if (range) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, bytes.length - Number(range[2]))
+        const end = range[2] ? Math.min(bytes.length - 1, Number(range[2])) : bytes.length - 1
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= bytes.length) { res.writeHead(416, { 'Content-Range': `bytes */${bytes.length}` }).end(); return }
+        res.writeHead(206, { ...headers, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${bytes.length}` }).end(bytes.subarray(start, end + 1))
+        return
+      }
+      res.writeHead(200, { ...headers, 'Content-Length': bytes.length }).end(bytes)
+      return
+    }
+    const resourceRoute = route.match(/^\/api\/resources\/(\d+)$/)
+    if (resourceRoute && method === 'GET') {
+      const row = db.prepare('SELECT * FROM resource_collections WHERE id=?').get(Number(resourceRoute[1]))
+      if (!row) return sendJson(res, 404, { error: 'That resource collection could not be found.' })
+      const viewer = sessionUser(req)
+      return sendJson(res, 200, { collection: resourceSummary(row, viewer?.id ?? null) })
     }
     const roadmapRoute = route.match(/^\/api\/roadmaps\/(\d+)$/)
     if (roadmapRoute && method === 'GET') {
@@ -534,6 +585,108 @@ async function handler(req, res) {
       const result = db.prepare('INSERT INTO roadmaps(owner_id,title,summary,category,tags_json,content_json) VALUES(?,?,?,?,?,?)').run(user.id, cleanTitle, cleanSummary, cleanCategory, JSON.stringify(cleanTags), encryptAtRest(contentJson))
       const row = db.prepare('SELECT * FROM roadmaps WHERE id=?').get(Number(result.lastInsertRowid))
       return sendJson(res, 201, { roadmap: { ...roadmapSummary(row, user.id), content: cleanContent, nextUpdateAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() } })
+    }
+    if (route === '/api/resources' && method === 'POST') {
+      const { title, summary, category, tags, videos } = await readBody(req, 40 * 1024 * 1024)
+      const cleanTitle = String(title ?? '').trim().slice(0, 120)
+      const cleanSummary = String(summary ?? '').trim().slice(0, 500)
+      const cleanCategory = String(category ?? 'General').trim().slice(0, 60) || 'General'
+      const cleanTags = Array.isArray(tags) ? [...new Set(tags.map((tag) => String(tag).trim().slice(0, 32)).filter(Boolean))].slice(0, 12) : []
+      if (!cleanTitle || !cleanSummary) return sendJson(res, 400, { error: 'Add a collection title and a short description.' })
+      if (!Array.isArray(videos) || videos.length < 1 || videos.length > 30) return sendJson(res, 400, { error: 'Add between 1 and 30 videos to a collection.' })
+      let uploadBytes = 0
+      const videoRows = videos.map((video) => {
+        if (!video || typeof video !== 'object') throw new Error('A video entry is invalid.')
+        const id = randomBytes(12).toString('hex')
+        const clean = { id, title: String(video.title ?? '').trim().slice(0, 140), description: String(video.description ?? '').trim().slice(0, 500), kind: video.kind === 'upload' ? 'upload' : 'link' }
+        if (!clean.title) throw new Error('Give every video a title.')
+        if (clean.kind === 'upload') {
+          const mediaType = String(video.mediaType ?? '')
+          const filename = String(video.filename ?? 'video').slice(0, 180).replace(/[\r\n]/g, '_')
+          const data = String(video.data ?? '')
+          if (!['video/mp4','video/webm','video/ogg'].includes(mediaType) || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw new Error('Video uploads must be MP4, WebM, or Ogg files.')
+          const size = Buffer.from(data, 'base64').length
+          if (!size || size > 15 * 1024 * 1024) throw new Error('Each uploaded video must be under 15 MB.')
+          uploadBytes += size
+          if (uploadBytes > 25 * 1024 * 1024) throw new Error('Uploaded videos in one collection must total under 25 MB.')
+          clean.mediaType = mediaType
+          clean.filename = filename
+          clean.data = data
+        } else {
+          let videoUrl
+          try { videoUrl = new URL(String(video.url ?? '')) } catch { throw new Error('Add a valid video link.') }
+          if (!['http:','https:'].includes(videoUrl.protocol)) throw new Error('Video links must use HTTP or HTTPS.')
+          clean.url = videoUrl.toString()
+        }
+        return clean
+      })
+      const videosJson = JSON.stringify(videoRows.map(({ data, ...video }) => video))
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const result = db.prepare('INSERT INTO resource_collections(owner_id,title,summary,category,tags_json,videos_json) VALUES(?,?,?,?,?,?)').run(user.id, cleanTitle, cleanSummary, cleanCategory, JSON.stringify(cleanTags), videosJson)
+        const collectionId = Number(result.lastInsertRowid)
+        const addVideo = db.prepare('INSERT INTO resource_videos(id,collection_id,filename,media_type,data_text) VALUES(?,?,?,?,?)')
+        for (const video of videoRows) if (video.kind === 'upload') addVideo.run(video.id, collectionId, video.filename, video.mediaType, encryptAtRest(video.data))
+        db.exec('COMMIT')
+        const row = db.prepare('SELECT * FROM resource_collections WHERE id=?').get(collectionId)
+        return sendJson(res, 201, { collection: resourceSummary(row, user.id) })
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    }
+    const resourceEditRoute = route.match(/^\/api\/resources\/(\d+)$/)
+    if (resourceEditRoute && (method === 'PUT' || method === 'DELETE')) {
+      const id = Number(resourceEditRoute[1])
+      const row = db.prepare('SELECT * FROM resource_collections WHERE id=?').get(id)
+      if (!row) return sendJson(res, 404, { error: 'That resource collection could not be found.' })
+      if (row.owner_id !== user.id) return sendJson(res, 403, { error: 'Only the collection owner can change it.' })
+      if (method === 'DELETE') { db.prepare('DELETE FROM resource_collections WHERE id=?').run(id); return sendJson(res, 200, { ok: true }) }
+      const { title, summary, category, tags, videos } = await readBody(req, 40 * 1024 * 1024)
+      const cleanTitle = String(title ?? '').trim().slice(0, 120)
+      const cleanSummary = String(summary ?? '').trim().slice(0, 500)
+      const cleanCategory = String(category ?? 'General').trim().slice(0, 60) || 'General'
+      const cleanTags = Array.isArray(tags) ? [...new Set(tags.map((tag) => String(tag).trim().slice(0, 32)).filter(Boolean))].slice(0, 12) : []
+      if (!cleanTitle || !cleanSummary) return sendJson(res, 400, { error: 'Add a collection title and a short description.' })
+      if (!Array.isArray(videos) || videos.length < 1 || videos.length > 30) return sendJson(res, 400, { error: 'Add between 1 and 30 videos to a collection.' })
+      let uploadBytes = 0
+      const videoRows = videos.map((video) => {
+        if (!video || typeof video !== 'object') throw new Error('A video entry is invalid.')
+        const videoId = /^[a-f0-9]{24}$/.test(String(video.id ?? '')) ? String(video.id) : randomBytes(12).toString('hex')
+        const clean = { id: videoId, title: String(video.title ?? '').trim().slice(0, 140), description: String(video.description ?? '').trim().slice(0, 500), kind: video.kind === 'upload' ? 'upload' : 'link' }
+        if (!clean.title) throw new Error('Give every video a title.')
+        if (clean.kind === 'upload') {
+          const existing = db.prepare('SELECT filename,media_type AS mediaType FROM resource_videos WHERE id=? AND collection_id=?').get(videoId, id)
+          if (existing && !video.data) { clean.filename = existing.filename; clean.mediaType = existing.mediaType }
+          else {
+            const mediaType = String(video.mediaType ?? '')
+            const filename = String(video.filename ?? 'video').slice(0, 180).replace(/[\r\n]/g, '_')
+            const data = String(video.data ?? '')
+            if (!['video/mp4','video/webm','video/ogg'].includes(mediaType) || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw new Error('Video uploads must be MP4, WebM, or Ogg files.')
+            const size = Buffer.from(data, 'base64').length
+            if (!size || size > 15 * 1024 * 1024) throw new Error('Each uploaded video must be under 15 MB.')
+            uploadBytes += size
+            if (uploadBytes > 25 * 1024 * 1024) throw new Error('Uploaded videos in one collection must total under 25 MB.')
+            clean.filename = filename; clean.mediaType = mediaType; clean.data = data
+          }
+        } else {
+          let videoUrl
+          try { videoUrl = new URL(String(video.url ?? '')) } catch { throw new Error('Add a valid video link.') }
+          if (!['http:','https:'].includes(videoUrl.protocol)) throw new Error('Video links must use HTTP or HTTPS.')
+          clean.url = videoUrl.toString()
+        }
+        return clean
+      })
+      const videosJson = JSON.stringify(videoRows.map(({ data, ...video }) => video))
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        db.prepare("UPDATE resource_collections SET title=?,summary=?,category=?,tags_json=?,videos_json=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(cleanTitle, cleanSummary, cleanCategory, JSON.stringify(cleanTags), videosJson, id)
+        const keep = videoRows.filter((video) => video.kind === 'upload').map((video) => video.id)
+        const existingVideos = db.prepare('SELECT id FROM resource_videos WHERE collection_id=?').all(id)
+        for (const existing of existingVideos) if (!keep.includes(existing.id)) db.prepare('DELETE FROM resource_videos WHERE id=?').run(existing.id)
+        const saveVideo = db.prepare('INSERT INTO resource_videos(id,collection_id,filename,media_type,data_text) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET filename=excluded.filename,media_type=excluded.media_type,data_text=excluded.data_text')
+        for (const video of videoRows) if (video.kind === 'upload' && video.data) saveVideo.run(video.id, id, video.filename, video.mediaType, encryptAtRest(video.data))
+        db.exec('COMMIT')
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+      const updated = db.prepare('SELECT * FROM resource_collections WHERE id=?').get(id)
+      return sendJson(res, 200, { collection: resourceSummary(updated, user.id) })
     }
     const roadmapEditRoute = route.match(/^\/api\/roadmaps\/(\d+)$/)
     if (roadmapEditRoute && method === 'PUT') {

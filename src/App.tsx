@@ -13,6 +13,7 @@ import DiaryPage from './DiaryPage'
 import BooksToRead from './BooksToRead'
 import Watchlist from './Watchlist'
 import RoadmapsPage from './RoadmapsPage'
+import ResourcesPage from './ResourcesPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 import { AdminPage, ContactPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
@@ -823,7 +824,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1007,7 +1008,7 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1027,7 +1028,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -3561,6 +3562,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (sitePage === 'books') return <BooksToRead theme={colorTheme} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'watchlist') return <Watchlist theme={colorTheme} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
+  if (sitePage === 'resources') return <ResourcesPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'resources'); navigatePage('signin') }} />
   if (sitePage === 'account') {
     const accountGoals = dashboardGoals.filter((goal) => goal.month === dashboardMonthKey())
     const completedGoals = accountGoals.filter((goal) => goal.done).length
@@ -3601,7 +3603,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                 <div className="dashboard-nav-section"><span className="dashboard-sidebar-label">Workspace</span>
                   <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
                   <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>
-                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>
+                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button>
                   <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>
                   <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                     <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)} aria-label="Simulator"><Icon name="graph" size={16} /><span>Simulator</span><Icon name="chevronDown" size={12} /></button>
@@ -3623,7 +3625,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                     </div>
                   </div>}
                 </div>
-              </> : <><button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button></>}
+              </> : <><button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button><button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button></>}
             </nav>
             <div className="landing-top-actions">
               
