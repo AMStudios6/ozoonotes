@@ -833,7 +833,8 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'dashboard-options' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
+  if (page === 'notes') return 'dashboard'
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'dashboard-options' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1017,7 +1018,8 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'dashboard-options', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const canonicalTarget = pageTarget === 'notes' ? 'dashboard' : pageTarget
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'dashboard-options', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'signin', 'profile', 'account', 'admin'].includes(canonicalTarget) ? canonicalTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1032,12 +1034,20 @@ function App() {
     else window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   useEffect(() => {
-    const syncRoute = () => setSitePage(readSiteRoute())
+    const syncRoute = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('page') === 'notes') {
+        url.searchParams.set('page', 'dashboard')
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+      }
+      setSitePage(readSiteRoute())
+    }
+    syncRoute()
     window.addEventListener('popstate', syncRoute)
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', 'dashboard-options': 'Choose your dashboard tools · OzooNotes', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', 'dashboard-options': 'Choose your dashboard tools · OzooNotes', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -3794,7 +3804,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (sitePage === 'profile') return cloudUser ? <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><a className="auth-dashboard-link" href="/?page=dashboard" onClick={(event) => { event.preventDefault(); navigatePage('dashboard') }}>← Back to dashboard</a><h1>Account profile</h1><p>Update the name and photo shown on your OzooNotes account.</p>{profileDialog}</section></main> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>Opening your profile…</p></section></main>
   if (sitePage === 'admin') return <AdminPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} users={adminUsers} totals={adminTotals} loading={adminLoading} error={adminError || (cloudUser?.isAdmin ? '' : 'Admin access is not enabled for this account. Add your username to ADMIN_USERNAMES in Railway after deploying the server update.')} onRefresh={() => void refreshAdminOverview()} onChangePlan={(id, plan) => void updateAdminPlan(id, plan)} />
 
-  if (boards.length === 0 || sitePage === 'dashboard') {
+  if (sitePage === 'dashboard') {
     return (
       <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}>
         <section className={'landing-window ' + (sitePage === 'dashboard' ? 'dashboard-window' + (dashboardSidebarCollapsed ? ' sidebar-collapsed' : '') : '')} style={sitePage === 'dashboard' ? ({ '--dashboard-background': colorTheme === 'purple' ? '#080808' : '#f1f1f1', '--dashboard-file-color': dashboardAppearance.fileColor } as CSSProperties) : undefined}>

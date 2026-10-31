@@ -1,7 +1,7 @@
 import { useState, type MouseEvent as ReactMouseEvent } from 'react'
 import './SitePages.css'
 
-export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'dashboard-options' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist' | 'contact' | 'notes' | 'signin' | 'profile' | 'account' | 'admin'
+export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'dashboard-options' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist' | 'contact' | 'signin' | 'profile' | 'account' | 'admin'
 
 export type DashboardOptionId = 'projects' | 'simulation' | 'infiniteBoard' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist'
 export const dashboardOptionChoices: { id: DashboardOptionId; title: string; description: string; icon: string }[] = [
