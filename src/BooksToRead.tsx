@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { readCloudData, writeCloudData } from './cloudData'
 import './BooksToRead.css'
 
 type ReadingBook = { id: string; title: string; cover?: string; spine?: string; status: 'Want to read' | 'Reading' | 'Finished'; addedAt: number }
@@ -21,6 +22,9 @@ function saveBook(db: IDBDatabase, book: ReadingBook): Promise<void> {
 function deleteBook(db: IDBDatabase, id: string): Promise<void> {
   return new Promise((resolve, reject) => { const request = db.transaction(STORE, 'readwrite').objectStore(STORE).delete(id); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error) })
 }
+function replaceBooks(db: IDBDatabase, books: ReadingBook[]): Promise<void> {
+  return new Promise((resolve, reject) => { const transaction = db.transaction(STORE, 'readwrite'); const store = transaction.objectStore(STORE); store.clear(); books.forEach((book) => store.put(book)); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error) })
+}
 function imageData(file?: File): Promise<string | undefined> {
   if (!file) return Promise.resolve(undefined)
   return createImageBitmap(file).then((bitmap) => {
@@ -31,7 +35,7 @@ function imageData(file?: File): Promise<string | undefined> {
     return canvas.toDataURL('image/jpeg', .82)
   })
 }
-export default function BooksToRead({ theme, onBack }: { theme: string; onBack: () => void }) {
+export default function BooksToRead({ theme, onBack, cloudEnabled = false }: { theme: string; onBack: () => void; cloudEnabled?: boolean }) {
   const [db, setDb] = useState<IDBDatabase | null>(null)
   const [books, setBooks] = useState<ReadingBook[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -43,26 +47,32 @@ export default function BooksToRead({ theme, onBack }: { theme: string; onBack: 
   const [filter, setFilter] = useState('All books')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const cloudVersion = useRef(0)
+  const cloudReady = useRef(false)
+  const cloudDirty = useRef(false)
   useEffect(() => {
     let active = true
-    openBooksDb().then(async (database) => { if (!active) { database.close(); return }; setDb(database); setBooks(await readBooks(database)) }).catch(() => setMessage('This browser could not open local book storage. Try a current version of Chrome, Edge, or Firefox.'))
+    cloudReady.current = false
+    openBooksDb().then(async (database) => { if (!active) { database.close(); return }; setDb(database); let savedBooks = await readBooks(database); if (cloudEnabled) { try { const remote = await readCloudData('ozoo:books-db'); if (remote?.value) { cloudVersion.current = remote.updatedAt; savedBooks = JSON.parse(remote.value) as ReadingBook[]; await replaceBooks(database, savedBooks) } else { const saved = await writeCloudData('ozoo:books-db', JSON.stringify(savedBooks)); cloudVersion.current = saved?.updatedAt ?? 0 } } catch { setMessage('Saved on this device · cloud backup will retry when connected.') } }; if (active) { setBooks(savedBooks); cloudReady.current = true } }).catch(() => setMessage('This browser could not open local book storage. Try a current version of Chrome, Edge, or Firefox.'))
     return () => { active = false }
-  }, [])
+  }, [cloudEnabled])
   const visibleBooks = useMemo(() => books.filter((book) => (filter === 'All books' || book.status === filter) && book.title.toLowerCase().includes(search.toLowerCase().trim())), [books, filter, search])
   const clearForm = () => { setTitle(''); setStatus('Want to read'); setCoverFile(undefined); setSpineFile(undefined); setShowForm(false); setMessage('') }
+  const pushCloudBooks = async (next: ReadingBook[]) => { if (!cloudEnabled) return; cloudDirty.current = true; try { const saved = await writeCloudData('ozoo:books-db', JSON.stringify(next)); cloudVersion.current = saved?.updatedAt ?? cloudVersion.current; cloudDirty.current = false; setMessage('Saved to your account cloud.') } catch { setMessage('Saved on this device, but cloud backup failed. Check your connection and try again.') } }
+  useEffect(() => { if (!db || !cloudEnabled) return; let active = true, polling = false; const poll = async () => { if (!cloudReady.current || cloudDirty.current || polling) return; polling = true; try { const remote = await readCloudData('ozoo:books-db'); if (!active || !remote || remote.deleted || remote.updatedAt <= cloudVersion.current || remote.value === null || cloudDirty.current) return; const incoming = JSON.parse(remote.value) as ReadingBook[]; await replaceBooks(db, incoming); if (active) { cloudVersion.current = remote.updatedAt; setBooks(incoming) } } catch { /* Keep local books and try again on the next interval. */ } finally { polling = false } }; const timer = setInterval(() => { void poll() }, 3000); return () => { active = false; clearInterval(timer) } }, [db, cloudEnabled])
   const addBook = async (event: FormEvent) => {
     event.preventDefault(); if (!db || !title.trim()) return
     setBusy(true); setMessage('')
     try {
       const book: ReadingBook = { id: crypto.randomUUID(), title: title.trim(), cover: await imageData(coverFile), spine: await imageData(spineFile), status, addedAt: Date.now() }
-      await saveBook(db, book); setBooks((current) => [book, ...current]); clearForm()
+      await saveBook(db, book); const next = [book, ...books]; setBooks(next); await pushCloudBooks(next); clearForm()
     } catch { setMessage('Could not save this book. Try smaller photos or check your available device storage.') }
     finally { setBusy(false) }
   }
-  const changeStatus = async (book: ReadingBook, next: ReadingBook['status']) => { if (!db) return; const updated = { ...book, status: next }; await saveBook(db, updated); setBooks((current) => current.map((item) => item.id === book.id ? updated : item)) }
-  const remove = async (book: ReadingBook) => { if (!db) return; await deleteBook(db, book.id); setBooks((current) => current.filter((item) => item.id !== book.id)) }
+  const changeStatus = async (book: ReadingBook, next: ReadingBook['status']) => { if (!db) return; const updated = { ...book, status: next }; await saveBook(db, updated); const nextBooks = books.map((item) => item.id === book.id ? updated : item); setBooks(nextBooks); await pushCloudBooks(nextBooks) }
+  const remove = async (book: ReadingBook) => { if (!db) return; await deleteBook(db, book.id); const next = books.filter((item) => item.id !== book.id); setBooks(next); await pushCloudBooks(next) }
   return <main className={`app ${theme === 'purple' ? 'dark' : 'light'}`} data-theme={theme}><div className="books-page">
-    <header className="books-topbar"><button className="books-back" type="button" onClick={onBack}>← <span>Dashboard</span></button><div className="books-brand"><span className="books-brand-mark">▤</span><span>OzooNotes <i>·</i> Bookshelf</span></div><span className="books-local-label"><i /> Saved on this device</span></header>
+    <header className="books-topbar"><button className="books-back" type="button" onClick={onBack}>← <span>Dashboard</span></button><div className="books-brand"><span className="books-brand-mark">▤</span><span>OzooNotes <i>·</i> Bookshelf</span></div><span className="books-local-label"><i /> {cloudEnabled ? 'Cloud backup on' : 'Saved on this device'}</span></header>
     <div className="books-content">
       <section className="books-intro"><div><span className="books-eyebrow">YOUR NEXT CHAPTER</span><h1>Books to read<span>.</span></h1><p>Keep the books you’re looking forward to in one cozy place.</p></div><div className="books-count"><strong>{books.length}</strong><span>{books.length === 1 ? 'book on your shelf' : 'books on your shelf'}</span></div></section>
       <section className="books-toolbar" aria-label="Bookshelf controls"><label className="books-search"><span aria-hidden="true">⌕</span><input aria-label="Search books" placeholder="Find a book…" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="books-filters" role="group" aria-label="Filter books">{['All books', 'Want to read', 'Reading', 'Finished'].map((item) => <button type="button" key={item} className={filter === item ? 'selected' : ''} aria-pressed={filter === item} onClick={() => setFilter(item)}>{item}</button>)}</div></section>

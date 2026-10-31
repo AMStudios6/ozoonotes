@@ -16,7 +16,8 @@ import RoadmapsPage from './RoadmapsPage'
 import ResourcesPage from './ResourcesPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
-import { AdminPage, ContactPage, MarketingHome, ProductPage, PricingPage, type AdminAccount, type SiteRoute } from './SitePages'
+import { AdminPage, ContactPage, DashboardOptionsPage, MarketingHome, ProductPage, PricingPage, dashboardOptionChoices, type AdminAccount, type DashboardOptionId, type SiteRoute } from './SitePages'
+import { type CloudDataRecord, cloudDataRequest } from './cloudData'
 import './ResponsiveLayout.css'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'
@@ -37,7 +38,7 @@ type DashboardTask = { id: string; title: string; dueDate: string; createdAt: nu
 type DashboardGoal = { id: string; title: string; month: string; done: boolean }
 type DashboardProjectSummary = { id: string; title: string; description: string; updatedAt: number }
 type DashboardShortcut = { id: string; kind: 'file' | 'folder' | 'project' | 'roadmap'; label: string; target: string }
-type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; businessPlan?: boolean; accountType?: AccountType; isAdmin?: boolean }
+type CloudUser = { id: number; username: string; email?: string | null; displayName?: string; avatar?: string | null; hasPassword?: boolean; plan?: 'normal' | 'pro'; businessPlan?: boolean; accountType?: AccountType; dashboardOptions?: DashboardOptionId[] | null; isAdmin?: boolean }
 type BoardState = { pages: number; pageSize?: PageSize; infinite?: boolean; orientation: 'portrait' | 'landscape'; pageOrientations?: ('portrait' | 'landscape')[]; pageBackground: string; gridEnabled?: boolean; showScale?: boolean; hiddenLayers?: LayerName[]; pageStrokes: Stroke[][] }
 type EncryptedBoardState = { encrypted: 'doomnotes-aes-gcm'; version: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ciphertext: string }
 type CloudBoard = { id: number; ownerId?: number; name: string; folderId: number | null; state: BoardState | EncryptedBoardState; role?: string; canDownload?: boolean; ownerName?: string; updatedAt?: string }
@@ -262,6 +263,14 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw error
   }
   return data
+}
+
+function isCloudSyncKey(key: string) {
+  if (key === 'ozoo:cloud-data-owner') return false
+  if (key.startsWith('doomnotes:')) return key !== 'doomnotes:cloud-board-ids'
+  if (!key.startsWith('ozoo:')) return false
+  if (['ozoo:projects-db', 'ozoo:books-db', 'ozoo:watchlist-db', 'ozoo:code-files-db', 'ozoo:projects-local-updated'].includes(key)) return false
+  return !['ozoo:password-reset-token', 'ozoo:after-login', 'ozoo:dashboard-options-return', 'ozoo:simulator-usage', 'ozoo:cloud-data-sync', 'ozoo:color-theme-change', 'ozoo:recent-stroke-colors', 'ozoo:dashboard-sidebar-collapsed', 'ozoo:dashboard-folders-expanded', 'ozoo:dashboard-file-view'].includes(key)
 }
 
 type ClassroomLink = { userId: number; username: string; permission: 'view' | 'edit'; status: 'pending' | 'accepted' | 'declined' }
@@ -824,7 +833,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'dashboard-options' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1008,7 +1017,7 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'dashboard-options', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1028,7 +1037,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', 'dashboard-options': 'Choose your dashboard tools · OzooNotes', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
@@ -1123,6 +1132,12 @@ const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>(readDashbo
   const [graphRange, setGraphRange] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 })
   const [graphError, setGraphError] = useState('')
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
+  const dashboardEnabledOptions = cloudUser?.dashboardOptions ?? dashboardOptionChoices.map((choice) => choice.id)
+  const dashboardToolEnabled = (id: DashboardOptionId) => dashboardEnabledOptions.includes(id)
+  const visibleDashboardShortcuts = dashboardShortcuts.filter((shortcut) => (shortcut.kind !== 'project' || dashboardToolEnabled('projects')) && (shortcut.kind !== 'roadmap' || dashboardToolEnabled('roadmaps')))
+  const [dashboardOptionsSaving, setDashboardOptionsSaving] = useState(false)
+  const [dashboardOptionsError, setDashboardOptionsError] = useState('')
+  const [accountDataSyncStatus, setAccountDataSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const isProUser = cloudUser?.plan === 'pro'
   const [adminUsers, setAdminUsers] = useState<AdminAccount[]>([])
   const [adminTotals, setAdminTotals] = useState({ users: 0, proUsers: 0 })
@@ -1531,7 +1546,174 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
   }, [passwordResetToken])
 
   useEffect(() => {
+    if (authStatus !== 'signed-in' || !cloudUser) { setAccountDataSyncStatus('idle'); return }
+    let active = true
+    let syncing = false
+    let initialized = false
+    let lastPollAt = 0
+    let cursor = 0
+    let changeTimer: ReturnType<typeof setTimeout> | undefined
+    const originalSetItem = Storage.prototype.setItem
+    const originalRemoveItem = Storage.prototype.removeItem
+    const lastValues = new Map<string, string | null>()
+    const dirtyKeys = new Set<string>()
+    const localSnapshot = () => {
+      const result = new Map<string, string>()
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index)
+        if (!key || !isCloudSyncKey(key)) continue
+        const value = localStorage.getItem(key)
+        if (value !== null) result.set(key, value)
+      }
+      return result
+    }
+    const upload = async (entries: { key: string; value: string | null }[]) => {
+      const batches: { key: string; value: string | null }[][] = []
+      let batch: { key: string; value: string | null }[] = []
+      let bytes = 0
+      for (const entry of entries) {
+        const entryBytes = new TextEncoder().encode(JSON.stringify(entry)).length
+        if (batch.length && (batch.length >= 40 || bytes + entryBytes > 7 * 1024 * 1024)) { batches.push(batch); batch = []; bytes = 0 }
+        batch.push(entry); bytes += entryBytes
+      }
+      if (batch.length) batches.push(batch)
+      for (const group of batches) {
+        const result = await apiRequest<{ entries: CloudDataRecord[] }>('/api/me/data', { method: 'PUT', body: JSON.stringify({ entries: group }) })
+        if (!active) return
+        const savedByKey = new Map(result.entries.map((entry) => [entry.key, entry]))
+        for (const entry of group) {
+          lastValues.set(entry.key, entry.value)
+          dirtyKeys.delete(entry.key)
+          const saved = savedByKey.get(entry.key)
+          if (saved) cursor = Math.max(cursor, saved.updatedAt)
+        }
+      }
+    }
+    const scheduleLocalSync = () => {
+      if (!initialized || !active) return
+      if (changeTimer) clearTimeout(changeTimer)
+      changeTimer = setTimeout(() => { void tick() }, 350)
+    }
+    Storage.prototype.setItem = function (key, value) {
+      originalSetItem.call(this, key, value)
+      if (this === window.localStorage && isCloudSyncKey(key)) scheduleLocalSync()
+    }
+    Storage.prototype.removeItem = function (key) {
+      originalRemoveItem.call(this, key)
+      if (this === window.localStorage && isCloudSyncKey(key)) scheduleLocalSync()
+    }
+    const onOtherTabStorage = (event: StorageEvent) => { if (event.storageArea === window.localStorage && event.key && isCloudSyncKey(event.key)) scheduleLocalSync() }
+    window.addEventListener('storage', onOtherTabStorage)
+    const initialize = async () => {
+      setAccountDataSyncStatus('syncing')
+      const ownerKey = 'ozoo:cloud-data-owner'
+      const previousOwner = localStorage.getItem(ownerKey)
+      if (previousOwner && previousOwner !== String(cloudUser.id)) {
+        const staleKeys = localSnapshot()
+        staleKeys.forEach((_, key) => originalRemoveItem.call(localStorage, key))
+        const databases = [
+          ['ozoo-project-documents', 'projects'],
+          ['ozoonotes-bookshelf-v1', 'books'],
+          ['ozoonotes-watchlist-v1', 'watchlist'],
+          ['ozoo-code-studio', 'projects'],
+        ] as const
+        await Promise.all(databases.map(([name, storeName]) => new Promise<void>((resolve) => {
+          try {
+            const request = indexedDB.open(name)
+            request.onsuccess = () => {
+              const database = request.result
+              if (!database.objectStoreNames.contains(storeName)) { database.close(); resolve(); return }
+              const transaction = database.transaction(storeName, 'readwrite')
+              transaction.objectStore(storeName).clear()
+              transaction.oncomplete = () => { database.close(); resolve() }
+              transaction.onerror = transaction.onabort = () => { database.close(); resolve() }
+            }
+            request.onerror = request.onblocked = () => resolve()
+          } catch { resolve() }
+        })))
+        originalSetItem.call(localStorage, ownerKey, String(cloudUser.id))
+        window.location.reload()
+        return
+      }
+      originalSetItem.call(localStorage, ownerKey, String(cloudUser.id))
+      const before = localSnapshot()
+      const result = await apiRequest<{ entries: CloudDataRecord[] }>('/api/me/data')
+      if (!active) return
+      const localStorageEntries = result.entries.filter((entry) => isCloudSyncKey(entry.key))
+      const cloudKeys = new Set(localStorageEntries.map((entry) => entry.key))
+      result.entries.forEach((entry) => { cursor = Math.max(cursor, entry.updatedAt) })
+      let restoredLocalData = false
+      for (const entry of localStorageEntries) {
+        const local = localStorage.getItem(entry.key)
+        if (entry.deleted) {
+          if (local !== null) { localStorage.removeItem(entry.key); restoredLocalData = true }
+          lastValues.set(entry.key, null)
+        } else if (entry.value !== null) {
+          if (local !== entry.value) { localStorage.setItem(entry.key, entry.value); restoredLocalData = true }
+          lastValues.set(entry.key, entry.value)
+        }
+      }
+      const onlyOnThisDevice = [...before].filter(([key]) => !cloudKeys.has(key)).map(([key, value]) => ({ key, value }))
+      if (onlyOnThisDevice.length) await upload(onlyOnThisDevice)
+      const current = localSnapshot()
+      current.forEach((value, key) => { if (!lastValues.has(key)) lastValues.set(key, value) })
+      if (restoredLocalData && sessionStorage.getItem('ozoo:cloud-data-hydrated-user') !== String(cloudUser.id)) {
+        sessionStorage.setItem('ozoo:cloud-data-hydrated-user', String(cloudUser.id))
+        window.location.reload()
+        return
+      }
+      sessionStorage.setItem('ozoo:cloud-data-hydrated-user', String(cloudUser.id))
+      setAccountDataSyncStatus('synced')
+    }
+    const tick = async () => {
+      if (!active || syncing) return
+      syncing = true
+      try {
+        const current = localSnapshot()
+        const changes: { key: string; value: string | null }[] = []
+        current.forEach((value, key) => { if (!lastValues.has(key) || lastValues.get(key) !== value) { changes.push({ key, value }); dirtyKeys.add(key) } })
+        lastValues.forEach((value, key) => { if (value !== null && !current.has(key)) { changes.push({ key, value: null }); dirtyKeys.add(key) } })
+        if (changes.length) { setAccountDataSyncStatus('syncing'); await upload(changes); setAccountDataSyncStatus('synced') }
+        if (Date.now() - lastPollAt >= 2500) {
+          const remote = await apiRequest<{ entries: CloudDataRecord[] }>(`/api/me/data?since=${cursor}`)
+          lastPollAt = Date.now()
+          for (const entry of remote.entries) {
+            cursor = Math.max(cursor, entry.updatedAt)
+            if (!isCloudSyncKey(entry.key)) continue
+            if (dirtyKeys.has(entry.key)) continue
+            const local = localStorage.getItem(entry.key)
+            if (entry.deleted) { if (local !== null) localStorage.removeItem(entry.key); lastValues.set(entry.key, null) }
+            else if (entry.value !== null) { if (local !== entry.value) localStorage.setItem(entry.key, entry.value); lastValues.set(entry.key, entry.value) }
+          }
+          if (remote.entries.length) setAccountDataSyncStatus('synced')
+        }
+      } catch { setAccountDataSyncStatus('error') }
+      finally { syncing = false }
+    }
+    let timer: ReturnType<typeof setInterval> | undefined
+    void initialize().then(() => { if (active) { initialized = true; timer = setInterval(() => { void tick() }, 2500) } }).catch(() => { if (active) setAccountDataSyncStatus('error') })
+    return () => {
+      active = false
+      initialized = false
+      if (timer) clearInterval(timer)
+      if (changeTimer) clearTimeout(changeTimer)
+      if (Storage.prototype.setItem !== originalSetItem) Storage.prototype.setItem = originalSetItem
+      if (Storage.prototype.removeItem !== originalRemoveItem) Storage.prototype.removeItem = originalRemoveItem
+      window.removeEventListener('storage', onOtherTabStorage)
+    }
+  }, [authStatus, cloudUser?.id])
+
+  useEffect(() => {
     if (authStatus !== 'signed-in') return
+    if (cloudUser?.dashboardOptions === null) {
+      if (sitePage !== 'dashboard-options') {
+        const intended = sessionStorage.getItem('ozoo:after-login')
+        sessionStorage.setItem('ozoo:dashboard-options-return', intended && intended !== 'dashboard-options' ? intended : 'dashboard')
+        sessionStorage.removeItem('ozoo:after-login')
+        navigatePage('dashboard-options')
+      }
+      return
+    }
     const intended = sessionStorage.getItem('ozoo:after-login')
     if (intended) {
       sessionStorage.removeItem('ozoo:after-login')
@@ -1539,10 +1721,16 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
       return
     }
     if (sitePage === 'signin') navigatePage(cloudUser?.isAdmin ? 'admin' : 'dashboard')
-  }, [authStatus, sitePage, cloudUser?.isAdmin])
+  }, [authStatus, sitePage, cloudUser?.isAdmin, cloudUser?.dashboardOptions])
 
   useEffect(() => {
     if ((sitePage === 'profile' || sitePage === 'account') && authStatus === 'signed-out') navigatePage('signin')
+  }, [sitePage, authStatus])
+
+  useEffect(() => {
+    if (sitePage !== 'dashboard-options' || authStatus !== 'signed-out') return
+    sessionStorage.setItem('ozoo:after-login', 'dashboard-options')
+    navigatePage('signin')
   }, [sitePage, authStatus])
 
   useEffect(() => {
@@ -1887,6 +2075,7 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
 
   const logout = async () => {
     try { await apiRequest('/api/auth/logout', { method: 'POST', body: '{}' }) } catch { /* server may be offline */ }
+    sessionStorage.removeItem('ozoo:cloud-data-hydrated-user')
     setCloudUser(null)
     setAuthStatus('signed-out')
     setCloudBoards([])
@@ -1944,6 +2133,22 @@ useEffect(() => { try { localStorage.setItem('ozoo:dashboard-tasks', JSON.string
       }
       setCloudMessage('Profile updated.')
     } catch (error) { setCloudMessage(error instanceof Error ? error.message : 'Could not update your profile.') }
+  }
+
+  const saveDashboardOptions = async (options: DashboardOptionId[]) => {
+    setDashboardOptionsSaving(true)
+    setDashboardOptionsError('')
+    try {
+      const result = await apiRequest<{ dashboardOptions: DashboardOptionId[] }>('/api/me/dashboard-options', { method: 'PUT', body: JSON.stringify({ options }) })
+      setCloudUser((current) => current ? { ...current, dashboardOptions: result.dashboardOptions } : current)
+      const target = sessionStorage.getItem('ozoo:dashboard-options-return') || 'dashboard'
+      sessionStorage.removeItem('ozoo:dashboard-options-return')
+      navigatePage(target)
+    } catch (error) {
+      setDashboardOptionsError(error instanceof Error ? error.message : 'Could not save your dashboard choices. Please try again.')
+    } finally {
+      setDashboardOptionsSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -3551,16 +3756,18 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
   if (circuitSimulatorOpen) return <CircuitSimulator onBack={() => setCircuitSimulatorOpen(false)} />
   if (graphSimulatorOpen) return <GraphSimulator onBack={() => setGraphSimulatorOpen(false)} />
   if (codeSimulatorMode === 'cpp') return <CppSimulator onBack={() => setCodeSimulatorMode(null)} />
-  if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} onBack={() => setCodeSimulatorMode(null)} />
-  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onThemeChange={setColorTheme} initialProjectId={projectFocusId ?? undefined} onBack={() => { setProjectsPageOpen(false); setProjectFocusId(null) }} />
+  if (codeSimulatorMode) return <CodeSimulator initialLanguage={codeSimulatorMode} cloudEnabled={Boolean(cloudUser)} onBack={() => setCodeSimulatorMode(null)} />
+  if (projectsPageOpen) return <ProjectStudio theme={colorTheme} onThemeChange={setColorTheme} cloudEnabled={Boolean(cloudUser)} initialProjectId={projectFocusId ?? undefined} onBack={() => { setProjectsPageOpen(false); setProjectFocusId(null) }} />
+
+  if (sitePage === 'dashboard-options') return cloudUser ? <DashboardOptionsPage theme={colorTheme} options={cloudUser.dashboardOptions ?? dashboardOptionChoices.map((choice) => choice.id)} saving={dashboardOptionsSaving} error={dashboardOptionsError} canGoBack={cloudUser.dashboardOptions !== null} onSave={(options) => void saveDashboardOptions(options)} onBack={() => navigatePage('dashboard')} /> : <main className={`app ${dark ? 'dark' : 'light'}`} data-theme={colorTheme}><section className="profile-page-layout"><p>{authStatus === 'loading' ? 'Checking your account…' : 'Taking you to sign in…'}</p></section></main>
 
   if (sitePage === 'home') return <MarketingHome logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'product') return <ProductPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'pricing') return <PricingPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
   if (sitePage === 'contact') return <ContactPage logo={brandLogo} theme={colorTheme} onNavigate={navigatePage} onThemeChange={setColorTheme} user={cloudUser} />
-  if (sitePage === 'diary') return <DiaryPage theme={colorTheme} onBack={() => navigatePage('dashboard')} />
-  if (sitePage === 'books') return <BooksToRead theme={colorTheme} onBack={() => navigatePage('dashboard')} />
-  if (sitePage === 'watchlist') return <Watchlist theme={colorTheme} onBack={() => navigatePage('dashboard')} />
+  if (sitePage === 'diary') return <DiaryPage theme={colorTheme} cloudEnabled={Boolean(cloudUser)} onBack={() => navigatePage('dashboard')} />
+  if (sitePage === 'books') return <BooksToRead theme={colorTheme} cloudEnabled={Boolean(cloudUser)} onBack={() => navigatePage('dashboard')} />
+  if (sitePage === 'watchlist') return <Watchlist theme={colorTheme} cloudEnabled={Boolean(cloudUser)} onBack={() => navigatePage('dashboard')} />
   if (sitePage === 'roadmaps') return <RoadmapsPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'roadmaps'); navigatePage('signin') }} />
   if (sitePage === 'resources') return <ResourcesPage theme={colorTheme} user={cloudUser ? { username: cloudUser.username } : null} onBack={() => navigatePage('dashboard')} onSignIn={() => { sessionStorage.setItem('ozoo:after-login', 'resources'); navigatePage('signin') }} />
   if (sitePage === 'account') {
@@ -3601,19 +3808,20 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
             <nav id="dashboard-navigation" className="landing-nav" aria-label="Main navigation">
               {sitePage === 'dashboard' ? <>
                 <div className="dashboard-nav-section"><span className="dashboard-sidebar-label">Workspace</span>
-                  <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>
-                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>
-                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button>
-                  <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>
-                  <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
+                  {dashboardToolEnabled('projects') && <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>}
+                  {dashboardToolEnabled('diary') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>}
+                  {dashboardToolEnabled('books') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button>}{dashboardToolEnabled('watchlist') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button>}{dashboardToolEnabled('roadmaps') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>}{dashboardToolEnabled('resources') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button>}
+                  {dashboardToolEnabled('infiniteBoard') && <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>}
+                  {dashboardToolEnabled('simulation') && <div className="landing-simulator-wrap" onKeyDown={(event) => { if (event.key === 'Escape') setSimulatorMenuOpen(false) }}>
                     <button type="button" className="landing-simulator-trigger" aria-haspopup="menu" aria-expanded={simulatorMenuOpen} onClick={() => setSimulatorMenuOpen((open) => !open)} aria-label="Simulator"><Icon name="graph" size={16} /><span>Simulator</span><Icon name="chevronDown" size={12} /></button>
                     {simulatorMenuOpen && <div className="landing-simulator-menu" role="menu" aria-label="Simulators"><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCircuitSimulator}><span className="studio-menu-glyph" aria-hidden="true">Ω</span><span><strong>Electronics</strong><small>Build and simulate DC circuits</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchGraphSimulator}><Icon name="graph" size={18} /><span><strong>Graph</strong><small>Plot equations or data points</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={launchCalculusSimulator}><span className="studio-menu-glyph" aria-hidden="true">∫</span><span><strong>Differentiation & integration</strong><small>Find derivatives and antiderivatives</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('cpp')}><span className="cpp-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>C++ coding</strong><small>Write and run C++ programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('python')}><span className="studio-menu-glyph" aria-hidden="true">Py</span><span><strong>Python coding</strong><small>Write and run Python programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('java')}><span className="studio-menu-glyph" aria-hidden="true">Ja</span><span><strong>Java coding</strong><small>Write and run Java programs</small></span></button><button type="button" role="menuitem" className="landing-simulator-option" onClick={() => launchCodeSimulator('web')}><span className="studio-menu-glyph" aria-hidden="true">&lt;/&gt;</span><span><strong>HTML · CSS · JavaScript</strong><small>Build and preview web projects</small></span></button></div>}
-                  </div>
+                  </div>}
                 </div>
                 <div className="dashboard-nav-section dashboard-nav-section-separated"><span className="dashboard-sidebar-label">Your work</span>
                   <button type="button" className="landing-nav-project" onClick={() => document.getElementById('dashboard-tasks')?.scrollIntoView({ behavior: 'smooth' })} aria-label="Focus tasks"><Icon name="study" size={16} /><span>Focus tasks</span></button>
                   <button type="button" className="landing-nav-project" onClick={() => document.getElementById('dashboard-progress')?.scrollIntoView({ behavior: 'smooth' })} aria-label="Progress"><Icon name="graph" size={16} /><span>Progress</span></button>
                   <button type="button" className="landing-nav-project" onClick={() => document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' })}><Icon name="notes" size={16} /><span>My files</span></button>
+                  <button type="button" className="landing-nav-project" onClick={() => navigatePage('dashboard-options')} aria-label="Customize dashboard tools"><Icon name="settings" size={16} /><span>Customize</span></button>
                 </div>
                 <div className="dashboard-nav-section dashboard-nav-section-separated dashboard-folder-section">
                   <div className="dashboard-folder-heading"><button type="button" className="dashboard-folder-section-button" aria-expanded={folderNavExpanded} onClick={() => setFolderNavExpanded((expanded) => !expanded)}><span className="dashboard-sidebar-label">Folders</span><span className="dashboard-folder-count">{notebooks.length + 1}</span><Icon name="chevronDown" size={13} /></button><button type="button" aria-label="Create folder" title="Create folder" onClick={() => { setFolderNavExpanded(true); setFolderCreateOpen((open) => !open) }}>＋</button></div>
@@ -3625,7 +3833,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                     </div>
                   </div>}
                 </div>
-              </> : <><button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button><button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button><button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button></>}
+              </> : <>{dashboardToolEnabled('projects') && <button type="button" className="landing-nav-project" onClick={() => setProjectsPageOpen(true)} aria-label="Projects"><Icon name="duplicate" size={16} /><span>Projects</span></button>}{dashboardToolEnabled('diary') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('diary')} aria-label="Diary"><Icon name="notes" size={16} /><span>Diary</span></button>}{dashboardToolEnabled('books') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('books')} aria-label="Books to read"><span className="dashboard-book-icon" aria-hidden="true">▤</span><span>Books to read</span></button>}{dashboardToolEnabled('watchlist') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('watchlist')} aria-label="Movies and series to watch"><span className="dashboard-watch-icon" aria-hidden="true">▣</span><span>Movies &amp; series</span></button>}{dashboardToolEnabled('roadmaps') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('roadmaps')} aria-label="Road map"><Icon name="study" size={16} /><span>Road map</span></button>}{dashboardToolEnabled('resources') && <button type="button" className="landing-nav-project" onClick={() => navigatePage('resources')} aria-label="Resources"><span aria-hidden="true">▶</span><span>Resources</span></button>}{dashboardToolEnabled('infiniteBoard') && <button type="button" className="landing-nav-project" onClick={openInfiniteBoard} aria-label="Infinite board"><Icon name="shape" size={16} /><span>Infinite board</span></button>}{dashboardToolEnabled('simulation') && <button type="button" className="landing-nav-project" onClick={launchGraphSimulator} aria-label="Simulator"><Icon name="graph" size={16} /><span>Simulator</span></button>}<button type="button" className="landing-nav-project" onClick={() => navigatePage('dashboard-options')} aria-label="Customize dashboard tools"><Icon name="settings" size={16} /><span>Customize</span></button></>}
             </nav>
             <div className="landing-top-actions">
               
@@ -3682,8 +3890,8 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                     <div className="dashboard-shortcuts">
                       <button type="button" onClick={() => addBoard(undefined, landingTemplate, landingPageSize)}><span>✎</span> Start a board</button>
                       <button type="button" onClick={() => documentInputRef.current?.click()}><span>↥</span> Open a file</button>
-                      <button type="button" onClick={() => setProjectsPageOpen(true)}><span>▤</span> Projects</button>
-                      <button type="button" onClick={launchGraphSimulator}><span>⌁</span> Graph simulator</button>
+                      {dashboardToolEnabled('projects') && <button type="button" onClick={() => setProjectsPageOpen(true)}><span>▤</span> Projects</button>}
+                      {dashboardToolEnabled('simulation') && <button type="button" onClick={launchGraphSimulator}><span>⌁</span> Graph simulator</button>}
                     </div>
                   </div>
                   <div className="dashboard-welcome-art" aria-hidden="true">
@@ -3713,7 +3921,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                 <section className="dashboard-insight-card dashboard-goals-card" aria-labelledby="dashboard-goals-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">THIS MONTH</span><h2 id="dashboard-goals-title">Monthly goals</h2></div><span className="dashboard-insight-badge">{dashboardMonthlyGoals.filter((goal) => goal.done).length}/{dashboardMonthlyGoals.length}</span></div><ul className="dashboard-goals-list">{dashboardMonthlyGoals.map((goal) => <li key={goal.id}><label><input type="checkbox" checked={goal.done} onChange={() => setDashboardGoals((goals) => goals.map((item) => item.id === goal.id ? { ...item, done: !item.done } : item))} /><span className={goal.done ? 'is-done' : ''}>{goal.title}</span></label><button type="button" aria-label={'Remove goal: ' + goal.title} onClick={() => setDashboardGoals((goals) => goals.filter((item) => item.id !== goal.id))}>×</button></li>)}</ul><form className="dashboard-inline-add" onSubmit={addDashboardGoal}><input aria-label="New monthly goal" placeholder="Add a goal…" value={dashboardGoalDraft} onChange={(event) => setDashboardGoalDraft(event.target.value)} maxLength={90} /><button type="submit" aria-label="Add monthly goal">＋</button></form></section>
                 <section className="dashboard-insight-card dashboard-tasks-card" id="dashboard-tasks" aria-labelledby="dashboard-tasks-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">ONE STEP AT A TIME</span><h2 id="dashboard-tasks-title">Focus tasks <small>({dashboardTasks.filter((task) => !task.done).length} open)</small></h2></div><button type="button" className="dashboard-small-link" onClick={() => document.getElementById('landing-files')?.scrollIntoView({ behavior: 'smooth' })}>My files ↗</button></div><form className="dashboard-task-form" onSubmit={addDashboardTask}><input aria-label="New focus task" placeholder="What would you like to do?" value={dashboardTaskDraft} onChange={(event) => setDashboardTaskDraft(event.target.value)} maxLength={100} /><input aria-label="Task due date" type="date" value={dashboardTaskDueDraft} onChange={(event) => setDashboardTaskDueDraft(event.target.value)} /><button type="submit" aria-label="Add task">＋</button></form>{dashboardTasks.length ? <ul className="dashboard-task-list">{[...dashboardTasks].sort((a, b) => Number(a.done) - Number(b.done) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).slice(0, 5).map((task) => <li key={task.id}><label><input type="checkbox" checked={task.done} onChange={() => toggleDashboardTask(task.id)} /><span className={task.done ? 'is-done' : ''}>{task.title}<small>{task.done ? 'Completed' : task.dueDate ? 'Due ' + new Date(task.dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'In progress'}</small></span></label><button type="button" aria-label={'Delete task: ' + task.title} onClick={() => setDashboardTasks((items) => items.filter((item) => item.id !== task.id))}>×</button></li>)}</ul> : <div className="dashboard-task-empty"><span>✦</span><strong>Nothing on your task list yet</strong><small>Add one small next step to get started.</small></div>}</section>
               </div>
-              <section className="dashboard-projects-card" aria-labelledby="dashboard-projects-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">KEEP YOUR WORK MOVING</span><h2 id="dashboard-projects-title">Last projects</h2></div><button type="button" className="dashboard-small-link" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>All projects ↗</button></div>{dashboardProjects.length ? <div className="dashboard-project-strip">{dashboardProjects.slice(0, 4).map((project, index) => <button type="button" className={'dashboard-project-tile dashboard-project-tile-' + index} key={project.id} onClick={() => { setProjectFocusId(project.id); setProjectsPageOpen(true) }}><span className="dashboard-project-tile-top"><i>▧</i><small>Edited {new Date(project.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</small></span><strong>{project.title || 'Untitled project'}</strong><span>{project.description || 'Open this project and keep building your ideas.'}</span></button>)}</div> : <div className="dashboard-project-empty"><span>▧</span><div><strong>Your projects will show up here</strong><small>Create a project document to keep plans, notes, and resources together.</small></div><button type="button" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>Open Projects</button></div>}</section>
+              {dashboardToolEnabled('projects') && <section className="dashboard-projects-card" aria-labelledby="dashboard-projects-title"><div className="dashboard-insight-heading"><div><span className="dashboard-card-eyebrow">KEEP YOUR WORK MOVING</span><h2 id="dashboard-projects-title">Last projects</h2></div><button type="button" className="dashboard-small-link" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>All projects ↗</button></div>{dashboardProjects.length ? <div className="dashboard-project-strip">{dashboardProjects.slice(0, 4).map((project, index) => <button type="button" className={'dashboard-project-tile dashboard-project-tile-' + index} key={project.id} onClick={() => { setProjectFocusId(project.id); setProjectsPageOpen(true) }}><span className="dashboard-project-tile-top"><i>▧</i><small>Edited {new Date(project.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</small></span><strong>{project.title || 'Untitled project'}</strong><span>{project.description || 'Open this project and keep building your ideas.'}</span></button>)}</div> : <div className="dashboard-project-empty"><span>▧</span><div><strong>Your projects will show up here</strong><small>Create a project document to keep plans, notes, and resources together.</small></div><button type="button" onClick={() => { setProjectFocusId(null); setProjectsPageOpen(true) }}>Open Projects</button></div>}</section>}
 </section>}
             {sitePage !== 'dashboard' && <section className="landing-hero">
               <div className="landing-copy">
@@ -3771,7 +3979,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
               <div className="landing-use-grid">
                 <article className="landing-use-card landing-use-study"><span className="landing-use-icon"><Icon name="study" /></span><small>FOR STUDY</small><h3>Turn class notes into clear ideas.</h3><p>Sketch a concept, add explanations, and keep revision pages grouped by subject.</p><button type="button" onClick={() => { setLandingAudience('student'); setLandingTemplate('Cornell notes'); document.getElementById('audience-starters')?.scrollIntoView({ behavior: 'smooth' }) }}>Explore student starters <Icon name="next" size={14} /></button></article>
                 <article className="landing-use-card landing-use-teach"><span className="landing-use-icon"><Icon name="lesson" /></span><small>FOR TEACHING</small><h3>Make lessons easier to follow.</h3><p>Prepare visual explanations, class activities, and pages you can present or export.</p><button type="button" onClick={() => { setLandingAudience('teacher'); setLandingTemplate('Lesson plan'); document.getElementById('audience-starters')?.scrollIntoView({ behavior: 'smooth' }) }}>Explore teacher starters <Icon name="next" size={14} /></button></article>
-                <article className="landing-use-card landing-use-stem"><span className="landing-use-icon"><Icon name="graph" /></span><small>FOR STEM & IDEAS</small><h3>See the pattern behind the problem.</h3><p>Move from a formula or circuit to a visual result, then keep your notes beside it.</p><button type="button" onClick={launchGraphSimulator}>Open graph simulator <Icon name="next" size={14} /></button></article>
+                {dashboardToolEnabled('simulation') && <article className="landing-use-card landing-use-stem"><span className="landing-use-icon"><Icon name="graph" /></span><small>FOR STEM & IDEAS</small><h3>See the pattern behind the problem.</h3><p>Move from a formula or circuit to a visual result, then keep your notes beside it.</p><button type="button" onClick={launchGraphSimulator}>Open graph simulator <Icon name="next" size={14} /></button></article>}
               </div>
             </section>
             <section className="landing-how" id="landing-how" aria-labelledby="landing-how-title">
@@ -3782,7 +3990,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
                 <li><span>03</span><div><strong>Keep it easy to find</strong><p>Organize with notebooks and tags, then export or share when you need to.</p></div></li>
               </ol>
             </section>
-            {sitePage === 'dashboard' && <section className="dashboard-shortcuts-panel" aria-label="Pinned shortcuts"><div className="dashboard-shortcuts-heading"><div><span className="dashboard-card-eyebrow">QUICK ACCESS</span><h2>Pinned shortcuts</h2></div><form onSubmit={addDashboardShortcut}><label className="sr-only" htmlFor="dashboard-shortcut-picker">Choose a shortcut</label><select id="dashboard-shortcut-picker" value={dashboardShortcutDraft} onChange={(event) => setDashboardShortcutDraft(event.target.value)}><option value="">Choose…</option><option value="project:projects">Projects</option><option value="roadmap:roadmaps">Road map</option><option value={'folder:' + encodeURIComponent('Inbox')}>Folder · Inbox</option>{notebooks.map((folder) => <option key={folder} value={'folder:' + encodeURIComponent(folder)}>Folder · {folder}</option>)}{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).map((name) => <option key={name} value={'file:' + encodeURIComponent(name)}>Note · {name}</option>)}</select><button type="submit" disabled={!dashboardShortcutDraft || dashboardShortcuts.some((shortcut) => shortcut.id === dashboardShortcutDraft)}>＋ Pin</button></form></div>{dashboardShortcuts.length ? <div className="dashboard-shortcuts-list">{dashboardShortcuts.map((shortcut) => <div className="dashboard-shortcut-item" key={shortcut.id}><button type="button" onClick={() => openDashboardShortcut(shortcut)}><span aria-hidden="true">{shortcut.kind === 'file' ? '▤' : shortcut.kind === 'folder' ? '▰' : shortcut.kind === 'project' ? '▧' : '⌖'}</span>{shortcut.label}<b>↗</b></button><button type="button" className="dashboard-shortcut-remove" aria-label={'Remove shortcut ' + shortcut.label} onClick={() => setDashboardShortcuts((current) => current.filter((item) => item.id !== shortcut.id))}>×</button></div>)}</div> : <p className="dashboard-shortcuts-empty">Pin a note, folder, project, or road map for one-click access.</p>}</section>}
+            {sitePage === 'dashboard' && <section className="dashboard-shortcuts-panel" aria-label="Pinned shortcuts"><div className="dashboard-shortcuts-heading"><div><span className="dashboard-card-eyebrow">QUICK ACCESS</span><h2>Pinned shortcuts</h2></div><form onSubmit={addDashboardShortcut}><label className="sr-only" htmlFor="dashboard-shortcut-picker">Choose a shortcut</label><select id="dashboard-shortcut-picker" value={dashboardShortcutDraft} onChange={(event) => setDashboardShortcutDraft(event.target.value)}><option value="">Choose…</option>{dashboardToolEnabled('projects') && <option value="project:projects">Projects</option>}{dashboardToolEnabled('roadmaps') && <option value="roadmap:roadmaps">Road map</option>}<option value={'folder:' + encodeURIComponent('Inbox')}>Folder · Inbox</option>{notebooks.map((folder) => <option key={folder} value={'folder:' + encodeURIComponent(folder)}>Folder · {folder}</option>)}{[...new Set(recentFiles)].filter((name) => name && !name.includes(':')).map((name) => <option key={name} value={'file:' + encodeURIComponent(name)}>Note · {name}</option>)}</select><button type="submit" disabled={!dashboardShortcutDraft || dashboardShortcuts.some((shortcut) => shortcut.id === dashboardShortcutDraft)}>＋ Pin</button></form></div>{visibleDashboardShortcuts.length ? <div className="dashboard-shortcuts-list">{visibleDashboardShortcuts.map((shortcut) => <div className="dashboard-shortcut-item" key={shortcut.id}><button type="button" onClick={() => openDashboardShortcut(shortcut)}><span aria-hidden="true">{shortcut.kind === 'file' ? '▤' : shortcut.kind === 'folder' ? '▰' : shortcut.kind === 'project' ? '▧' : '⌖'}</span>{shortcut.label}<b>↗</b></button><button type="button" className="dashboard-shortcut-remove" aria-label={'Remove shortcut ' + shortcut.label} onClick={() => setDashboardShortcuts((current) => current.filter((item) => item.id !== shortcut.id))}>×</button></div>)}</div> : <p className="dashboard-shortcuts-empty">Pin a note, folder, project, or road map for one-click access.</p>}</section>}
 {sitePage === 'dashboard' && <section className="dashboard-shared-activity" aria-labelledby="dashboard-shared-activity-title"><div className="dashboard-shared-activity-heading"><div><span className="dashboard-card-eyebrow">COLLABORATION</span><h2 id="dashboard-shared-activity-title">Shared work</h2></div><span className="dashboard-shared-activity-count">{cloudUser ? cloudBoards.length : '—'}</span></div>{cloudUser ? cloudBoards.length ? <div className="dashboard-shared-activity-list">{[...cloudBoards].sort((a,b) => (Date.parse(b.updatedAt ?? '') || 0) - (Date.parse(a.updatedAt ?? '') || 0)).slice(0,4).map((board) => <button type="button" key={board.id} onClick={() => { void loadCloudBoard(board) }}><span className="dashboard-shared-board-icon">☁</span><span className="dashboard-shared-board-copy"><strong>{board.name}</strong><small>{board.role === 'owner' ? 'Owned by you' : board.role === 'edit' ? 'Shared · can edit' : board.role === 'read' ? 'Shared · view only' : 'Shared workspace'}{board.updatedAt ? ' · Updated ' + new Date(board.updatedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ''}</small></span><Icon name="next" size={14} /></button>)}</div> : <p className="dashboard-shared-activity-empty">Boards shared with you, and your recent cloud boards, will appear here.</p> : <div className="dashboard-shared-activity-empty"><p>Sign in to see your shared notes and recent cloud activity.</p><button type="button" onClick={() => navigatePage('signin')}>Sign in</button></div>}</section>}
 <section className="landing-files" id="landing-files">
               <div className="landing-files-heading"><div><span>READY WHEN YOU ARE</span><h2>Your files, close at hand.</h2></div><div className="landing-files-actions"><div className="dashboard-file-view-switch" role="group" aria-label="File layout"><button type="button" aria-label="Grid view" aria-pressed={dashboardFileView === 'grid'} className={dashboardFileView === 'grid' ? 'active' : ''} onClick={() => setDashboardFileView('grid')}>▦</button><button type="button" aria-label="List view" aria-pressed={dashboardFileView === 'list'} className={dashboardFileView === 'list' ? 'active' : ''} onClick={() => setDashboardFileView('list')}>☷</button></div><button className="landing-create-file" type="button" onClick={() => addBoard()}><Icon name="addPage" size={16} /> Create a file</button></div></div>
@@ -3968,7 +4176,7 @@ const addDashboardTask = (event: FormEvent<HTMLFormElement>) => { event.preventD
               </div>
             </div>
           </div>
-          <div className={`tool-status autosave-${autoSaveStatus}`} role="status" title={autoSaveError || undefined} aria-label={autoSaveError ? `Auto-save error: ${autoSaveError}` : undefined}><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · hover for details' : 'Not saved yet'}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · ${cloudSyncStatus === 'syncing' ? 'Syncing…' : cloudSyncStatus === 'synced' ? 'Synced' : 'Sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
+          <div className={`tool-status autosave-${autoSaveStatus}`} role="status" title={autoSaveError || undefined} aria-label={autoSaveError ? `Auto-save error: ${autoSaveError}` : undefined}><span className="status-dot" />{autoSaveStatus === 'saving' ? 'Saving locally…' : autoSaveStatus === 'saved' ? 'Saved locally' : autoSaveStatus === 'error' ? 'Auto-save failed · hover for details' : 'Not saved yet'}{cloudUser ? ` · Account cloud ${accountDataSyncStatus === 'syncing' ? 'syncing…' : accountDataSyncStatus === 'synced' ? 'synced' : accountDataSyncStatus === 'error' ? 'sync paused' : 'connecting…'}` : ''}{activeRemoteBoard && cloudSyncStatus !== 'idle' ? ` · Board ${cloudSyncStatus === 'syncing' ? 'syncing…' : cloudSyncStatus === 'synced' ? 'synced' : 'sync failed'}` : ''}{selectedIndices.length ? ` · ${selectedIndices.length} selected` : ''} · {activeTool}</div>
         </section>
       </div>
       {newFileDialog}

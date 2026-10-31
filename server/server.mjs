@@ -10,6 +10,7 @@ const databasePath = process.env.DOOMNOTES_DB ?? join(process.cwd(), 'data', 'do
 const staticRoot = resolve(process.cwd(), 'dist')
 const dataEncryptionKey = process.env.OZOO_DATA_ENCRYPTION_KEY ? Buffer.from(process.env.OZOO_DATA_ENCRYPTION_KEY, 'base64') : null
 const encryptedValuePrefix = 'ozoo:aes-256-gcm:v1:'
+const dashboardOptionIds = new Set(['projects', 'simulation', 'infiniteBoard', 'diary', 'roadmaps', 'resources', 'books', 'watchlist'])
 if (dataEncryptionKey && dataEncryptionKey.length !== 32) throw new Error('OZOO_DATA_ENCRYPTION_KEY must be a base64-encoded 32-byte key.')
 mkdirSync(dirname(databasePath), { recursive: true })
 const db = new DatabaseSync(databasePath)
@@ -48,6 +49,7 @@ if (!userColumns.includes('password_enabled')) {
 if (!userColumns.includes('plan')) db.exec("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'normal' CHECK(plan IN ('normal','pro'))")
 if (!userColumns.includes('account_type')) db.exec("ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'student' CHECK(account_type IN ('student','teacher','business','employee'))")
 if (!userColumns.includes('business_plan')) db.exec('ALTER TABLE users ADD COLUMN business_plan INTEGER NOT NULL DEFAULT 0 CHECK(business_plan IN (0,1))')
+if (!userColumns.includes('dashboard_options')) db.exec('ALTER TABLE users ADD COLUMN dashboard_options TEXT')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_unique ON users(github_id) WHERE github_id IS NOT NULL')
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL')
@@ -97,6 +99,8 @@ if (dataEncryptionKey && !savedEncryptionKeyId) {
 }
 
 db.exec('CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)')
+db.exec(`CREATE TABLE IF NOT EXISTS user_data (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, data_key TEXT NOT NULL, data_value TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)), updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,data_key))`)
+db.exec('CREATE INDEX IF NOT EXISTS user_data_updated_at_idx ON user_data(user_id,updated_at)')
 db.exec(`CREATE TABLE IF NOT EXISTS auth_tokens (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, purpose TEXT NOT NULL CHECK(purpose IN ('verify-email','reset-password')), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`)
 db.exec(`CREATE TABLE IF NOT EXISTS auth_mail_limits (email_hash TEXT NOT NULL, purpose TEXT NOT NULL, window_started_at INTEGER NOT NULL, sent_count INTEGER NOT NULL, last_sent_at INTEGER NOT NULL, PRIMARY KEY(email_hash,purpose))`)
 const eventClients = new Map()
@@ -187,8 +191,17 @@ const sessionUser = (req) => {
   if (!sessionId) return null
   const hash = sessionTokenHash(sessionId)
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
-  const user = db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword, users.plan, users.business_plan AS businessPlan, users.account_type AS accountType FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now())
-  return user ? { ...user, isAdmin: adminUsernames.has(String(user.username).toLowerCase()) } : null
+  const user = db.prepare('SELECT users.id, users.username, users.email, COALESCE(users.display_name, users.username) AS displayName, users.avatar_data AS avatar, users.password_enabled AS hasPassword, users.plan, users.business_plan AS businessPlan, users.account_type AS accountType, users.dashboard_options AS dashboardOptionsJson FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?').get(hash, Date.now())
+  if (!user) return null
+  let dashboardOptions = null
+  if (user.dashboardOptionsJson !== null) {
+    try {
+      const stored = JSON.parse(user.dashboardOptionsJson)
+      if (Array.isArray(stored) && stored.every((option) => typeof option === 'string' && dashboardOptionIds.has(option))) dashboardOptions = [...new Set(stored)]
+    } catch { /* Invalid saved preferences are treated as not configured yet. */ }
+  }
+  const { dashboardOptionsJson, ...profile } = user
+  return { ...profile, dashboardOptions, isAdmin: adminUsernames.has(String(user.username).toLowerCase()) }
 }
 const notifyBoard = (boardId, type) => {
   for (const client of eventClients.get(boardId) ?? []) client.write(`event: ${type}\ndata: {}\n\n`)
@@ -347,7 +360,6 @@ async function handler(req, res) {
     if (route === '/api/auth/providers' && method === 'GET') return sendJson(res, 200, { google: googleEnabled, github: githubEnabled })
     if (route === '/api/auth/google' && method === 'GET') {
       if (!googleEnabled) return sendJson(res, 503, { error: 'Google sign-in is not configured on this OzooNotes server yet.' })
-      const now = Date.now()
       for (const [key, entry] of googleStates) if (entry.expiresAt <= now) googleStates.delete(key)
       const state = randomBytes(32).toString('hex')
       const browserBinding = randomBytes(32).toString('hex')
@@ -508,8 +520,11 @@ async function handler(req, res) {
       if (user.email && !user.email_verified_at) return sendJson(res, 403, { error: 'Verify your email before signing in.', code: 'EMAIL_NOT_VERIFIED' })
       const sessionId = randomBytes(32).toString('hex')
       db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(sessionTokenHash(sessionId), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000)
-      const loggedInUser = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType FROM users WHERE id=?').get(user.id)
-      return sendJson(res, 200, { user: { ...loggedInUser, isAdmin: adminUsernames.has(String(loggedInUser.username).toLowerCase()) } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
+      const loggedInUser = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType,dashboard_options AS dashboardOptionsJson FROM users WHERE id=?').get(user.id)
+      let dashboardOptions = null
+      if (loggedInUser.dashboardOptionsJson !== null) { try { const stored = JSON.parse(loggedInUser.dashboardOptionsJson); if (Array.isArray(stored) && stored.every((option) => typeof option === 'string' && dashboardOptionIds.has(option))) dashboardOptions = [...new Set(stored)] } catch { /* Invalid saved preferences are treated as not configured yet. */ } }
+      const { dashboardOptionsJson, ...profile } = loggedInUser
+      return sendJson(res, 200, { user: { ...profile, dashboardOptions, isAdmin: adminUsernames.has(String(profile.username).toLowerCase()) } }, { 'Set-Cookie': `${cookieName}=${sessionId}; ${cookieFlags}` })
     }
     if (route === '/api/auth/logout' && method === 'POST') {
       const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))
@@ -536,6 +551,39 @@ async function handler(req, res) {
     const user = sessionUser(req)
     if (route === '/api/me' && method === 'GET') return user ? sendJson(res, 200, { user }) : sendJson(res, 200, { user: null })
     if (!user) return sendJson(res, 401, { error: 'Sign in to use cloud features.' })
+    if (route === '/api/me/data' && method === 'GET') {
+      const key = url.searchParams.get('key')
+      const sinceValue = Number(url.searchParams.get('since') ?? 0)
+      if (key !== null && (key.length > 240 || !/^(doomnotes:|ozoo:)(?!password-reset-token|after-login|dashboard-options-return|simulator-usage|cloud-sync)/.test(key) || key === 'doomnotes:cloud-board-ids')) return sendJson(res, 400, { error: 'That data key cannot be synced.' })
+      const rows = key !== null
+        ? db.prepare('SELECT data_key AS key,data_value AS value,deleted,updated_at AS updatedAt FROM user_data WHERE user_id=? AND data_key=?').all(user.id, key)
+        : db.prepare('SELECT data_key AS key,data_value AS value,deleted,updated_at AS updatedAt FROM user_data WHERE user_id=? AND updated_at>? ORDER BY updated_at').all(user.id, Number.isFinite(sinceValue) && sinceValue > 0 ? sinceValue : 0)
+      return sendJson(res, 200, { entries: rows.map((row) => ({ ...row, value: row.deleted ? null : decryptAtRest(row.value), deleted: Boolean(row.deleted) })) })
+    }
+    if (route === '/api/me/data' && method === 'PUT') {
+      const { entries } = await readBody(req, 60 * 1024 * 1024)
+      if (!Array.isArray(entries) || entries.length > 250) return sendJson(res, 400, { error: 'Sync this data in smaller batches.' })
+      const saveEntry = db.prepare(`INSERT INTO user_data(user_id,data_key,data_value,deleted,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,data_key) DO UPDATE SET data_value=excluded.data_value,deleted=excluded.deleted,updated_at=max(user_data.updated_at+1,excluded.updated_at)`)
+      const seen = new Set()
+      const now = Date.now()
+      const latestUpdate = db.prepare('SELECT COALESCE(MAX(updated_at),0) AS value FROM user_data WHERE user_id=?').get(user.id)?.value ?? 0
+      let nextUpdatedAt = Math.max(now, Number(latestUpdate) + 1)
+      for (const entry of entries) {
+        if (!entry || typeof entry.key !== 'string' || entry.key.length > 240 || !/^(doomnotes:|ozoo:)(?!password-reset-token|after-login|dashboard-options-return|simulator-usage|cloud-sync)/.test(entry.key) || entry.key === 'doomnotes:cloud-board-ids' || seen.has(entry.key) || (entry.value !== null && (typeof entry.value !== 'string' || Buffer.byteLength(entry.value, 'utf8') > 20 * 1024 * 1024))) return sendJson(res, 400, { error: 'One or more items cannot be synced. Large files may need to be saved separately.' })
+        seen.add(entry.key)
+        saveEntry.run(user.id, entry.key, entry.value === null ? '' : encryptAtRest(entry.value), entry.value === null ? 1 : 0, nextUpdatedAt++)
+      }
+      const keys = [...seen]
+      const saved = keys.length ? db.prepare(`SELECT data_key AS key,deleted,updated_at AS updatedAt FROM user_data WHERE user_id=? AND data_key IN (${keys.map(() => '?').join(',')})`).all(user.id, ...keys) : []
+      return sendJson(res, 200, { entries: saved.map((row) => ({ ...row, deleted: Boolean(row.deleted) })) })
+    }
+    if (route === '/api/me/dashboard-options' && method === 'PUT') {
+      const { options } = await readBody(req, 10_000)
+      if (!Array.isArray(options) || options.length > dashboardOptionIds.size || options.some((option) => typeof option !== 'string' || !dashboardOptionIds.has(option)) || new Set(options).size !== options.length) return sendJson(res, 400, { error: 'Choose valid dashboard tools and try again.' })
+      const dashboardOptions = [...options]
+      db.prepare('UPDATE users SET dashboard_options=? WHERE id=?').run(JSON.stringify(dashboardOptions), user.id)
+      return sendJson(res, 200, { dashboardOptions })
+    }
     if (route === '/api/classroom/links' && method === 'GET') {
       const accountType = db.prepare('SELECT account_type FROM users WHERE id=?').get(user.id)?.account_type
       if (accountType === 'teacher') {
@@ -735,8 +783,11 @@ async function handler(req, res) {
       if (!['student','teacher','business','employee'].includes(accountType)) return sendJson(res, 400, { error: 'Choose a valid account type.' })
       if (avatar !== null && avatar !== undefined && (typeof avatar !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 1_800_000)) return sendJson(res, 400, { error: 'Use a PNG, JPEG, or WebP profile photo under 1.3 MB.' })
       db.prepare('UPDATE users SET display_name=?,avatar_data=?,account_type=? WHERE id=?').run(cleanName, avatar || null, accountType, user.id)
-      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType FROM users WHERE id=?').get(user.id)
-      return sendJson(res, 200, { user: { ...updated, isAdmin: adminUsernames.has(String(updated.username).toLowerCase()) } })
+      const updated = db.prepare('SELECT id,username,email,COALESCE(display_name,username) AS displayName,avatar_data AS avatar,password_enabled AS hasPassword,plan,business_plan AS businessPlan,account_type AS accountType,dashboard_options AS dashboardOptionsJson FROM users WHERE id=?').get(user.id)
+      let dashboardOptions = null
+      if (updated.dashboardOptionsJson !== null) { try { const stored = JSON.parse(updated.dashboardOptionsJson); if (Array.isArray(stored) && stored.every((option) => typeof option === 'string' && dashboardOptionIds.has(option))) dashboardOptions = [...new Set(stored)] } catch { /* Invalid saved preferences are treated as not configured yet. */ } }
+      const { dashboardOptionsJson, ...profile } = updated
+      return sendJson(res, 200, { user: { ...profile, dashboardOptions, isAdmin: adminUsernames.has(String(profile.username).toLowerCase()) } })
     }
     if (route === '/api/me/password' && method === 'POST') {
       const { currentPassword, newPassword } = await readBody(req, 10_000)

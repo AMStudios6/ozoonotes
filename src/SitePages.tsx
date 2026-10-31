@@ -1,7 +1,19 @@
 import { useState, type MouseEvent as ReactMouseEvent } from 'react'
 import './SitePages.css'
 
-export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist' | 'contact' | 'notes' | 'signin' | 'profile' | 'account' | 'admin'
+export type SiteRoute = 'home' | 'product' | 'pricing' | 'dashboard' | 'dashboard-options' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist' | 'contact' | 'notes' | 'signin' | 'profile' | 'account' | 'admin'
+
+export type DashboardOptionId = 'projects' | 'simulation' | 'infiniteBoard' | 'diary' | 'roadmaps' | 'resources' | 'books' | 'watchlist'
+export const dashboardOptionChoices: { id: DashboardOptionId; title: string; description: string; icon: string }[] = [
+  { id: 'projects', title: 'Projects', description: 'Write longer reports and keep project materials together.', icon: '▧' },
+  { id: 'simulation', title: 'Simulators', description: 'Open electronics, graphing, calculus, and coding tools.', icon: '⌁' },
+  { id: 'infiniteBoard', title: 'Infinite board', description: 'Sketch and organize ideas on an open canvas.', icon: '∞' },
+  { id: 'diary', title: 'Diary', description: 'Keep private daily entries in your workspace.', icon: '▤' },
+  { id: 'roadmaps', title: 'Road maps', description: 'Create or explore community learning plans.', icon: '⌖' },
+  { id: 'resources', title: 'Resources', description: 'Browse and share video collections.', icon: '▶' },
+  { id: 'books', title: 'Books to read', description: 'Keep track of books you want to read.', icon: '▤' },
+  { id: 'watchlist', title: 'Movies & series', description: 'Save titles you want to watch.', icon: '▣' },
+]
 
 type SharedProps = {
   logo: string
@@ -46,6 +58,33 @@ function SiteFooter({ logo, onNavigate }: Pick<SharedProps, 'logo' | 'onNavigate
 
 export function ContactPage({ logo, theme, onNavigate, onThemeChange, user }: SharedProps) {
   return <main className="site-page site-content-page" data-theme={theme}><SiteHeader logo={logo} theme={theme} onNavigate={onNavigate} onThemeChange={onThemeChange} user={user}/><section className="contact-wrap"><span className="site-eyebrow">WE’D LIKE TO HEAR FROM YOU</span><h1>Contact OzooNotes</h1><p>Have a question, found a problem, or want to suggest what we build next? Choose the route that works for you.</p><div className="contact-options"><a href="https://www.instagram.com/ozoonotes/" target="_blank" rel="noreferrer"><span>◎</span><strong>Message us on Instagram</strong><small>For general questions and updates</small><b>Open Instagram ↗</b></a><a href="https://github.com/AMStudios6/ozoonotes/issues/new" target="_blank" rel="noreferrer"><span>⌘</span><strong>Report an issue or request a feature</strong><small>Include steps to reproduce a problem, or describe your idea</small><b>Open GitHub ↗</b></a></div><p className="contact-note">Please don’t include passwords, payment details, or private notes in a support message.</p></section><SiteFooter logo={logo} onNavigate={onNavigate}/></main>
+}
+
+export function DashboardOptionsPage({ theme, options, saving, error, canGoBack, onSave, onBack }: {
+  theme: string
+  options: DashboardOptionId[]
+  saving: boolean
+  error: string
+  canGoBack: boolean
+  onSave: (options: DashboardOptionId[]) => void
+  onBack: () => void
+}) {
+  const [selected, setSelected] = useState<DashboardOptionId[]>(options)
+  const toggle = (id: DashboardOptionId) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+  return <main className="dashboard-options-page" data-theme={theme}>
+    <div className="dashboard-options-shell">
+      {canGoBack && <button className="dashboard-options-back" type="button" onClick={onBack}>← <span>Dashboard</span></button>}
+      <header className="dashboard-options-heading"><span className="site-eyebrow">MAKE IT YOURS</span><h1>Choose your workspace.</h1><p>Pick the tools you want in your dashboard. You can change these choices later, and they’ll stay with your account on every device.</p></header>
+      <div className="dashboard-options-controls"><span>{selected.length} of {dashboardOptionChoices.length} tools selected</span><div><button type="button" onClick={() => setSelected(dashboardOptionChoices.map((choice) => choice.id))}>Select all</button><button type="button" onClick={() => setSelected([])}>Clear</button></div></div>
+      <section className="dashboard-options-grid" aria-label="Dashboard tools">{dashboardOptionChoices.map((choice) => <label key={choice.id} className={'dashboard-option-card' + (selected.includes(choice.id) ? ' selected' : '')}>
+        <input type="checkbox" checked={selected.includes(choice.id)} onChange={() => toggle(choice.id)} />
+        <span className="dashboard-option-icon" aria-hidden="true">{choice.icon}</span><span className="dashboard-option-copy"><strong>{choice.title}</strong><small>{choice.description}</small></span><span className="dashboard-option-check" aria-hidden="true">✓</span>
+      </label>)}</section>
+      <p className="dashboard-options-note"><strong>Your notes stay available.</strong> This only changes which optional tools appear in your dashboard navigation.</p>
+      {error && <p className="dashboard-options-error" role="alert">{error}</p>}
+      <footer className="dashboard-options-footer"><button type="button" className="dashboard-options-save" disabled={saving} onClick={() => onSave(selected)}>{saving ? 'Saving your choices…' : 'Save and continue'} <span aria-hidden="true">→</span></button><small>Saved securely to your OzooNotes account.</small></footer>
+    </div>
+  </main>
 }
 
 function AppPreview() {

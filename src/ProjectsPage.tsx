@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type FormEvent, type CSSProperties } from 'react'
+import { readCloudData, writeCloudData } from './cloudData'
 import './ProjectsPage.css'
 
 type ProjectTheme = 'purple' | 'white-purple'
@@ -84,6 +85,46 @@ async function removeProject(id: string) {
     transaction.onabort = () => reject(transaction.error ?? new Error('Project delete was cancelled.'))
   })
 }
+
+function replaceProjects(projects: ProjectDocument[]): Promise<void> {
+  return getDatabase().then((db) => new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite')
+    const store = transaction.objectStore(storeName)
+    store.clear()
+    projects.forEach((project) => store.put(project))
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error('Could not restore cloud projects.'))
+    transaction.onabort = () => reject(transaction.error ?? new Error('Project restore was cancelled.'))
+  }))
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not prepare a project attachment for cloud backup.')); reader.onerror = () => reject(reader.error ?? new Error('Could not read a project attachment.')); reader.readAsDataURL(blob) })
+}
+
+async function encodeCloudProjects(projects: ProjectDocument[]) {
+  const serializable = await Promise.all(projects.map(async (project) => ({
+    ...project,
+    assets: await Promise.all(project.assets.map(async (asset) => asset.blob ? { ...asset, blob: undefined, blobData: await blobToDataUrl(asset.blob) } : asset)),
+  })))
+  return JSON.stringify(serializable)
+}
+
+function decodeCloudProjects(value: string): ProjectDocument[] {
+  const parsed = JSON.parse(value) as (ProjectDocument & { assets: (ProjectAsset & { blobData?: string })[] })[]
+  return parsed.map((project) => ({ ...project, assets: project.assets.map((asset) => {
+    const { blobData, ...rest } = asset
+    if (!blobData) return rest
+    const [header, base64] = blobData.split(',', 2)
+    const mime = header.match(/^data:([^;]+)/)?.[1] || asset.type || 'application/octet-stream'
+    const binary = atob(base64 || '')
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+    return { ...rest, blob: new Blob([bytes], { type: mime }) }
+  }) }))
+}
+
+const projectLocalUpdatedKey = 'ozoo:projects-local-updated'
 
 const safeTags = new Set(['P', 'DIV', 'BR', 'HR', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'SUP', 'SUB', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD'])
 function sanitizeHtml(value: string) {
@@ -569,7 +610,7 @@ function ProjectAssetCard({ asset, onDelete }: { asset: ProjectAsset; onDelete: 
   </article>
 }
 
-function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onBack: () => void; theme: ProjectTheme; onThemeChange: (theme: ProjectTheme) => void; initialProjectId?: string }) {
+function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId, cloudEnabled = false }: { onBack: () => void; theme: ProjectTheme; onThemeChange: (theme: ProjectTheme) => void; initialProjectId?: string; cloudEnabled?: boolean }) {
   const [projects, setProjects] = useState<ProjectDocument[]>([])
   const projectsRef = useRef<ProjectDocument[]>([])
   const [activeId, setActiveId] = useState<string | null>(initialProjectId ?? null)
@@ -584,33 +625,111 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
   const videoInput = useRef<HTMLInputElement>(null)
   const noteInput = useRef<HTMLInputElement>(null)
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cloudVersion = useRef(0)
+  const cloudDirty = useRef(false)
+  const cloudReady = useRef(false)
   const activeProject = projects.find((project) => project.id === activeId) ?? null
+
+  const saveProjectsToCloud = async (snapshot: ProjectDocument[]) => {
+    if (!cloudEnabled) return
+    try {
+      const value = await encodeCloudProjects(snapshot)
+      const saved = await writeCloudData('ozoo:projects-db', value)
+      if (saved?.updatedAt) {
+        cloudVersion.current = saved.updatedAt
+        localStorage.setItem(projectLocalUpdatedKey, String(saved.updatedAt))
+      }
+      if (projectsRef.current === snapshot) cloudDirty.current = false
+      setSaveState('saved')
+      setStorageError('')
+    } catch (error) {
+      setSaveState('error')
+      setStorageError(error instanceof Error ? `Saved on this device; cloud backup failed: ${error.message}` : 'Saved on this device; cloud backup failed.')
+    }
+  }
+
+  const queueCloudSave = (snapshot: ProjectDocument[]) => {
+    if (!cloudEnabled) return
+    cloudDirty.current = true
+    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current)
+    setSaveState('saving')
+    cloudSaveTimer.current = setTimeout(() => { void saveProjectsToCloud(projectsRef.current.length ? projectsRef.current : snapshot) }, 850)
+  }
 
   useEffect(() => {
     let mounted = true
-    readProjects().then((loaded) => {
+    cloudReady.current = false
+    readProjects().then(async (localProjects) => {
+      let loaded = localProjects
+      if (cloudEnabled) {
+        try {
+          const remote = await readCloudData('ozoo:projects-db')
+          if (remote?.value !== null && remote?.value !== undefined) {
+            cloudVersion.current = remote.updatedAt
+            const localTimestamp = Number(localStorage.getItem(projectLocalUpdatedKey)) || Math.max(0, ...localProjects.map((project) => project.updatedAt))
+            if (localTimestamp > remote.updatedAt) { projectsRef.current = localProjects; cloudDirty.current = true; await saveProjectsToCloud(localProjects) }
+            else { loaded = decodeCloudProjects(remote.value); await replaceProjects(loaded); localStorage.setItem(projectLocalUpdatedKey, String(remote.updatedAt)) }
+          }
+          else { projectsRef.current = localProjects; cloudDirty.current = true; await saveProjectsToCloud(localProjects) }
+        } catch { if (mounted) setStorageError('Project saved on this device; cloud backup could not be loaded.') }
+      }
       if (!mounted) return
       projectsRef.current = loaded
       setProjects(loaded)
       setActiveId(loaded.find((project) => project.id === initialProjectId)?.id ?? loaded[0]?.id ?? null)
       setSaveState('saved')
+      cloudReady.current = true
     }).catch((error) => {
       if (!mounted) return
       setStorageError(error instanceof Error ? error.message : 'Could not open local project storage.')
       setSaveState('error')
     })
     return () => { mounted = false }
-  }, [initialProjectId])
+  }, [initialProjectId, cloudEnabled])
+
+  useEffect(() => {
+    if (!cloudEnabled) return
+    let active = true
+    let polling = false
+    const poll = async () => {
+      if (!active || !cloudReady.current || polling || cloudDirty.current || cloudSaveTimer.current || pendingSaves.current.size) return
+      polling = true
+      try {
+        const remote = await readCloudData('ozoo:projects-db')
+        if (!active || !remote || remote.deleted || remote.value === null || remote.updatedAt <= cloudVersion.current || cloudDirty.current || cloudSaveTimer.current || pendingSaves.current.size) return
+        const incoming = decodeCloudProjects(remote.value)
+        await replaceProjects(incoming)
+        if (!active) return
+        cloudVersion.current = remote.updatedAt
+        localStorage.setItem(projectLocalUpdatedKey, String(remote.updatedAt))
+        projectsRef.current = incoming
+        setProjects(incoming)
+        setActiveId((current) => incoming.some((project) => project.id === current) ? current : incoming[0]?.id ?? null)
+        setSaveState('saved')
+      } catch { /* Keep the current editor state and retry on the next poll. */ }
+      finally { polling = false }
+    }
+    const timer = setInterval(() => { void poll() }, 3000)
+    return () => { active = false; clearInterval(timer) }
+  }, [cloudEnabled])
 
   useEffect(() => () => {
     pendingSaves.current.forEach((timer) => clearTimeout(timer))
-  }, [])
+    if (projectsRef.current.length) void Promise.all(projectsRef.current.map((project) => writeProject(project)))
+    if (cloudSaveTimer.current) {
+      clearTimeout(cloudSaveTimer.current)
+      if (cloudEnabled) void encodeCloudProjects(projectsRef.current).then((value) => writeCloudData('ozoo:projects-db', value)).then((saved) => { if (saved?.updatedAt) localStorage.setItem(projectLocalUpdatedKey, String(saved.updatedAt)) }).catch(() => {})
+    }
+  }, [cloudEnabled])
 
   const updateProject = (id: string, change: Partial<ProjectDocument>) => {
     const current = projectsRef.current
     const updated = current.find((project) => project.id === id)
     if (!updated) return
     const nextProject = { ...updated, ...change, updatedAt: Date.now() }
+    cloudDirty.current = true
+    localStorage.setItem(projectLocalUpdatedKey, String(nextProject.updatedAt))
     const next = [nextProject, ...current.filter((project) => project.id !== id)].sort((a, b) => b.updatedAt - a.updatedAt)
     projectsRef.current = next
     setProjects(next)
@@ -621,12 +740,13 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
       writeProject(nextProject).then(() => setSaveState('saved')).catch((error) => {
         setStorageError(error instanceof Error ? error.message : 'Could not save this project.')
         setSaveState('error')
-      }).finally(() => pendingSaves.current.delete(id))
+      }).finally(() => { pendingSaves.current.delete(id); queueCloudSave(projectsRef.current) })
     }, 300))
   }
 
   const createProject = () => {
     const now = Date.now()
+    localStorage.setItem(projectLocalUpdatedKey, String(now))
     const project: ProjectDocument = { id: createId(), title: 'Untitled project', description: '', bodyHtml: '<p><br></p>', assets: [], createdAt: now, updatedAt: now }
     const next = [project, ...projectsRef.current]
     projectsRef.current = next
@@ -636,7 +756,7 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
     writeProject(project).then(() => setSaveState('saved')).catch((error) => {
       setStorageError(error instanceof Error ? error.message : 'Could not save this project.')
       setSaveState('error')
-    })
+    }).then(() => queueCloudSave(projectsRef.current))
   }
 
   const deleteProject = async (project: ProjectDocument) => {
@@ -645,10 +765,11 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
     if (pending) clearTimeout(pending)
     pendingSaves.current.delete(project.id)
     const next = projectsRef.current.filter((item) => item.id !== project.id)
+    localStorage.setItem(projectLocalUpdatedKey, String(Date.now()))
     projectsRef.current = next
     setProjects(next)
     setActiveId(next[0]?.id ?? null)
-    try { await removeProject(project.id); setSaveState('saved') }
+    try { await removeProject(project.id); setSaveState('saved'); queueCloudSave(next) }
     catch (error) { setStorageError(error instanceof Error ? error.message : 'Could not delete this project.'); setSaveState('error') }
   }
 
@@ -724,7 +845,7 @@ function ProjectStudio({ onBack, theme, onThemeChange, initialProjectId }: { onB
     window.setTimeout(() => { printWindow.focus(); printWindow.print() }, 350)
     setExportOpen(false)
   }
-  const saveLabel = saveState === 'loading' ? 'Loading projects…' : saveState === 'saving' ? 'Saving on this device…' : saveState === 'error' ? 'Save issue' : 'Saved on this device'
+  const saveLabel = saveState === 'loading' ? 'Loading projects…' : saveState === 'saving' ? cloudEnabled ? 'Saving to cloud…' : 'Saving on this device…' : saveState === 'error' ? 'Save issue' : cloudEnabled ? 'Saved to your account cloud' : 'Saved on this device'
 
   return <main className="project-studio" data-theme={theme}>
     <header className="project-topbar">

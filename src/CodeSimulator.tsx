@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './CodeSimulator.css'
 import CodeEditor from './CodeEditor'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
+import { readCloudData, writeCloudData } from './cloudData'
 
 type CodeMode = 'python' | 'java' | 'web'
 type StudioFile = { path: string; type: string; encoding: 'text' | 'data'; content: string }
@@ -113,7 +114,7 @@ const EXEC_WORKER = [
   '};',
 ].join('\n')
 
-export default function CodeSimulator({ initialLanguage = 'python', onBack }: { initialLanguage?: CodeMode; onBack: () => void }) {
+export default function CodeSimulator({ initialLanguage = 'python', onBack, cloudEnabled = false }: { initialLanguage?: CodeMode; onBack: () => void; cloudEnabled?: boolean }) {
   const [colorTheme, setColorTheme] = useSimulatorTheme()
   const [language, setLanguage] = useState<CodeMode>(initialLanguage)
   const [python, setPython] = useState(() => readCode('ozoo:python-code', PY_START))
@@ -130,6 +131,12 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
   const [input, setInput] = useState('')
   const [running, setRunning] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
+  const cloudFilesReady = useRef(false)
+  const cloudFilesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cloudFilesVersion = useRef(0)
+  const cloudFilesDirty = useRef(false)
+  const filesRef = useRef(files)
+  filesRef.current = files
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -145,6 +152,48 @@ export default function CodeSimulator({ initialLanguage = 'python', onBack }: { 
   useEffect(() => {
     if (filesReady) void putSavedFiles(files).catch(() => setNotice('The browser could not save these project files. Check available storage.'))
   }, [files, filesReady])
+  useEffect(() => {
+    if (!filesReady) return
+    let active = true
+    cloudFilesReady.current = false
+    if (!cloudEnabled) { cloudFilesReady.current = true; return }
+    void (async () => {
+      try {
+        const remote = await readCloudData('ozoo:code-files-db')
+        if (!active) return
+        if (remote?.value) { cloudFilesVersion.current = remote.updatedAt; const remoteFiles = JSON.parse(remote.value) as StudioFile[]; await putSavedFiles(remoteFiles); setFiles(remoteFiles) }
+        else { const saved = await writeCloudData('ozoo:code-files-db', JSON.stringify(files)); cloudFilesVersion.current = saved?.updatedAt ?? 0 }
+        cloudFilesReady.current = true
+        setNotice('Project files are backed up to your account cloud.')
+      } catch { if (active) { cloudFilesReady.current = true; setNotice('Files remain saved on this device; cloud backup could not be reached.') } }
+    })()
+    return () => { active = false }
+  }, [cloudEnabled, filesReady])
+  useEffect(() => {
+    if (!cloudEnabled || !filesReady || !cloudFilesReady.current) return
+    cloudFilesDirty.current = true
+    if (cloudFilesTimer.current) clearTimeout(cloudFilesTimer.current)
+    cloudFilesTimer.current = setTimeout(() => { cloudFilesTimer.current = null; const snapshot = files; void writeCloudData('ozoo:code-files-db', JSON.stringify(snapshot)).then((saved) => { cloudFilesVersion.current = saved?.updatedAt ?? cloudFilesVersion.current; if (filesRef.current === snapshot) cloudFilesDirty.current = false }).catch(() => setNotice('Saved on this device; cloud backup failed.')) }, 900)
+    return () => { if (cloudFilesTimer.current) clearTimeout(cloudFilesTimer.current) }
+  }, [cloudEnabled, files, filesReady])
+  useEffect(() => {
+    if (!cloudEnabled || !filesReady) return
+    let active = true, polling = false
+    const poll = async () => {
+      if (!cloudFilesReady.current || cloudFilesDirty.current || cloudFilesTimer.current || polling) return
+      polling = true
+      try {
+        const remote = await readCloudData('ozoo:code-files-db')
+        if (!active || !remote || remote.deleted || remote.value === null || remote.updatedAt <= cloudFilesVersion.current || cloudFilesDirty.current) return
+        const incoming = JSON.parse(remote.value) as StudioFile[]
+        await putSavedFiles(incoming)
+        if (active) { cloudFilesVersion.current = remote.updatedAt; setFiles(incoming); setNotice('Project files synced from your account cloud.') }
+      } catch { /* Keep the open files and retry on the next poll. */ }
+      finally { polling = false }
+    }
+    const timer = setInterval(() => { void poll() }, 3000)
+    return () => { active = false; clearInterval(timer) }
+  }, [cloudEnabled, filesReady])
 
   const importFiles = async (selected: FileList | null) => {
     if (!selected?.length) return
