@@ -833,8 +833,7 @@ const normalSimulationsPerToolPerDay = 2
 
 function readSiteRoute(): SiteRoute {
   const page = new URLSearchParams(window.location.search).get('page')
-  if (page === 'notes') return 'dashboard'
-  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'dashboard-options' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
+  if (page === 'home' || page === 'product' || page === 'pricing' || page === 'dashboard' || page === 'dashboard-options' || page === 'diary' || page === 'roadmaps' || page === 'resources' || page === 'books' || page === 'watchlist' || page === 'contact' || page === 'notes' || page === 'signin' || page === 'profile' || page === 'account' || page === 'admin') return page
   return 'home'
 }
 
@@ -1018,8 +1017,7 @@ function App() {
 
   const navigatePage = (target: string) => {
     const [pageTarget, anchor] = target.split('#', 2)
-    const canonicalTarget = pageTarget === 'notes' ? 'dashboard' : pageTarget
-    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'dashboard-options', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'signin', 'profile', 'account', 'admin'].includes(canonicalTarget) ? canonicalTarget : 'home') as SiteRoute
+    const nextPage = (['home', 'product', 'pricing', 'dashboard', 'dashboard-options', 'diary', 'roadmaps', 'resources', 'books', 'watchlist', 'contact', 'notes', 'signin', 'profile', 'account', 'admin'].includes(pageTarget) ? pageTarget : 'home') as SiteRoute
     const url = new URL(window.location.href)
     url.searchParams.delete('workspace')
     url.searchParams.delete('simulator')
@@ -1035,11 +1033,6 @@ function App() {
   }
   useEffect(() => {
     const syncRoute = () => {
-      const url = new URL(window.location.href)
-      if (url.searchParams.get('page') === 'notes') {
-        url.searchParams.set('page', 'dashboard')
-        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
-      }
       setSitePage(readSiteRoute())
     }
     syncRoute()
@@ -1047,7 +1040,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
   useEffect(() => {
-    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', 'dashboard-options': 'Choose your dashboard tools · OzooNotes', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
+    const titles: Record<SiteRoute, string> = { home: 'OzooNotes — Just imagine, and it will do it.', product: 'What OzooNotes offers', pricing: 'OzooNotes plans', dashboard: 'Your OzooNotes dashboard', 'dashboard-options': 'Choose your dashboard tools · OzooNotes', diary: 'Diary · OzooNotes', roadmaps: 'Community roadmaps · OzooNotes', resources: 'Community video resources · OzooNotes', books: 'Books to read · OzooNotes', watchlist: 'Movies & series · OzooNotes', contact: 'Contact OzooNotes', notes: 'Notes · OzooNotes', signin: 'Sign in to OzooNotes', profile: 'Edit your profile · OzooNotes', account: 'Your account · OzooNotes', admin: 'OzooNotes admin' }
     document.title = titles[sitePage]
   }, [sitePage])
   const [initialWorkspace] = useState(readSavedWorkspace)
