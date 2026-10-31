@@ -17,7 +17,7 @@ import ResourcesPage from './ResourcesPage'
 import { installAppContextMenu } from './contextMenu'
 import { SimulatorThemePicker, useSimulatorTheme } from './SimulatorTheme'
 import { AdminPage, ContactPage, DashboardOptionsPage, MarketingHome, ProductPage, PricingPage, dashboardOptionChoices, type AdminAccount, type DashboardOptionId, type SiteRoute } from './SitePages'
-import { type CloudDataRecord, cloudDataRequest } from './cloudData'
+import { type CloudDataRecord } from './cloudData'
 import './ResponsiveLayout.css'
 
 type Tool = 'Brush' | 'Pencil' | 'Pen' | 'Marker' | 'Highlighter' | 'Hand' | 'Select' | 'Shape' | 'Text' | 'Line' | 'Eraser'

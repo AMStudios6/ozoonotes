@@ -111,7 +111,7 @@ async function encodeCloudProjects(projects: ProjectDocument[]) {
 }
 
 function decodeCloudProjects(value: string): ProjectDocument[] {
-  const parsed = JSON.parse(value) as (ProjectDocument & { assets: (ProjectAsset & { blobData?: string })[] })[]
+  const parsed = JSON.parse(value) as (Omit<ProjectDocument, 'assets'> & { assets: (ProjectAsset & { blobData?: string })[] })[]
   return parsed.map((project) => ({ ...project, assets: project.assets.map((asset) => {
     const { blobData, ...rest } = asset
     if (!blobData) return rest
